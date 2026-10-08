@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { botProfile, channelConnections, commands } from "@/db/schema";
 import { getManagedBotToken, telegramCall } from "@/lib/channels/telegram-api";
+import { getSupabaseServer } from "@/lib/supabase/server";
 
 type TelegramUser = { id: number; username?: string; first_name?: string };
 type TelegramMessage = {
@@ -81,6 +82,33 @@ export async function POST(request: Request) {
 
   const managed = update.managed_bot?.bot ?? update.message?.managed_bot_created?.bot;
   if (!managed?.id) return Response.json({ ok: true });
+
+  // Multi-tenant projects live in Supabase. A pending channel is matched by
+  // Telegram's globally unique username, then the managed bot is configured.
+  if (env.SUPABASE_SECRET_KEY) {
+    const supabase = getSupabaseServer({ privileged: true });
+    const username = managed.username ?? "";
+    const { data: projectChannel } = await supabase.from("bot_channels").select("id,bot_id").eq("channel", "telegram").eq("external_username", username).maybeSingle();
+    if (projectChannel) {
+      const runtimeSecret = crypto.randomUUID().replaceAll("-", "");
+      const origin = new URL(request.url).origin;
+      const { data: projectBot } = await supabase.from("bots").select("id,owner_id,name,description,settings").eq("id", projectChannel.bot_id).single();
+      if (projectBot) {
+        const token = await getManagedBotToken(env.TELEGRAM_MANAGER_TOKEN, String(managed.id));
+        const miniAppUrl = new URL(`/workspace?bot=${projectBot.id}`, origin).toString();
+        await Promise.all([
+          telegramCall(token, "setMyName", { name: projectBot.name.slice(0, 64) }),
+          telegramCall(token, "setMyDescription", { description: projectBot.description.slice(0, 512) }),
+          telegramCall(token, "setChatMenuButton", { menu_button: { type: "web_app", text: "Открыть", web_app: { url: miniAppUrl } } }),
+          telegramCall(token, "setWebhook", { url: new URL(`/api/channels/telegram/project-runtime?channel=${projectChannel.id}`, origin).toString(), secret_token: runtimeSecret, allowed_updates: ["message"] }),
+        ]);
+        await supabase.from("bot_channels").update({ status: "connected", external_account_id: String(managed.id), configuration: { runtime_secret: runtimeSecret, mini_app_url: miniAppUrl } }).eq("id", projectChannel.id);
+        const creator = update.managed_bot?.user ?? message?.from;
+        if (creator?.id) await supabase.from("app_users").update({ telegram_id: creator.id, telegram_username: creator.username ?? null, first_name: creator.first_name ?? "" }).eq("id", projectBot.owner_id).is("telegram_id", null);
+        return Response.json({ ok: true });
+      }
+    }
+  }
 
   const db = getDb();
   const username = managed.username ?? "";

@@ -64,13 +64,12 @@ export default function OnboardingPage() {
 
   const saveFirstItem = async () => {
     const telegram = (window as typeof window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp;
-    if (!telegram?.initData) { setStage("done"); return; }
     setSaveState("saving");
     const response = await fetch("/api/onboarding", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        initData: telegram.initData,
+        initData: telegram?.initData,
         botName,
         templateType: template.id,
         item: { name: itemName, description, priceMinor: price ? Number(price) * 100 : undefined },
