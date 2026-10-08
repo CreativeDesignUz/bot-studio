@@ -10,6 +10,8 @@ const demoBots: { id: string; name: string; type: BotTemplateId; username: strin
   { id: "food", name: "Osh Express", type: "delivery", username: "osh_express_bot" },
   { id: "beauty", name: "Aura Beauty", type: "service", username: "aura_booking_bot" },
 ];
+type BotMetrics={ordersToday:number;revenueTodayMinor:number;catalogItems:number;customers:number;recentOrders:{id:string;customer_name:string;status:string;total_minor:number}[]};
+type WorkspaceBot=(typeof demoBots)[number]&{metrics?:BotMetrics};
 
 const content = {
   store: { kpis: [["18", "заказов сегодня", "+12%"], ["7 240 000 сум", "выручка", "+18%"], ["34", "товара заканчиваются", "Проверить"]], rows: [["#1048", "Сабина М.", "Кроссовки Mono", "690 000 сум", "Оплачен"], ["#1047", "Жасур Б.", "Худи Studio", "420 000 сум", "Новый"], ["#1046", "Лола Т.", "Сумка Mini", "530 000 сум", "Собран"]], goal: "Поднять средний чек", tip: "Добавьте комплект кроссовки + носки со скидкой 10%. Покажем его в корзине.", action: "Создать комплект" },
@@ -18,13 +20,15 @@ const content = {
 } as const;
 
 export default function WorkspacePage() {
-  const [bots, setBots] = useState<typeof demoBots>([]);
+  const [bots, setBots] = useState<WorkspaceBot[]>([]);
   const [loading, setLoading] = useState(true);
   const [botId, setBotId] = useState("");
   const [section, setSection] = useState("overview");
   const bot = bots.find((item) => item.id === botId) ?? bots[0] ?? demoBots[0];
   const template = productTemplates[bot.type];
-  const page = content[bot.type];
+  const basePage = content[bot.type];
+  const metrics = bot.metrics ?? {ordersToday:0,revenueTodayMinor:0,catalogItems:0,customers:0,recentOrders:[]};
+  const page = { ...basePage, kpis: [[String(metrics.ordersToday), "заказов сегодня", "Сегодня"], [`${Math.round(metrics.revenueTodayMinor/100).toLocaleString("ru-RU")} сум`, "выручка сегодня", "Факт"], [String(metrics.catalogItems), bot.type==="delivery"?"блюд в меню":bot.type==="store"?"товаров в каталоге":"активных услуг", "Каталог"]], rows: metrics.recentOrders.map(order=>[`#${order.id.slice(0,6)}`,order.customer_name||"Клиент","Заказ",`${Math.round(order.total_minor/100).toLocaleString("ru-RU")} сум`,order.status]) };
   const currentSection = useMemo(() => template.modules.some((item) => item.id === section) ? section : "overview", [section, template]);
   const sectionName = template.modules.find((item) => item.id === currentSection)?.label ?? "Обзор";
 
@@ -33,7 +37,7 @@ export default function WorkspacePage() {
     telegram?.ready?.(); telegram?.expand?.(); telegram?.setHeaderColor?.("#ffffff"); telegram?.setBackgroundColor?.("#f4f6f8");
     if (telegram) document.documentElement.dataset.telegram = "true";
     const initData=(telegram as {initData?:string}|undefined)?.initData??"";
-    fetch("/api/workspace",{headers:{"x-telegram-init-data":initData}}).then(response=>response.ok?response.json():Promise.reject()).then((result:{bots:{id:string;name:string;username:string|null;template_type:BotTemplateId}[]})=>{const loaded=result.bots.map(item=>({id:item.id,name:item.name,type:item.template_type,username:item.username??`studio_${item.id.slice(0,8)}_bot`}));setBots(loaded);const requested=new URLSearchParams(location.search).get("bot");setBotId(loaded.some(item=>item.id===requested)?requested!:loaded[0]?.id??"");}).finally(()=>setLoading(false));
+    fetch("/api/workspace",{headers:{"x-telegram-init-data":initData}}).then(response=>response.ok?response.json():Promise.reject()).then((result:{bots:{id:string;name:string;username:string|null;template_type:BotTemplateId;metrics:BotMetrics}[]})=>{const loaded=result.bots.map(item=>({id:item.id,name:item.name,type:item.template_type,username:item.username??`studio_${item.id.slice(0,8)}_bot`,metrics:item.metrics}));setBots(loaded);const requested=new URLSearchParams(location.search).get("bot");setBotId(loaded.some(item=>item.id===requested)?requested!:loaded[0]?.id??"");}).finally(()=>setLoading(false));
     return () => { delete document.documentElement.dataset.telegram; };
   }, []);
 
@@ -72,10 +76,10 @@ export default function WorkspacePage() {
 
 function RestaurantMenuEntry(){return <section className="rounded-[22px] border border-[#e4e7ec] bg-white p-6 sm:p-8"><span className="grid size-12 place-items-center rounded-2xl bg-[#fff0e8] text-[#ef6820]"><Plus/></span><h2 className="mt-5 text-xl font-semibold">Соберите меню ресторана</h2><p className="mt-2 max-w-xl text-sm leading-6 text-[#667085]">Импортируйте Excel-файл или добавляйте категории, подкатегории и блюда вручную. Перед публикацией система покажет ошибки.</p><Link href="/workspace/restaurant" className="mt-6 inline-flex h-11 items-center rounded-xl bg-[#101828] px-4 text-sm font-semibold text-white no-underline">Открыть редактор меню</Link></section>}
 
-function Overview({ page, botType }: { page: typeof content[BotTemplateId]; botType: BotTemplateId }) {
+function Overview({ page, botType }: { page: {kpis:string[][];rows:string[][];goal:string;tip:string;action:string}; botType: BotTemplateId }) {
   return <div className="space-y-5">
     <section className="grid gap-4 md:grid-cols-3">{page.kpis.map(([value, label, delta], index) => <article key={label} className="rounded-[20px] border border-[#e4e7ec] bg-white p-5"><div className="flex items-start justify-between"><span className="grid size-9 place-items-center rounded-xl bg-[#f0ecff] text-[#6d45f5]">{index === 0 ? <CircleCheck className="size-[18px]" /> : index === 1 ? <TrendingUp className="size-[18px]" /> : <Clock3 className="size-[18px]" />}</span><span className="rounded-full bg-[#ecfdf3] px-2.5 py-1 text-[11px] font-semibold text-[#027a48]">{delta}</span></div><strong className="mt-5 block text-[clamp(1.35rem,2vw,1.75rem)] tracking-[-.04em]">{value}</strong><span className="mt-1 block text-sm text-[#667085]">{label}</span></article>)}</section>
-    <section className="grid gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(280px,.8fr)]"><article className="overflow-hidden rounded-[22px] border border-[#e4e7ec] bg-white"><div className="flex items-center justify-between border-b border-[#eaecf0] p-5"><div><h2 className="font-semibold">{botType === "service" ? "Ближайшие записи" : "Последние заказы"}</h2><p className="mt-1 text-xs text-[#98a2b3]">Обновлено только что</p></div><button className="text-sm font-semibold text-[#5934dc]">Открыть все</button></div><div className="divide-y divide-[#eaecf0]">{page.rows.map((row) => <div key={row[0]} className="grid grid-cols-[70px_minmax(95px,1fr)_minmax(130px,1.4fr)] items-center gap-3 px-5 py-4 text-sm sm:grid-cols-[80px_1fr_1.5fr_120px_110px]"><strong>{row[0]}</strong><span>{row[1]}</span><span className="truncate text-[#667085]">{row[2]}</span><span className="hidden sm:block">{row[3]}</span><span className="hidden w-fit rounded-full bg-[#f2f4f7] px-2.5 py-1 text-xs font-medium sm:block">{row[4]}</span></div>)}</div></article><article className="rounded-[22px] bg-[#17132d] p-6 text-white"><span className="text-xs font-semibold uppercase tracking-[.14em] text-[#b9a8ff]">Идея для роста</span><h2 className="mt-4 text-xl font-semibold">{page.goal}</h2><p className="mt-3 text-sm leading-6 text-[#d0cbe7]">{page.tip}</p><button className="mt-6 h-11 rounded-xl bg-[#7654f6] px-4 text-sm font-semibold">{page.action}</button></article></section>
+    <section className="grid gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(280px,.8fr)]"><article className="overflow-hidden rounded-[22px] border border-[#e4e7ec] bg-white"><div className="flex items-center justify-between border-b border-[#eaecf0] p-5"><div><h2 className="font-semibold">{botType === "service" ? "Ближайшие записи" : "Последние заказы"}</h2><p className="mt-1 text-xs text-[#98a2b3]">Данные из вашего бота</p></div><button className="text-sm font-semibold text-[#5934dc]">Открыть все</button></div><div className="divide-y divide-[#eaecf0]">{page.rows.length?page.rows.map((row) => <div key={row[0]} className="grid grid-cols-[70px_minmax(95px,1fr)_minmax(130px,1.4fr)] items-center gap-3 px-5 py-4 text-sm sm:grid-cols-[80px_1fr_1.5fr_120px_110px]"><strong>{row[0]}</strong><span>{row[1]}</span><span className="truncate text-[#667085]">{row[2]}</span><span className="hidden sm:block">{row[3]}</span><span className="hidden w-fit rounded-full bg-[#f2f4f7] px-2.5 py-1 text-xs font-medium sm:block">{row[4]}</span></div>):<div className="p-8 text-center"><strong className="text-sm">Заказов пока нет</strong><p className="mt-1 text-xs text-[#98a2b3]">Они появятся здесь после запуска бота.</p></div>}</div></article><article className="rounded-[22px] bg-[#17132d] p-6 text-white"><span className="text-xs font-semibold uppercase tracking-[.14em] text-[#b9a8ff]">Идея для роста</span><h2 className="mt-4 text-xl font-semibold">{page.goal}</h2><p className="mt-3 text-sm leading-6 text-[#d0cbe7]">{page.tip}</p><button className="mt-6 h-11 rounded-xl bg-[#7654f6] px-4 text-sm font-semibold">{page.action}</button></article></section>
   </div>;
 }
 
