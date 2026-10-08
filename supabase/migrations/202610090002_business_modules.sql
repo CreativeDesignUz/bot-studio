@@ -1,5 +1,12 @@
 -- Business modules for the three launch templates: store, delivery and services.
 
+-- Keep the migration self-healing when the base schema was installed from an
+-- earlier preview that did not include the helper used by the RLS policies.
+create or replace function public.current_app_user_id()
+returns uuid language sql stable security definer set search_path = '' as $$
+  select id from public.app_users where auth_user_id = auth.uid() limit 1
+$$;
+
 alter table public.bots drop constraint if exists bots_template_type_check;
 alter table public.bots add constraint bots_template_type_check check (template_type in ('delivery','store','service'));
 

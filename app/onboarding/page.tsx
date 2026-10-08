@@ -46,6 +46,7 @@ export default function OnboardingPage() {
   const [itemName, setItemName] = useState("");
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
+  const [botId, setBotId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "error">("idle");
   const template = useMemo(() => templates.find((item) => item.id === templateId) ?? templates[0], [templateId]);
   const TemplateIcon = template.icon;
@@ -76,6 +77,8 @@ export default function OnboardingPage() {
       }),
     });
     if (!response.ok) { setSaveState("error"); return; }
+    const result = await response.json() as { bot?: { id?: string } };
+    if (result.bot?.id) { localStorage.setItem("botStudioBotId", result.bot.id); setBotId(result.bot.id); }
     setSaveState("idle");
     setStage("done");
   };
@@ -104,7 +107,7 @@ export default function OnboardingPage() {
           {stage === "type" && <TypeStep selected={templateId} onSelect={setTemplateId} botName={botName} setBotName={setBotName} onNext={() => setStage("empty")} />}
           {stage === "empty" && <EmptyStep template={template} botName={botName} onBack={() => setStage("type")} onNext={() => setStage("item")} />}
           {stage === "item" && <ItemStep template={template} itemName={itemName} setItemName={setItemName} price={price} setPrice={setPrice} description={description} setDescription={setDescription} onBack={() => setStage("empty")} onSave={saveFirstItem} saveState={saveState} />}
-          {stage === "done" && <DoneStep template={template} botName={botName} itemName={itemName} price={price} onAdd={resetItem} />}
+          {stage === "done" && <DoneStep template={template} botName={botName} itemName={itemName} price={price} botId={botId} onAdd={resetItem} />}
         </div>
       </section>
     </div>
@@ -137,10 +140,10 @@ function ItemStep({ template, itemName, setItemName, price, setPrice, descriptio
   </div>;
 }
 
-function DoneStep({ template, botName, itemName, price, onAdd }: { template:Template; botName:string; itemName:string; price:string; onAdd:()=>void }) {
+function DoneStep({ template, botName, itemName, price, botId, onAdd }: { template:Template; botName:string; itemName:string; price:string; botId:string|null; onAdd:()=>void }) {
   return <div className="flow-step done-step"><div className="success-mark"><Check /></div><div className="flow-heading"><span>Первый результат</span><h1>Бот больше не пуст</h1><p>{itemName} добавлен в «{botName}». Теперь можно открыть клиентское превью или продолжить наполнение.</p></div>
     <div className="first-item-card"><span className="first-item-image"><Package /></span><div><small>{template.item}</small><strong>{itemName}</strong><p>{price ? `${Number(price).toLocaleString("ru-RU")} сум` : "Цена не указана"}</p></div><span className="published-badge">Активен</span></div>
-    <div className="launch-actions"><button className="flow-secondary" onClick={onAdd}><Plus />Добавить ещё</button><Link className="flow-primary" href="/workspace">Перейти в кабинет <ArrowRight /></Link></div>
+    <div className="launch-actions"><button className="flow-secondary" onClick={onAdd}><Plus />Добавить ещё</button><Link className="flow-primary" href={botId?`/workspace/builder?bot=${botId}`:"/workspace/builder"}>Настроить и посмотреть превью <ArrowRight /></Link></div>
   </div>;
 }
 

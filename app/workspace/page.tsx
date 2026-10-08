@@ -57,12 +57,14 @@ export default function WorkspacePage() {
         <div className="border-b border-[#e4e7ec] bg-white px-4 py-2 lg:hidden"><div className="flex gap-1 overflow-x-auto">{template.modules.map(({ id, label }) => <button key={id} onClick={() => setSection(id)} className={`shrink-0 rounded-full px-3 py-2 text-xs font-semibold ${currentSection === id ? "bg-[#101828] text-white" : "bg-[#f2f4f7] text-[#667085]"}`}>{label}</button>)}</div></div>
         <div className="p-4 sm:p-7 lg:p-9">
           <div className="mb-7 flex flex-wrap items-end justify-between gap-4"><div><p className="mb-2 text-xs font-semibold text-[#6d45f5]">{template.label} · @{bot.username}</p><h1 className="text-2xl font-semibold tracking-[-.035em] sm:text-3xl">{sectionName}</h1><p className="mt-1.5 text-sm text-[#667085]">{currentSection === "overview" ? "Главное за сегодня и следующий шаг для роста." : `Управляйте разделом «${sectionName}» без перехода в другие сервисы.`}</p></div><button className="flex h-11 items-center gap-2 rounded-xl bg-[#101828] px-4 text-sm font-semibold text-white"><Plus className="size-4" />Добавить {template.itemLabel}</button></div>
-          {currentSection === "overview" ? <Overview page={page} botType={bot.type} /> : <ModuleView name={sectionName} itemLabel={template.itemLabel} botType={bot.type} />}
+          {bot.type === "delivery" && currentSection === "catalog" ? <RestaurantMenuEntry /> : currentSection === "overview" ? <Overview page={page} botType={bot.type} /> : <ModuleView name={sectionName} itemLabel={template.itemLabel} botType={bot.type} />}
         </div>
       </section>
     </div>
   </main>;
 }
+
+function RestaurantMenuEntry(){return <section className="rounded-[22px] border border-[#e4e7ec] bg-white p-6 sm:p-8"><span className="grid size-12 place-items-center rounded-2xl bg-[#fff0e8] text-[#ef6820]"><Plus/></span><h2 className="mt-5 text-xl font-semibold">Соберите меню ресторана</h2><p className="mt-2 max-w-xl text-sm leading-6 text-[#667085]">Импортируйте Excel-файл или добавляйте категории, подкатегории и блюда вручную. Перед публикацией система покажет ошибки.</p><Link href="/workspace/restaurant" className="mt-6 inline-flex h-11 items-center rounded-xl bg-[#101828] px-4 text-sm font-semibold text-white no-underline">Открыть редактор меню</Link></section>}
 
 function Overview({ page, botType }: { page: typeof content[BotTemplateId]; botType: BotTemplateId }) {
   return <div className="space-y-5">
