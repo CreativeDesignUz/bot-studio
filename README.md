@@ -1,4 +1,17 @@
-# vinext-starter
+# Bot Studio
+
+Единая платформа для создания и управления ботами: веб-кабинет, Telegram Mini App и в дальнейшем нативное iOS-приложение.
+
+## Текущий MVP
+
+- адаптивный кабинет с переключением между ботами;
+- Telegram Mini App SDK и мобильный интерфейс;
+- онбординг для доставки, магазина, услуг и онлайн-курсов;
+- Supabase-схема пользователей, ботов, каталога, заказов, каналов и событий;
+- проверка подписи Telegram `initData` перед серверной записью;
+- менеджер-бот, который открывает Mini App по команде `/start`.
+
+Инструкция по базе и переменным окружения: [docs/supabase-setup.md](docs/supabase-setup.md).
 
 A clean full-stack starter running on [vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and Drizzle support.
 

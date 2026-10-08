@@ -32,7 +32,7 @@ export async function POST(request: Request) {
   const chatId = message?.chat?.id;
   const command = message?.text?.trim().split(/\s+/, 1)[0]?.split("@", 1)[0];
   if (chatId && (command === "/start" || command === "/help")) {
-    const miniAppUrl = new URL("/", request.url).toString();
+    const miniAppUrl = new URL("/onboarding", request.url).toString();
     await telegramCall(env.TELEGRAM_MANAGER_TOKEN, "sendMessage", {
       chat_id: chatId,
       text: WELCOME_TEXT,
