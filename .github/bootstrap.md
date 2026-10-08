@@ -1,1 +1,0 @@
-Bot Studio repository bootstrap. This file is replaced by the imported project tree.
