@@ -4,10 +4,11 @@ import { getDb } from "@/db";
 import { botProfile, channelConnections, commands } from "@/db/schema";
 import { getManagedBotToken, telegramCall } from "@/lib/channels/telegram-api";
 
-type TelegramUser = { id: number; username?: string };
+type TelegramUser = { id: number; username?: string; first_name?: string };
 type TelegramMessage = {
   text?: string;
   chat?: { id?: number };
+  from?: TelegramUser;
   managed_bot_created?: { bot: TelegramUser };
 };
 type ManagerUpdate = {
@@ -15,13 +16,28 @@ type ManagerUpdate = {
   message?: TelegramMessage;
 };
 
-const WELCOME_TEXT = [
-  "Добро пожаловать в Bot Studio 👋",
+const MANAGER_COMMANDS = [
+  { command: "start", description: "Главное меню" },
+  { command: "create", description: "Создать нового бота" },
+  { command: "bots", description: "Открыть мои боты" },
+  { command: "help", description: "Помощь и возможности" },
+];
+
+function welcomeText(name?: string) { return [
+  `Добро пожаловать${name ? `, ${name}` : ""} в Bot Studio 👋`,
   "",
-  "Создавайте ботов, управляйте ими и смотрите активность прямо в Telegram.",
+  "Здесь вы можете создать бота для магазина, доставки или услуг — без программирования.",
   "",
-  "Откройте студию, чтобы начать.",
-].join("\n");
+  "В Mini App вы добавите товары или услуги, подключите оплату и будете следить за заказами.",
+].join("\n"); }
+
+async function configureManagerBot(token: string, origin: string) {
+  const workspaceUrl = new URL("/workspace", origin).toString();
+  await Promise.all([
+    telegramCall(token, "setMyCommands", { commands: MANAGER_COMMANDS }),
+    telegramCall(token, "setChatMenuButton", { menu_button: { type: "web_app", text: "Открыть студию", web_app: { url: workspaceUrl } } }),
+  ]);
+}
 
 export async function POST(request: Request) {
   if (!env.TELEGRAM_MANAGER_TOKEN || !env.TELEGRAM_MANAGER_WEBHOOK_SECRET) return new Response("Not configured", { status: 503 });
@@ -31,14 +47,34 @@ export async function POST(request: Request) {
   const message = update.message;
   const chatId = message?.chat?.id;
   const command = message?.text?.trim().split(/\s+/, 1)[0]?.split("@", 1)[0];
-  if (chatId && (command === "/start" || command === "/help")) {
-    const miniAppUrl = new URL("/onboarding", request.url).toString();
+  if (chatId && ["/start", "/help", "/create", "/bots"].includes(command ?? "")) {
+    const origin = new URL(request.url).origin;
+    const createUrl = new URL("/onboarding", origin).toString();
+    const workspaceUrl = new URL("/workspace", origin).toString();
+    await configureManagerBot(env.TELEGRAM_MANAGER_TOKEN, origin).catch(() => undefined);
+    const isCreate = command === "/create";
+    const isBots = command === "/bots";
     await telegramCall(env.TELEGRAM_MANAGER_TOKEN, "sendMessage", {
       chat_id: chatId,
-      text: WELCOME_TEXT,
+      text: isCreate ? "Создадим нового бота. Сначала выберите тип бизнеса и добавьте первый товар или услугу." : isBots ? "Открываю кабинет. Здесь можно переключаться между ботами и управлять их данными." : welcomeText(message?.from?.first_name),
       reply_markup: {
-        inline_keyboard: [[{ text: "Открыть Bot Studio", web_app: { url: miniAppUrl } }]],
+        inline_keyboard: isCreate
+          ? [[{ text: "✨ Создать бота", web_app: { url: createUrl } }]]
+          : isBots
+            ? [[{ text: "📊 Мои боты", web_app: { url: workspaceUrl } }]]
+            : [[{ text: "✨ Создать первого бота", web_app: { url: createUrl } }], [{ text: "📊 Открыть кабинет", web_app: { url: workspaceUrl } }]],
       },
+    });
+    return Response.json({ ok: true });
+  }
+
+  if (chatId && message?.text) {
+    const createUrl = new URL("/onboarding", request.url).toString();
+    const workspaceUrl = new URL("/workspace", request.url).toString();
+    await telegramCall(env.TELEGRAM_MANAGER_TOKEN, "sendMessage", {
+      chat_id: chatId,
+      text: "Я помогу создать и запустить бизнес-бота. Выберите действие ниже или используйте команды /create, /bots и /help.",
+      reply_markup: { inline_keyboard: [[{ text: "✨ Создать бота", web_app: { url: createUrl } }], [{ text: "📊 Мои боты", web_app: { url: workspaceUrl } }]] },
     });
     return Response.json({ ok: true });
   }

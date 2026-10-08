@@ -53,7 +53,10 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     document.documentElement.dataset.onboardingHydrated = "true";
-    return () => { delete document.documentElement.dataset.onboardingHydrated; };
+    const telegram = (window as typeof window & { Telegram?: { WebApp?: { ready?:()=>void; expand?:()=>void; setHeaderColor?:(color:string)=>void; setBackgroundColor?:(color:string)=>void } } }).Telegram?.WebApp;
+    telegram?.ready?.(); telegram?.expand?.(); telegram?.setHeaderColor?.("#ffffff"); telegram?.setBackgroundColor?.("#f5f6f8");
+    if (telegram) document.documentElement.dataset.telegram = "true";
+    return () => { delete document.documentElement.dataset.onboardingHydrated; delete document.documentElement.dataset.telegram; };
   }, []);
 
   const resetItem = () => { setItemName(""); setPrice(""); setDescription(""); setStage("empty"); };

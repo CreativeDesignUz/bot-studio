@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Bell, Bot, ChevronDown, CircleCheck, Clock3, MoreHorizontal, Plus, Search, Settings, TrendingUp } from "lucide-react";
 import { BotTemplateId, productTemplates } from "@/lib/product/templates";
@@ -25,6 +25,13 @@ export default function WorkspacePage() {
   const page = content[bot.type];
   const currentSection = useMemo(() => template.modules.some((item) => item.id === section) ? section : "overview", [section, template]);
   const sectionName = template.modules.find((item) => item.id === currentSection)?.label ?? "Обзор";
+
+  useEffect(() => {
+    const telegram = (window as typeof window & { Telegram?: { WebApp?: { ready?:()=>void; expand?:()=>void; setHeaderColor?:(color:string)=>void; setBackgroundColor?:(color:string)=>void } } }).Telegram?.WebApp;
+    telegram?.ready?.(); telegram?.expand?.(); telegram?.setHeaderColor?.("#ffffff"); telegram?.setBackgroundColor?.("#f4f6f8");
+    if (telegram) document.documentElement.dataset.telegram = "true";
+    return () => { delete document.documentElement.dataset.telegram; };
+  }, []);
 
   function switchBot(nextId: string) {
     const next = demoBots.find((item) => item.id === nextId);
