@@ -1,4 +1,4 @@
-import { normalizeBotButtons, telegramInlineKeyboard } from "@/lib/telegram/button-actions";
+import { normalizeBotButtons, resolveReplyPath, telegramInlineKeyboard } from "@/lib/telegram/button-actions";
 import { env } from "cloudflare:workers";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { getManagedBotToken, telegramCall } from "@/lib/channels/telegram-api";
@@ -31,11 +31,16 @@ export async function POST(request:Request){
  const token=await getManagedBotToken(env.TELEGRAM_MANAGER_TOKEN,channel.external_account_id);
  if(update.callback_query){
   const query=update.callback_query;
-  const match=/^reply:([0-7])$/.exec(query.data??"");
-  const selected=match ? buttons[Number(match[1])] : null;
+  const selected=resolveReplyPath(buttons,query.data??"");
   await telegramCall(token,"answerCallbackQuery",{callback_query_id:query.id,text:selected?.action==="reply"?"":"Кнопка недоступна"}).catch(()=>undefined);
   if(selected?.action==="reply" && selected.replyText){
-   await telegramCall(token,"sendMessage",{chat_id:chatId,text:selected.replyText});
+   const match=/^reply:([0-7])/.exec(query.data??"");
+   const rootIndex=match ? Number(match[1]) : 0;
+   const next=selected.nextButtons??[];
+   await telegramCall(token,"sendMessage",{
+    chat_id:chatId,text:selected.replyText,
+    ...(next.length ? {reply_markup:{inline_keyboard:telegramInlineKeyboard(next,new URL(`/miniapp?bot=${channel.bot_id}`,origin).toString(),rootIndex)}} : {}),
+   });
   }
   return Response.json({ok:true});
  }
