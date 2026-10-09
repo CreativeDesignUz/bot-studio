@@ -1,0 +1,38 @@
+export type BotActionButton = {
+  id?: string;
+  label: string;
+  action: "home" | "url";
+  url?: string;
+};
+
+export function normalizeBotButtons(input: unknown): BotActionButton[] {
+  if (!Array.isArray(input)) throw new Error("BUTTONS_INVALID");
+  if (input.length > 8) throw new Error("TOO_MANY_BUTTONS");
+  return input.map((raw: unknown) => {
+    if (!raw || typeof raw !== "object") throw new Error("BUTTON_INVALID");
+    const data = raw as Record<string, unknown>;
+    const label = typeof data.label === "string" ? data.label.trim() : "";
+    if (!label || label.length > 60) throw new Error("BUTTON_LABEL_INVALID");
+    const action = data.action === "url" ? "url" : data.action === "home" || data.action === "custom" ? "home" : null;
+    if (!action) throw new Error("BUTTON_ACTION_INVALID");
+    if (action === "url") {
+      if (typeof data.url !== "string" || data.url.length > 2048) throw new Error("BUTTON_URL_INVALID");
+      let target: URL;
+      try { target = new URL(data.url); } catch { throw new Error("BUTTON_URL_INVALID"); }
+      if (target.protocol !== "https:" || !target.hostname || target.username || target.password)
+        throw new Error("BUTTON_URL_INVALID");
+      return { label, action, url: target.toString() };
+    }
+    return { label, action };
+  });
+}
+
+export function telegramInlineKeyboard(buttons: BotActionButton[], miniAppUrl: string) {
+  const actions = buttons.length ? buttons : [{ label: "Открыть приложение", action: "home" as const }];
+  return actions.map(button => [{
+    text: button.label,
+    ...(button.action === "url" && button.url
+      ? { url: button.url }
+      : { web_app: { url: miniAppUrl } }),
+  }]);
+}
