@@ -67,7 +67,7 @@ async function handleSupabaseManagedBot(request: Request, managed: TelegramUser,
     await telegramCall(token, "setMyName", { name: bot.name.slice(0, 64) });
     await telegramCall(token, "setMyDescription", { description: bot.description.slice(0, 512) });
     await telegramCall(token, "setChatMenuButton", { menu_button: { type: "web_app", text: "Открыть", web_app: { url: miniAppUrl } } });
-    await telegramCall(token, "setWebhook", { url: new URL(`/api/channels/telegram/project-runtime?channel=${binding.channel_id}`, origin).toString(), secret_token: runtimeSecret, allowed_updates: ["message"] });
+    await telegramCall(token, "setWebhook", { url: new URL(`/api/channels/telegram/project-runtime?channel=${binding.channel_id}`, origin).toString(), secret_token: runtimeSecret, allowed_updates: ["message", "callback_query"] });
     const { error: completeError } = await supabase.rpc("complete_telegram_binding", {
       p_binding_id: binding.binding_id, p_bot_id: binding.bot_id, p_channel_id: binding.channel_id,
       p_external_account_id: String(managed.id), p_configuration: { runtime_secret: runtimeSecret, mini_app_url: miniAppUrl },
@@ -132,7 +132,7 @@ export async function POST(request: Request) {
     if (profile) { await telegramCall(token, "setMyName", { name: profile.name }); await telegramCall(token, "setMyDescription", { description: profile.description }); }
     if (commandRows.length) await telegramCall(token, "setMyCommands", { commands: commandRows.map((item) => ({ command: item.command, description: item.description || item.command })) });
     const origin = new URL(request.url).origin;
-    await telegramCall(token, "setWebhook", { url: `${origin}/api/channels/telegram/runtime?connection=${encodeURIComponent(connection.id)}`, secret_token: runtimeSecret, allowed_updates: ["message"] });
+    await telegramCall(token, "setWebhook", { url: `${origin}/api/channels/telegram/runtime?connection=${encodeURIComponent(connection.id)}`, secret_token: runtimeSecret, allowed_updates: ["message", "callback_query"] });
   } catch {
     await db.update(channelConnections).set({ status: "error", updatedAt: new Date().toISOString() }).where(eq(channelConnections.id, connection.id));
   }
