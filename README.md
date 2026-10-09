@@ -2,6 +2,13 @@
 
 Единая платформа для создания и управления ботами: веб-кабинет, Telegram Mini App и в дальнейшем нативное iOS-приложение.
 
+## Открыть проект
+
+- [Рабочий кабинет Bot Studio](https://bot-studio-uz.wittykrill2.chatgpt.site/workspace)
+- [Telegram-бот BotStudioManagerBot](https://t.me/BotStudioManagerBot)
+
+GitHub хранит исходный код и предоставляет короткую страницу входа через GitHub Pages. Само full-stack приложение работает на серверном хостинге, поскольку ему нужны API, Supabase и Telegram webhook — GitHub Pages поддерживает только статические страницы.
+
 ## Текущий MVP
 
 - адаптивный кабинет с переключением между ботами;
