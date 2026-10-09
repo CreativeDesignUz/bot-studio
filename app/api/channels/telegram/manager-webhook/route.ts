@@ -61,7 +61,7 @@ async function handleSupabaseManagedBot(request: Request, managed: TelegramUser,
   if (!bot) return new Response("Project not found", { status: 404 });
   const origin = new URL(request.url).origin;
   const runtimeSecret = crypto.randomUUID().replaceAll("-", "");
-  const miniAppUrl = new URL(`/workspace?bot=${bot.id}`, origin).toString();
+  const miniAppUrl = new URL(`/miniapp?bot=${bot.id}`, origin).toString();
   try {
     const token = await getManagedBotToken(managerToken, String(managed.id));
     await telegramCall(token, "setMyName", { name: bot.name.slice(0, 64) });
