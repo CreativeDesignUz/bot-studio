@@ -26,9 +26,9 @@ export async function POST(request:Request){
  const origin=new URL(request.url).origin;
  const token=await getManagedBotToken(env.TELEGRAM_MANAGER_TOKEN,channel.external_account_id);
  if(text==="/start"){
-  await telegramCall(token,"sendMessage",{chat_id:chatId,text:`${publishedName}\n\n${publishedDescription}`,reply_markup:{inline_keyboard:buttons.map(button=>[{text:button.label||"Открыть",web_app:{url:new URL(`/workspace?bot=${channel.bot_id}&view=${button.action||"home"}`,origin).toString()}}])}});
+  await telegramCall(token,"sendMessage",{chat_id:chatId,text:`${publishedName}\n\n${publishedDescription}`,reply_markup:{inline_keyboard:buttons.map(button=>[{text:button.label||"Открыть",web_app:{url:new URL(`/miniapp?bot=${channel.bot_id}&view=${button.action||"home"}`,origin).toString()}}])}});
  }else{
-  await telegramCall(token,"sendMessage",{chat_id:chatId,text:"Откройте приложение — там доступны каталог, заказы и поддержка.",reply_markup:{inline_keyboard:[[{text:"Открыть приложение",web_app:{url:new URL(`/workspace?bot=${channel.bot_id}`,origin).toString()}}]]}});
+  await telegramCall(token,"sendMessage",{chat_id:chatId,text:"Откройте приложение — там доступны каталог, заказы и поддержка.",reply_markup:{inline_keyboard:[[{text:"Открыть приложение",web_app:{url:new URL(`/miniapp?bot=${channel.bot_id}`,origin).toString()}}]]}});
  }
  return Response.json({ok:true});
 }
