@@ -25,7 +25,7 @@ export default function RootLayout({
   return (
     <html lang="ru" suppressHydrationWarning>
       <body className="antialiased">
-        <Script src="https://telegram.org/js/telegram-web-app.js" strategy="afterInteractive" />
+        <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />
         {children}
       </body>
     </html>
