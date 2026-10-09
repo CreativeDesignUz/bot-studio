@@ -1,4 +1,5 @@
 import { resolveAppUser, withSessionCookie } from "@/lib/auth/app-user";
+import { isBotTemplateType, isValidRequestKey } from "@/lib/bots/onboarding";
 
 type Payload = {
   initData?: string;
@@ -8,42 +9,36 @@ type Payload = {
   primaryColor?: string;
   secondaryColor?: string;
   templateType?: "delivery" | "store" | "service" | "course";
+  requestKey?: string;
   item?: { name?: string; description?: string; priceMinor?: number };
 };
 
-const itemTypes = { delivery: "dish", store: "product", service: "service", course: "lesson" } as const;
-
 export async function POST(request: Request) {
   const payload = await request.json() as Payload;
-  if (!payload.botName?.trim() || !payload.templateType) return Response.json({ error: "Bot name and template are required" }, { status: 400 });
+  if (!payload.botName?.trim() || !isBotTemplateType(payload.templateType) || !isValidRequestKey(payload.requestKey)) {
+    return Response.json({ error: "Bot name, template and request key are required" }, { status: 400 });
+  }
   const identity = await resolveAppUser(request, payload.initData ?? "");
   if ("error" in identity) return Response.json({ error: identity.error }, { status: identity.status });
   const { supabase, user: appUser, setCookie } = identity;
 
-  const values = {
-    name: payload.botName.trim(),
-    description: payload.description?.trim() ?? "",
-    template_type: payload.templateType,
-    primary_color: payload.primaryColor ?? "#6541F5",
-    secondary_color: payload.secondaryColor ?? "#F0ECFF",
-    onboarding_stage: payload.item?.name ? "ready" : "structure_ready",
-  };
-  const query = payload.botId
-    ? supabase.from("bots").update(values).eq("id", payload.botId).eq("owner_id", appUser.id)
-    : supabase.from("bots").insert({ owner_id: appUser.id, ...values });
-  const { data: bot, error: botError } = await query.select("id,name,template_type,onboarding_stage,logo_url").single();
-  if (botError) return Response.json({ error: botError.message }, { status: 500 });
-
-  if (payload.item?.name?.trim()) {
-    const { error: itemError } = await supabase.from("catalog_items").insert({
-      bot_id: bot.id,
-      item_type: itemTypes[payload.templateType],
-      name: payload.item.name.trim(),
-      description: payload.item.description?.trim() ?? "",
-      price_minor: payload.item.priceMinor ?? null,
-    });
-    if (itemError) return Response.json({ error: itemError.message }, { status: 500 });
-  }
+  const item = payload.item?.name?.trim() ? {
+    name: payload.item.name.trim(),
+    description: payload.item.description?.trim() ?? "",
+    priceMinor: payload.item.priceMinor ?? null,
+  } : null;
+  const { data: bot, error: botError } = await supabase.rpc("save_bot_onboarding", {
+    p_owner_id: appUser.id,
+    p_bot_id: payload.botId ?? null,
+    p_request_key: payload.requestKey,
+    p_name: payload.botName.trim(),
+    p_description: payload.description?.trim() ?? "",
+    p_template_type: payload.templateType,
+    p_primary_color: payload.primaryColor ?? "#6541F5",
+    p_secondary_color: payload.secondaryColor ?? "#F0ECFF",
+    p_item: item,
+  });
+  if (botError || !bot) return Response.json({ error: botError?.message ?? "Не удалось сохранить онбординг." }, { status: 500 });
 
   return withSessionCookie({ bot }, 200, setCookie);
 }

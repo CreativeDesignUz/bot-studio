@@ -52,7 +52,18 @@ export default function BotBuilder(){
    setDirty(false);setSaved(true);setPublishState("idle");return true;
   }catch(error){setLoadError(error instanceof Error?error.message:"Не удалось сохранить изменения.");setPublishState("error");return false}
  }
- async function publish(){if(dirty&&!(await save()))return;setPublishState("validating");await new Promise(r=>setTimeout(r,500));setPublishState("publishing");const telegram=(window as typeof window&{Telegram?:{WebApp?:{initData?:string}}}).Telegram?.WebApp;const response=await fetch("/api/publish",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({initData:telegram?.initData,botId,name,description,color,buttons})});if(!response.ok){setPublishState("error");return}const result=await response.json() as {requiresTelegramConnection?:boolean;connectUrl?:string};if(result.requiresTelegramConnection&&result.connectUrl){setConnectUrl(result.connectUrl);setPublishState("connection");return}setPublishState("published")}
+ async function publish(){
+  if(dirty&&!(await save()))return;
+  setLoadError("");setPublishState("validating");await new Promise(r=>setTimeout(r,500));setPublishState("publishing");
+  const telegram=(window as typeof window&{Telegram?:{WebApp?:{initData?:string}}}).Telegram?.WebApp;
+  try{
+   const response=await fetch("/api/publish",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({initData:telegram?.initData,botId,name,description,color,buttons})});
+   const result=await response.json() as {status?:string;requiresTelegramConnection?:boolean;connectUrl?:string;error?:string};
+   if(result.requiresTelegramConnection&&result.connectUrl){setConnectUrl(result.connectUrl);setPublishState("connection");return}
+   if(!response.ok||result.status!=="published")throw new Error(result.error||"Публикация не завершена. Повторите попытку.");
+   setPublishState("published");
+  }catch(error){setLoadError(error instanceof Error?error.message:"Не удалось опубликовать бота.");setPublishState("error")}
+ }
  if(loadState==="loading")return <main className="grid min-h-screen place-items-center bg-[#f4f6f8] text-sm text-[#667085]"><span className="flex items-center gap-3"><LoaderCircle className="size-5 animate-spin"/>Загружаем данные бота…</span></main>;
  if(loadState==="error")return <main className="grid min-h-screen place-items-center bg-[#f4f6f8] p-5 text-[#101828]"><section className="w-full max-w-lg rounded-[24px] border border-[#e4e7ec] bg-white p-8 text-center"><span className="mx-auto grid size-14 place-items-center rounded-2xl bg-[#fff1f3] text-[#c01048]"><Bot/></span><h1 className="mt-5 text-2xl font-semibold">Не удалось открыть редактор</h1><p className="mt-2 text-sm leading-6 text-[#667085]">{loadError}</p><div className="mt-6 flex justify-center gap-3"><Link href="/workspace" className="inline-flex h-11 items-center rounded-xl border border-[#d0d5dd] px-4 text-sm font-semibold no-underline">В кабинет</Link><button onClick={()=>location.reload()} className="h-11 rounded-xl bg-[#101828] px-5 text-sm font-semibold text-white">Повторить</button></div></section></main>;
  return <main className="min-h-screen bg-[#f4f6f8] text-[#101828]">

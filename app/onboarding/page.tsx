@@ -80,12 +80,20 @@ export default function OnboardingPage() {
   };
 
   const initData = () => (window as typeof window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData;
+  const requestKey = () => {
+    const storageKey = "botStudioOnboardingRequestKey";
+    const existing = sessionStorage.getItem(storageKey);
+    if (existing) return existing;
+    const created = crypto.randomUUID().replaceAll("-", "");
+    sessionStorage.setItem(storageKey, created);
+    return created;
+  };
 
   const createBot = async () => {
     setSaveState("saving"); setSaveError("");
     const response = await fetch("/api/onboarding", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ initData: initData(), botId, botName, description: botDescription, templateType: template.id, primaryColor, secondaryColor }),
+      body: JSON.stringify({ initData: initData(), botId, requestKey: requestKey(), botName, description: botDescription, templateType: template.id, primaryColor, secondaryColor }),
     });
     const result = await response.json().catch(() => ({ error:"Сервис сохранения временно недоступен" })) as { bot?: { id?: string }; error?: string };
     if (!response.ok || !result.bot?.id) { setSaveState("error"); setSaveError(result.error ?? "Не удалось создать бота"); return; }
@@ -106,11 +114,12 @@ export default function OnboardingPage() {
     setSaveState("saving"); setSaveError("");
     const response = await fetch("/api/onboarding", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ initData: initData(), botId, botName, description: botDescription, templateType: template.id, primaryColor, secondaryColor, item: { name: itemName, description, priceMinor: price ? Number(price) * 100 : undefined } }),
+      body: JSON.stringify({ initData: initData(), botId, requestKey: requestKey(), botName, description: botDescription, templateType: template.id, primaryColor, secondaryColor, item: { name: itemName, description, priceMinor: price ? Number(price) * 100 : undefined } }),
     });
     const result = await response.json().catch(() => ({ error:"Сервис сохранения временно недоступен" })) as { bot?: { id?: string }; error?: string };
     if (!response.ok) { setSaveState("error"); setSaveError(result.error ?? "Не удалось сохранить"); return; }
     if (result.bot?.id) setBotId(result.bot.id);
+    sessionStorage.removeItem("botStudioOnboardingRequestKey");
     setSaveState("idle"); setStage("done");
   };
 

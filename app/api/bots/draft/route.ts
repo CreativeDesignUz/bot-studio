@@ -29,12 +29,14 @@ export async function POST(request: Request) {
   const identity = await resolveAppUser(request, payload.initData ?? "");
   if ("error" in identity) return Response.json({ error: identity.error }, { status: identity.status });
   const { supabase, user: appUser, setCookie } = identity;
-  const { data: bot, error } = await supabase.from("bots").update({
-    name: payload.name.trim(),
-    description: payload.description.trim(),
-    primary_color: payload.color ?? "#6541F5",
-    settings: { home_buttons: payload.buttons ?? [] },
-  }).eq("id", payload.botId).eq("owner_id", appUser.id).select("id,status,updated_at").single();
+  const { data: bot, error } = await supabase.rpc("update_bot_draft", {
+    p_bot_id: payload.botId,
+    p_owner_id: appUser.id,
+    p_name: payload.name.trim(),
+    p_description: payload.description.trim(),
+    p_primary_color: payload.color ?? "#6541F5",
+    p_home_buttons: payload.buttons ?? null,
+  });
   if (error || !bot) return Response.json({ error: "Бот не найден или у вас нет доступа." }, { status: 404 });
   return withSessionCookie({ bot }, 200, setCookie);
 }
