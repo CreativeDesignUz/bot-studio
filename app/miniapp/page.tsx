@@ -31,7 +31,7 @@ export default function MiniAppPage() {
     const botId = new URLSearchParams(window.location.search).get("bot");
     if (!botId) { setError("Не указан магазин"); setLoading(false); return; }
     fetch("/api/miniapp?bot=" + encodeURIComponent(botId), { cache: "no-store" })
-      .then(async response => { const body = await response.json(); if (!response.ok) throw new Error(body.error ?? "Не удалось загрузить магазин"); return body as Shop; })
+      .then(async response => { const body = await response.json() as { error?: string }; if (!response.ok) throw new Error(body.error ?? "Не удалось загрузить магазин"); return body as Shop; })
       .then(setShop).catch(e => setError(e instanceof Error ? e.message : "Ошибка загрузки"))
       .finally(() => setLoading(false));
   }, []);
@@ -62,9 +62,9 @@ export default function MiniAppPage() {
         body: JSON.stringify({ botId: shop.bot.id, initData: telegram.initData, name, fulfillment, address,
           items: selected.map(item => ({ id: item.id, quantity: cart[item.id] })) }),
       });
-      const body = await response.json();
+      const body = await response.json() as { error?: string; orderId?: string };
       if (!response.ok) throw new Error(body.error ?? "Не удалось оформить заказ");
-      setSuccess(body.orderId); setCart({}); setTab("catalog");
+      setSuccess(body.orderId ?? ""); setCart({}); setTab("catalog");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка заказа");
     } finally { setSending(false); }
