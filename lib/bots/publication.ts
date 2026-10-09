@@ -17,7 +17,7 @@ const operations: Record<PublicationStep, (input: PublicationInput) => [string, 
   set_name: (input) => ["setMyName", { name: input.name.slice(0, 64) }],
   set_description: (input) => ["setMyDescription", { description: input.description.slice(0, 512) }],
   set_menu_button: (input) => ["setChatMenuButton", { menu_button: { type: "web_app", text: "Открыть", web_app: { url: input.miniAppUrl } } }],
-  set_webhook: (input) => ["setWebhook", { url: input.webhookUrl, secret_token: input.runtimeSecret, allowed_updates: ["message"] }],
+  set_webhook: (input) => ["setWebhook", { url: input.webhookUrl, secret_token: input.runtimeSecret, allowed_updates: ["message", "callback_query"] }],
 };
 
 export class PublicationError extends Error {
