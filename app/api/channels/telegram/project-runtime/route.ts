@@ -39,7 +39,7 @@ export async function POST(request:Request){
   }
   return Response.json({ok:true});
  }
- if(/^\/start(?:@\w+)?(?:\s|$)/.test(text)){
+ if(/^\/start(?:@\w+)?(?:\s|$)/.test(text??"")){
   await telegramCall(token,"sendMessage",{chat_id:chatId,text:`${publishedName}\n\n${publishedDescription}`,reply_markup:{inline_keyboard:telegramInlineKeyboard(buttons,new URL(`/miniapp?bot=${channel.bot_id}`,origin).toString())}});
  }else{
   await telegramCall(token,"sendMessage",{chat_id:chatId,text:"Откройте приложение — там доступны каталог, заказы и поддержка.",reply_markup:{inline_keyboard:[[{text:"Открыть приложение",web_app:{url:new URL(`/miniapp?bot=${channel.bot_id}`,origin).toString()}}]]}});
