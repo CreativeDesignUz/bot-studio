@@ -271,6 +271,13 @@ begin
   on conflict (bot_id, request_key)
   do update set
     status = 'publishing',
+    -- Completed Telegram operations are valid only for the exact snapshot
+    -- they were performed against. Reset them when the snapshot changes.
+    completed_steps = case
+      when public.bot_publication_attempts.snapshot is distinct from excluded.snapshot
+        then '{}'::text[]
+      else public.bot_publication_attempts.completed_steps
+    end,
     snapshot = excluded.snapshot,
     error_step = null,
     error_message = null
