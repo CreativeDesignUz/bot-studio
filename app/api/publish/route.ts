@@ -52,7 +52,7 @@ export async function POST(request: Request) {
   if (!env.TELEGRAM_MANAGER_TOKEN) return withSessionCookie({ error: "Telegram manager is not configured.", status: "failed" }, 503, setCookie);
   const configuration = (channel.configuration ?? {}) as Record<string, unknown>;
   const runtimeSecret = typeof configuration.runtime_secret === "string" ? configuration.runtime_secret : crypto.randomUUID().replaceAll("-", "");
-  const miniAppUrl = new URL(`/workspace?bot=${botId}`, origin).toString();
+  const miniAppUrl = new URL(`/miniapp?bot=${botId}`, origin).toString();
   const webhookUrl = new URL(`/api/channels/telegram/project-runtime?channel=${channel.id}`, origin).toString();
   try {
     const token = await getManagedBotToken(env.TELEGRAM_MANAGER_TOKEN, channel.external_account_id);
