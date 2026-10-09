@@ -2,21 +2,59 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Bot, Check, ChevronRight, Eye, GripVertical, ImagePlus, LoaderCircle, Plus, Save, Send, Trash2 } from "lucide-react";
 
 type ActionButton={id:string;label:string;action:string};
 type PublishState="idle"|"validating"|"saving"|"publishing"|"published"|"connection"|"error";
+type LoadState="loading"|"ready"|"error";
+type DraftResponse={bot?:{name:string;description:string;primary_color:string;settings?:{home_buttons?:ActionButton[]}};error?:string};
+type ErrorResponse={error?:string};
 
 export default function BotBuilder(){
- const [name,setName]=useState("Osh Express"),[description,setDescription]=useState("Настоящий узбекский плов и любимые блюда с доставкой."),[color,setColor]=useState("#ef6820");
- const [buttons,setButtons]=useState<ActionButton[]>([{id:"1",label:"🍽 Открыть меню",action:"menu"},{id:"2",label:"🛵 Мой заказ",action:"orders"},{id:"3",label:"☎️ Поддержка",action:"support"}]);
- const [botId]=useState<string|null>(()=>typeof window==="undefined"?null:new URLSearchParams(location.search).get("bot")??localStorage.getItem("botStudioBotId"));
+ const searchParams=useSearchParams();
+ const botId=searchParams.get("bot");
+ const [name,setName]=useState(""),[description,setDescription]=useState(""),[color,setColor]=useState("#6541F5");
+ const [buttons,setButtons]=useState<ActionButton[]>([]);
  const [connectUrl,setConnectUrl]=useState<string|null>(null);
  const [dirty,setDirty]=useState(false),[saved,setSaved]=useState(true),[publishState,setPublishState]=useState<PublishState>("idle");
- useEffect(()=>{const tg=(window as typeof window&{Telegram?:{WebApp?:{ready?:()=>void;expand?:()=>void;initData?:string}}}).Telegram?.WebApp;tg?.ready?.();tg?.expand?.();if(botId)fetch(`/api/bots/draft?bot=${encodeURIComponent(botId)}`,{headers:{"x-telegram-init-data":tg?.initData??""}}).then(response=>response.ok?response.json():Promise.reject()).then((result:{bot:{name:string;description:string;primary_color:string;settings?:{home_buttons?:ActionButton[]}}})=>{setName(result.bot.name);setDescription(result.bot.description);setColor(result.bot.primary_color);if(result.bot.settings?.home_buttons?.length)setButtons(result.bot.settings.home_buttons)}).catch(()=>undefined)},[botId]);
+ const [loadState,setLoadState]=useState<LoadState>("loading"),[loadError,setLoadError]=useState("");
+ useEffect(()=>{
+  const tg=(window as typeof window&{Telegram?:{WebApp?:{ready?:()=>void;expand?:()=>void;initData?:string}}}).Telegram?.WebApp;
+  tg?.ready?.();tg?.expand?.();
+  const controller=new AbortController();
+  async function loadBot(){
+   if(!botId){setLoadError("Не указан бот для редактирования.");setLoadState("error");return}
+   setLoadState("loading");setLoadError("");
+   try{
+    const response=await fetch(`/api/bots/draft?bot=${encodeURIComponent(botId)}`,{headers:{"x-telegram-init-data":tg?.initData??""},signal:controller.signal});
+    const result=await response.json() as DraftResponse;
+    if(!response.ok||!result.bot)throw new Error(result.error||"Не удалось загрузить бота.");
+    setName(result.bot.name);setDescription(result.bot.description);setColor(result.bot.primary_color);setButtons(result.bot.settings?.home_buttons??[]);
+    setDirty(false);setSaved(true);setLoadState("ready");
+   }catch(error){
+    if(controller.signal.aborted)return;
+    setLoadError(error instanceof Error?error.message:"Не удалось загрузить бота.");setLoadState("error");
+   }
+  }
+  void loadBot();
+  return()=>controller.abort();
+ },[botId]);
  function change(fn:()=>void){fn();setDirty(true);setSaved(false);if(publishState==="published")setPublishState("idle")}
- async function save(){setPublishState("saving");const telegram=(window as typeof window&{Telegram?:{WebApp?:{initData?:string}}}).Telegram?.WebApp;if(botId){const response=await fetch("/api/bots/draft",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({initData:telegram?.initData,botId,name,description,color,buttons})});if(!response.ok){setPublishState("error");return false}}else{localStorage.setItem("botStudioDraft",JSON.stringify({name,description,color,buttons}))}setDirty(false);setSaved(true);setPublishState("idle");return true}
+ async function save(){
+  if(!botId||loadState!=="ready"){setPublishState("error");return false}
+  setLoadError("");setPublishState("saving");
+  const telegram=(window as typeof window&{Telegram?:{WebApp?:{initData?:string}}}).Telegram?.WebApp;
+  try{
+   const response=await fetch("/api/bots/draft",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({initData:telegram?.initData,botId,name,description,color,buttons})});
+   const result=await response.json() as ErrorResponse;
+   if(!response.ok)throw new Error(result.error||"Не удалось сохранить изменения.");
+   setDirty(false);setSaved(true);setPublishState("idle");return true;
+  }catch(error){setLoadError(error instanceof Error?error.message:"Не удалось сохранить изменения.");setPublishState("error");return false}
+ }
  async function publish(){if(dirty&&!(await save()))return;setPublishState("validating");await new Promise(r=>setTimeout(r,500));setPublishState("publishing");const telegram=(window as typeof window&{Telegram?:{WebApp?:{initData?:string}}}).Telegram?.WebApp;const response=await fetch("/api/publish",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({initData:telegram?.initData,botId,name,description,color,buttons})});if(!response.ok){setPublishState("error");return}const result=await response.json() as {requiresTelegramConnection?:boolean;connectUrl?:string};if(result.requiresTelegramConnection&&result.connectUrl){setConnectUrl(result.connectUrl);setPublishState("connection");return}setPublishState("published")}
+ if(loadState==="loading")return <main className="grid min-h-screen place-items-center bg-[#f4f6f8] text-sm text-[#667085]"><span className="flex items-center gap-3"><LoaderCircle className="size-5 animate-spin"/>Загружаем данные бота…</span></main>;
+ if(loadState==="error")return <main className="grid min-h-screen place-items-center bg-[#f4f6f8] p-5 text-[#101828]"><section className="w-full max-w-lg rounded-[24px] border border-[#e4e7ec] bg-white p-8 text-center"><span className="mx-auto grid size-14 place-items-center rounded-2xl bg-[#fff1f3] text-[#c01048]"><Bot/></span><h1 className="mt-5 text-2xl font-semibold">Не удалось открыть редактор</h1><p className="mt-2 text-sm leading-6 text-[#667085]">{loadError}</p><div className="mt-6 flex justify-center gap-3"><Link href="/workspace" className="inline-flex h-11 items-center rounded-xl border border-[#d0d5dd] px-4 text-sm font-semibold no-underline">В кабинет</Link><button onClick={()=>location.reload()} className="h-11 rounded-xl bg-[#101828] px-5 text-sm font-semibold text-white">Повторить</button></div></section></main>;
  return <main className="min-h-screen bg-[#f4f6f8] text-[#101828]">
   <header className="sticky top-0 z-30 flex min-h-[68px] flex-wrap items-center gap-3 border-b border-[#e4e7ec] bg-white/95 px-4 py-3 backdrop-blur sm:px-7"><Link href="/workspace" className="grid size-10 place-items-center rounded-xl border border-[#e4e7ec]"><ArrowLeft className="size-4"/></Link><span className="grid size-10 place-items-center rounded-xl bg-[#f0ecff] text-[#6d45f5]"><Bot className="size-5"/></span><div><strong className="block text-sm">Редактор бота</strong><span className="text-xs text-[#98a2b3]">{saved&&!dirty?"Все изменения сохранены":"Есть несохранённые изменения"}</span></div><div className="ml-auto flex gap-2"><button onClick={save} disabled={!dirty||publishState!=="idle"} className="flex h-10 items-center gap-2 rounded-xl border border-[#d0d5dd] px-3 text-sm font-semibold disabled:opacity-40"><Save className="size-4"/><span className="hidden sm:inline">Сохранить</span></button><button onClick={publish} disabled={publishState!=="idle"&&publishState!=="published"} className="flex h-10 items-center gap-2 rounded-xl bg-[#101828] px-4 text-sm font-semibold text-white disabled:opacity-60"><Send className="size-4"/>{publishState==="published"?"Опубликовано":"Опубликовать"}</button></div></header>
   <div className="mx-auto grid max-w-[1580px] gap-5 p-4 sm:p-7 xl:grid-cols-[250px_minmax(0,1fr)_360px]">
@@ -28,7 +66,7 @@ export default function BotBuilder(){
   </div>
   {publishState!=="idle"&&publishState!=="published"&&publishState!=="connection"&&publishState!=="error"&&<PublishOverlay state={publishState}/>} 
   {publishState==="published"&&<div className="fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-2xl bg-[#101828] px-5 py-4 text-sm font-semibold text-white shadow-xl"><Check className="size-5 text-[#6ce9a6]"/>Бот опубликован. Изменения доступны в Telegram.</div>}
-  {publishState==="error"&&<div className="fixed bottom-5 left-1/2 z-50 flex w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 items-center gap-3 rounded-2xl bg-[#7a271a] px-5 py-4 text-sm font-semibold text-white shadow-xl"><span className="flex-1">Публикация ещё не подключена: нужен новый Telegram-токен и запуск из Mini App.</span><button onClick={()=>setPublishState("idle")}><Trash2 className="size-4"/></button></div>}
+  {publishState==="error"&&<div className="fixed bottom-5 left-1/2 z-50 flex w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 items-center gap-3 rounded-2xl bg-[#7a271a] px-5 py-4 text-sm font-semibold text-white shadow-xl"><span className="flex-1">{loadError||"Не удалось выполнить операцию. Повторите попытку."}</span><button onClick={()=>setPublishState("idle")}><Trash2 className="size-4"/></button></div>}
   {publishState==="connection"&&connectUrl&&<div className="fixed bottom-5 left-1/2 z-50 flex w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 items-center gap-3 rounded-2xl bg-[#101828] px-5 py-4 text-sm text-white shadow-xl"><span className="flex-1"><strong className="block">Проект сохранён</strong><small className="text-white/70">Подтвердите создание бота в Telegram — после этого публикация завершится автоматически.</small></span><a href={connectUrl} className="shrink-0 rounded-xl bg-white px-4 py-2 font-semibold text-[#101828]">Открыть Telegram</a></div>}
  </main>
 }

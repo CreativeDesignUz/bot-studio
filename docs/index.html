@@ -1,23 +1,79 @@
 <!doctype html>
 <html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#f4f6f8">
-  <title>Bot Studio — кабинет</title>
-  <style>
-    html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#f4f6f8}
-    iframe{display:block;width:100%;height:100%;border:0;background:#f4f6f8}
-    .fallback{position:fixed;inset:0;display:grid;place-items:center;padding:24px;font:16px system-ui;text-align:center}
-    .fallback a{color:#5934dc;font-weight:700}
-  </style>
-</head>
-<body>
-  <iframe
-    src="https://bot-studio-uz.wittykrill2.chatgpt.site/workspace"
-    title="Bot Studio — кабинет"
-    allow="clipboard-read; clipboard-write; fullscreen"
-  ></iframe>
-  <noscript><div class="fallback">Для работы кабинета включите JavaScript.</div></noscript>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#6c4cff" />
+    <meta http-equiv="refresh" content="0;url=https://bot-studio-uz.wittykrill2.chatgpt.site/workspace" />
+    <link rel="canonical" href="https://bot-studio-uz.wittykrill2.chatgpt.site/workspace" />
+    <title>Bot Studio — открыть кабинет</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #eef1f5;
+        color: #10121a;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+
+      main {
+        width: min(100%, 520px);
+        padding: 48px;
+        border: 1px solid rgba(16, 18, 26, 0.08);
+        border-radius: 32px;
+        background: rgba(255, 255, 255, 0.94);
+        box-shadow: 0 24px 70px rgba(45, 48, 60, 0.12);
+        text-align: center;
+      }
+
+      .logo {
+        width: 64px;
+        height: 64px;
+        margin: 0 auto 24px;
+        display: grid;
+        place-items: center;
+        border-radius: 20px;
+        background: #6c4cff;
+        color: white;
+        font-size: 30px;
+      }
+
+      h1 { margin: 0 0 12px; font-size: clamp(28px, 6vw, 40px); letter-spacing: -0.04em; }
+      p { margin: 0 0 28px; color: #6d7280; line-height: 1.55; }
+
+      a {
+        display: inline-flex;
+        min-height: 48px;
+        align-items: center;
+        justify-content: center;
+        padding: 0 24px;
+        border-radius: 999px;
+        background: #10121a;
+        color: white;
+        font-weight: 650;
+        text-decoration: none;
+      }
+
+      @media (max-width: 520px) {
+        main { padding: 36px 24px; border-radius: 24px; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="logo" aria-hidden="true">🤖</div>
+      <h1>Открываем Bot Studio</h1>
+      <p>Сейчас вы перейдёте в кабинет, где можно создавать и настраивать ботов.</p>
+      <a href="https://bot-studio-uz.wittykrill2.chatgpt.site/workspace">Открыть кабинет</a>
+    </main>
+  </body>
 </html>

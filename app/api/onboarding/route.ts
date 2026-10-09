@@ -2,7 +2,11 @@ import { resolveAppUser, withSessionCookie } from "@/lib/auth/app-user";
 
 type Payload = {
   initData?: string;
+  botId?: string;
   botName?: string;
+  description?: string;
+  primaryColor?: string;
+  secondaryColor?: string;
   templateType?: "delivery" | "store" | "service" | "course";
   item?: { name?: string; description?: string; priceMinor?: number };
 };
@@ -16,12 +20,18 @@ export async function POST(request: Request) {
   if ("error" in identity) return Response.json({ error: identity.error }, { status: identity.status });
   const { supabase, user: appUser, setCookie } = identity;
 
-  const { data: bot, error: botError } = await supabase.from("bots").insert({
-    owner_id: appUser.id,
+  const values = {
     name: payload.botName.trim(),
+    description: payload.description?.trim() ?? "",
     template_type: payload.templateType,
+    primary_color: payload.primaryColor ?? "#6541F5",
+    secondary_color: payload.secondaryColor ?? "#F0ECFF",
     onboarding_stage: payload.item?.name ? "ready" : "structure_ready",
-  }).select("id,name,template_type,onboarding_stage").single();
+  };
+  const query = payload.botId
+    ? supabase.from("bots").update(values).eq("id", payload.botId).eq("owner_id", appUser.id)
+    : supabase.from("bots").insert({ owner_id: appUser.id, ...values });
+  const { data: bot, error: botError } = await query.select("id,name,template_type,onboarding_stage,logo_url").single();
   if (botError) return Response.json({ error: botError.message }, { status: 500 });
 
   if (payload.item?.name?.trim()) {
