@@ -13,6 +13,9 @@ const { d1, r2 } = hostingConfig;
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 const managedLinux = readExecutionProfile() === "managed-linux";
+// Allow only an explicitly configured temporary HTTPS tunnel for local testing.
+const tunnelHost = process.env.BOT_STUDIO_TUNNEL_HOST?.trim().toLowerCase();
+const safeTunnelHost = tunnelHost && /^[a-z0-9-]+\.trycloudflare\.com$/.test(tunnelHost) ? tunnelHost : null;
 
 const localBindingConfig = {
   main: "./build/sites-worker.ts",
@@ -53,9 +56,8 @@ export default defineConfig(async ({ command }) => {
 
   return {
     server: {
-      ...(managedLinux
-        ? { host: "0.0.0.0", allowedHosts: ["terminal.local"] }
-        : {}),
+      ...(managedLinux ? { host: "0.0.0.0" } : {}),
+      allowedHosts: [...(managedLinux ? ["terminal.local"] : []), ...(safeTunnelHost ? [safeTunnelHost] : [])],
       ...(isCodexSeatbeltSandbox
         ? { watch: { useFsEvents: false, usePolling: true } }
         : {}),
