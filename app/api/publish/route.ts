@@ -1,10 +1,11 @@
+import { normalizeBotButtons } from "@/lib/telegram/button-actions";
 import { env } from "cloudflare:workers";
 import { resolveAppUser, withSessionCookie } from "@/lib/auth/app-user";
 import { getManagedBotToken, telegramCall } from "@/lib/channels/telegram-api";
 import { PublicationError, publicationRequestKey, publicPublicationError, runTelegramPublication } from "@/lib/bots/publication";
 import { buildBindingStartParameter, createBindingToken, hashBindingToken } from "@/lib/telegram/managed-binding";
 
-type PublishPayload = { initData?: string; botId?: string; name?: string; description?: string; color?: string; buttons?: { label?: string; action?: string }[] };
+type PublishPayload = { initData?: string; botId?: string; name?: string; description?: string; color?: string; buttons?: unknown };
 type PreparedPublication = { attempt_id: string; completed_steps?: string[]; snapshot: { name: string; description: string; username?: string | null } };
 
 function suggestedUsername(botId: string, current?: string | null) {
@@ -16,14 +17,17 @@ function suggestedUsername(botId: string, current?: string | null) {
 export async function POST(request: Request) {
   const payload = await request.json() as PublishPayload;
   if (!payload.botId || !payload.name?.trim() || !payload.description?.trim()) return Response.json({ error: "Заполните название и описание." }, { status: 400 });
+  let buttons;
+  try { buttons = payload.buttons == null ? [] : normalizeBotButtons(payload.buttons); }
+  catch { return Response.json({ error: "Проверьте названия и адреса кнопок." }, { status: 400 }); }
   const botId = payload.botId;
   const identity = await resolveAppUser(request, payload.initData ?? "");
   if ("error" in identity) return Response.json({ error: identity.error }, { status: identity.status });
   const { supabase, user: appUser, setCookie } = identity;
-  const requestKey = await publicationRequestKey(botId, { name: payload.name.trim(), description: payload.description.trim(), color: payload.color ?? "#6541F5", buttons: payload.buttons ?? [] });
+  const requestKey = await publicationRequestKey(botId, { name: payload.name.trim(), description: payload.description.trim(), color: payload.color ?? "#6541F5", buttons });
   const { data: prepared, error: prepareError } = await supabase.rpc("prepare_bot_publication", {
     p_bot_id: botId, p_owner_id: appUser.id, p_request_key: requestKey, p_name: payload.name.trim(),
-    p_description: payload.description.trim(), p_primary_color: payload.color ?? "#6541F5", p_home_buttons: payload.buttons ?? null,
+    p_description: payload.description.trim(), p_primary_color: payload.color ?? "#6541F5", p_home_buttons: buttons,
   });
   if (prepareError || !prepared) return Response.json({ error: "Бот не найден или у вас нет доступа." }, { status: 404 });
   const publication = prepared as PreparedPublication;
