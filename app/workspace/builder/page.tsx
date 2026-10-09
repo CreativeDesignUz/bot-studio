@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Bot, Check, ChevronRight, Eye, GripVertical, LoaderCircle, Plus, Save, Send, Trash2, MessageCircle, Smartphone, ExternalLink } from "lucide-react";
 
-type ActionButton={id:string;label:string;action:string};
+type ActionButton={id:string;label:string;action:"home"|"url";url?:string};
 type PublishState="idle"|"validating"|"saving"|"publishing"|"published"|"connection"|"error";
 type LoadState="loading"|"ready"|"error";
 type DraftResponse={bot?:{name:string;description:string;primary_color:string;settings?:{home_buttons?:ActionButton[]}};error?:string};
@@ -32,7 +32,7 @@ export default function BotBuilder(){
     const response=await fetch(`/api/bots/draft?bot=${encodeURIComponent(botId)}`,{headers:{"x-telegram-init-data":tg?.initData??""},signal:controller.signal});
     const result=await response.json() as DraftResponse;
     if(!response.ok||!result.bot)throw new Error(result.error||"Не удалось загрузить бота.");
-    setName(result.bot.name);setDescription(result.bot.description);setColor(result.bot.primary_color);setButtons(result.bot.settings?.home_buttons??[]);
+    setName(result.bot.name);setDescription(result.bot.description);setColor(result.bot.primary_color);setButtons((result.bot.settings?.home_buttons??[]).map(button=>({...button,id:button.id??crypto.randomUUID(),action:button.action==="url"?"url":"home"})));
     setDirty(false);setSaved(true);setLoadState("ready");
    }catch(error){
     if(controller.signal.aborted)return;
@@ -94,10 +94,13 @@ export default function BotBuilder(){
     {activeSection==="buttons" && <div className="rounded-[22px] border border-[#e4e7ec] bg-white p-5 sm:p-7">
       <span className="text-xs font-semibold text-[#6d45f5]">Шаг 2 · Telegram</span>
       <h1 className="mt-2 text-2xl font-semibold">Кнопки под сообщением</h1>
-      <p className="mt-2 text-sm leading-6 text-[#667085]">Эти кнопки появятся прямо под сообщением /start. При нажатии клиент откроет ваш Mini App. Если ничего не добавлять, будет кнопка «Открыть приложение».</p>
-      <div className="mt-6 space-y-3">{buttons.map((button,index)=><div key={button.id} className="flex items-center gap-3 rounded-2xl border border-[#e4e7ec] p-3"><GripVertical className="size-4 shrink-0 text-[#98a2b3]"/><span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[#f2f4f7] text-xs font-semibold">{index+1}</span><div className="min-w-0 flex-1"><input aria-label={`Текст кнопки ${index+1}`} maxLength={60} value={button.label} onChange={e=>change(()=>setButtons(v=>v.map(x=>x.id===button.id?{...x,label:e.target.value}:x)))} placeholder="Название кнопки" className="h-10 w-full bg-transparent text-sm font-medium outline-none"/><p className="text-xs text-[#98a2b3]">Открывает Mini App</p></div><button type="button" onClick={()=>change(()=>setButtons(v=>v.filter(x=>x.id!==button.id)))} aria-label="Удалить кнопку" className="grid size-9 shrink-0 place-items-center rounded-lg text-[#98a2b3] hover:bg-[#fff1f3] hover:text-[#c01048]"><Trash2 className="size-4"/></button></div>)}</div>
+      <p className="mt-2 text-sm leading-6 text-[#667085]">Эти кнопки появятся под сообщением /start. Выберите для каждой кнопку действие: открыть Mini App или перейти по ссылке.</p>
+      <div className="mt-6 space-y-3">{buttons.map((button,index)=><div key={button.id} className="rounded-2xl border border-[#e4e7ec] p-4">
+       <div className="flex items-center gap-3"><GripVertical className="size-4 shrink-0 text-[#98a2b3]"/><span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[#f2f4f7] text-xs font-semibold">{index+1}</span><input aria-label={`Текст кнопки ${index+1}`} maxLength={60} value={button.label} onChange={e=>change(()=>setButtons(v=>v.map(x=>x.id===button.id?{...x,label:e.target.value}:x)))} placeholder="Название кнопки" className="h-10 min-w-0 flex-1 bg-transparent text-sm font-medium outline-none"/><button type="button" onClick={()=>change(()=>setButtons(v=>v.filter(x=>x.id!==button.id)))} aria-label="Удалить кнопку" className="grid size-9 shrink-0 place-items-center rounded-lg text-[#98a2b3] hover:bg-[#fff1f3] hover:text-[#c01048]"><Trash2 className="size-4"/></button></div>
+       <div className="mt-3 grid gap-3 pl-0 sm:pl-11"><label className="text-xs font-medium text-[#667085]">Действие кнопки<select aria-label={`Действие кнопки ${index+1}`} value={button.action} onChange={e=>change(()=>setButtons(v=>v.map(x=>x.id===button.id?{...x,action:e.target.value as "home"|"url"}:x)))} className="mt-1 block h-10 w-full rounded-xl border border-[#d0d5dd] bg-white px-3 text-sm text-[#101828]"><option value="home">Открыть Mini App</option><option value="url">Открыть ссылку</option></select></label>{button.action==="url"&&<label className="text-xs font-medium text-[#667085]">HTTPS-адрес<input type="url" value={button.url??""} onChange={e=>change(()=>setButtons(v=>v.map(x=>x.id===button.id?{...x,url:e.target.value}:x)))} placeholder="https://example.com" className="mt-1 block h-10 w-full rounded-xl border border-[#d0d5dd] px-3 text-sm text-[#101828]"/></label>}</div>
+      </div>)}</div>
       <button type="button" onClick={()=>change(()=>setButtons(v=>[...v,{id:crypto.randomUUID(),label:"Открыть каталог",action:"home"}]))} disabled={buttons.length>=8} className="mt-4 inline-flex h-11 items-center gap-2 rounded-xl border border-[#d0d5dd] px-4 text-sm font-semibold disabled:opacity-40"><Plus className="size-4"/>Добавить кнопку</button>
-      <p className="mt-4 text-xs text-[#667085]">Дополнительные действия кнопок и ветвления диалога добавим отдельно. Сейчас все кнопки открывают Mini App.</p>
+      <p className="mt-4 text-xs text-[#667085]">Кнопки можно направить в Mini App или на внешний HTTPS-сайт. Сценарии с ответами и условиями добавим следующим этапом.</p>
     </div>}
     {activeSection==="miniapp" && <div className="rounded-[22px] border border-[#e4e7ec] bg-white p-5 sm:p-7">
       <span className="text-xs font-semibold text-[#6d45f5]">Шаг 3 · Mini App</span>
