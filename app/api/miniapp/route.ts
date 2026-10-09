@@ -64,34 +64,24 @@ export async function POST(request: Request) {
     if (!telegramUser) return jsonError("Откройте магазин через Telegram", 401);
 
     const quantities = new Map<string, number>();
-    for (const item of input.items) quantities.set(item.id, (quantities.get(item.id) ?? 0) + item.quantity);
-    const { data: catalog, error } = await supabase.from("catalog_items")
-      .select("id,name,price_minor,currency")
-      .eq("bot_id", input.botId).eq("is_active", true).in("id", [...quantities.keys()]);
-    if (error || !catalog || catalog.length !== quantities.size || catalog.some(item => item.price_minor == null || Number(item.price_minor) < 0))
-      return jsonError("Некоторые товары недоступны", 409);
-    const currencies = new Set(catalog.map(item => item.currency));
-    if (currencies.size !== 1) return jsonError("Товары должны иметь одну валюту", 409);
-    const subtotal = catalog.reduce((sum, item) => sum + Number(item.price_minor) * (quantities.get(item.id) ?? 0), 0);
-    if (!Number.isSafeInteger(subtotal) || subtotal < 0) return jsonError("Некорректная сумма", 400);
-
-    const { data: order, error: orderError } = await supabase.from("orders").insert({
-      bot_id: input.botId, customer_external_id: String(telegramUser.id), customer_name: name,
-      status: "new", subtotal_minor: subtotal, total_minor: subtotal, delivery_minor: 0,
-      currency: catalog[0].currency, fulfillment_type: input.fulfillment,
-      delivery_address: input.fulfillment === "delivery" ? { address } : null,
-      payload: { source: "telegram_miniapp", payment_method: "on_delivery" },
-    }).select("id").single();
-    if (orderError || !order) return jsonError("Не удалось создать заказ", 500);
-    const { error: linesError } = await supabase.from("order_items").insert(catalog.map(item => ({
-      order_id: order.id, catalog_item_id: item.id, item_name: item.name,
-      quantity: quantities.get(item.id), unit_price_minor: item.price_minor,
-    })));
-    if (linesError) {
-      await supabase.from("orders").delete().eq("id", order.id).eq("bot_id", input.botId);
-      return jsonError("Не удалось сохранить состав заказа", 500);
+    for (const item of input.items) {
+      const total = (quantities.get(item.id) ?? 0) + item.quantity;
+      if (total > 99) return jsonError("Не более 99 единиц одного товара", 400);
+      quantities.set(item.id, total);
     }
-    return Response.json({ orderId: order.id, totalMinor: subtotal, currency: catalog[0].currency }, { status: 201 });
+    const { data: order, error: checkoutError } = await supabase.rpc("create_miniapp_order", {
+      p_bot_id: input.botId,
+      p_customer_external_id: String(telegramUser.id),
+      p_customer_name: name,
+      p_fulfillment: input.fulfillment,
+      p_delivery_address: address,
+      p_items: [...quantities].map(([id, quantity]) => ({ id, quantity })),
+    });
+    if (checkoutError || !order) {
+      if (checkoutError?.code === "22023") return jsonError("Проверьте доступность товаров и состав заказа", 409);
+      return jsonError("Не удалось сохранить заказ", 500);
+    }
+    return Response.json(order, { status: 201 });
   } catch {
     return jsonError("Не удалось оформить заказ. Попробуйте позже", 503);
   }
