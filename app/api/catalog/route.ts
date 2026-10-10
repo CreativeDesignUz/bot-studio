@@ -12,6 +12,7 @@ async function authorize(request: Request, botId: string, initData: string) {
   const identity = await resolveAppUser(request, initData);
   if ("error" in identity) return { error: bad(identity.error, identity.status) };
   const { supabase, user, setCookie } = identity;
+  if (!user) return { error: bad("Не удалось определить пользователя.", 401) };
   const { data: bot, error } = await supabase.from("bots").select("id,template_type")
     .eq("id", botId).eq("owner_id", user.id).maybeSingle();
   if (error || !bot) return { error: withSessionCookie({ error: "Бот не найден или нет доступа." }, 404, setCookie) };
