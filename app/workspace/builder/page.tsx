@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import FigmaTelegramPreview from "./figma-telegram-preview";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Bot, Check, ChevronRight, Eye, GripVertical, LoaderCircle, Plus, Save, Send, Trash2, MessageCircle, Smartphone, ExternalLink, KeyRound, ShieldCheck, Unplug } from "lucide-react";
 
@@ -20,6 +21,7 @@ export default function BotBuilder(){
  const [buttons,setButtons]=useState<ActionButton[]>([]);
  const [activeSection,setActiveSection]=useState<"message"|"buttons"|"miniapp"|"publish">("message");
  const [previewMode,setPreviewMode]=useState<"telegram"|"miniapp">("telegram");
+ const [figmaPreview,setFigmaPreview]=useState<"profile"|"chat">("chat");
  const [connectUrl,setConnectUrl]=useState<string|null>(null);
  const [dirty,setDirty]=useState(false),[saved,setSaved]=useState(true),[publishState,setPublishState]=useState<PublishState>("idle");
  const [loadState,setLoadState]=useState<LoadState>("loading"),[loadError,setLoadError]=useState("");
@@ -87,27 +89,43 @@ export default function BotBuilder(){
  }
  if(loadState==="loading")return <main className="grid min-h-screen place-items-center bg-[#f4f6f8] text-sm text-[#667085]"><span className="flex items-center gap-3"><LoaderCircle className="size-5 animate-spin"/>Загружаем данные бота…</span></main>;
  if(loadState==="error")return <main className="grid min-h-screen place-items-center bg-[#f4f6f8] p-5 text-[#101828]"><section className="w-full max-w-lg rounded-[24px] border border-[#e4e7ec] bg-white p-8 text-center"><span className="mx-auto grid size-14 place-items-center rounded-2xl bg-[#fff1f3] text-[#c01048]"><Bot/></span><h1 className="mt-5 text-2xl font-semibold">Не удалось открыть редактор</h1><p className="mt-2 text-sm leading-6 text-[#667085]">{loadError}</p><div className="mt-6 flex justify-center gap-3"><Link href="/workspace" className="inline-flex h-11 items-center rounded-xl border border-[#d0d5dd] px-4 text-sm font-semibold no-underline">В кабинет</Link><button onClick={()=>location.reload()} className="h-11 rounded-xl bg-[#101828] px-5 text-sm font-semibold text-white">Повторить</button></div></section></main>;
- return <main className="min-h-screen bg-[#f4f6f8] text-[#101828]">
-  <header className="sticky top-0 z-30 flex min-h-[68px] flex-wrap items-center gap-3 border-b border-[#e4e7ec] bg-white/95 px-4 py-3 backdrop-blur sm:px-7"><Link href="/workspace" className="grid size-10 place-items-center rounded-xl border border-[#e4e7ec]"><ArrowLeft className="size-4"/></Link><span className="grid size-10 place-items-center rounded-xl bg-[#f0ecff] text-[#6d45f5]"><Bot className="size-5"/></span><div><strong className="block text-sm">Редактор бота</strong><span className="text-xs text-[#98a2b3]">{saved&&!dirty?"Все изменения сохранены":"Есть несохранённые изменения"}</span></div><div className="ml-auto flex gap-2"><button onClick={save} disabled={!dirty||publishState!=="idle"} className="flex h-10 items-center gap-2 rounded-xl border border-[#d0d5dd] px-3 text-sm font-semibold disabled:opacity-40"><Save className="size-4"/><span className="hidden sm:inline">Сохранить</span></button><button type="button" onClick={publish} disabled={publishState!=="idle"&&publishState!=="published"} className="app-primary-button h-10 shrink-0 whitespace-nowrap px-4"><Send className="size-4 shrink-0"/><span>{publishState==="published"?"Опубликовано":"Опубликовать"}</span></button></div></header>
-  <div className="mx-auto grid max-w-[1580px] gap-5 p-4 sm:p-7 xl:grid-cols-[250px_minmax(0,1fr)_360px]">
-   <aside className="rounded-[22px] border border-[#e4e7ec] bg-white p-3 xl:sticky xl:top-[92px] xl:h-fit">
-    <p className="px-3 py-3 text-[11px] font-semibold uppercase tracking-[.14em] text-[#98a2b3]">Telegram-бот</p>
-    {([{id:"message",label:"Приветственное сообщение",icon:MessageCircle},{id:"buttons",label:"Кнопки под сообщением",icon:Bot},{id:"miniapp",label:"Мини-приложение",icon:Smartphone},{id:"publish",label:"Подключение и запуск",icon:Send}] as const).map(item=>{
-     const Icon=item.icon;
-     return <button key={item.id} type="button" onClick={()=>{setActiveSection(item.id);setPreviewMode(item.id==="miniapp"?"miniapp":"telegram")}} className={`mb-1 flex min-h-12 w-full items-center gap-2 rounded-xl px-3 text-left text-sm font-medium ${activeSection===item.id?"bg-[#f0ecff] text-[#5934dc]":"text-[#667085] hover:bg-[#f9fafb]"}`}><Icon className="size-4 shrink-0"/><span className="flex-1">{item.label}</span><ChevronRight className="size-4"/></button>
-    })}
-    <div className="mt-6 rounded-2xl bg-[#f9fafb] p-4"><strong className="text-sm">Как это работает</strong><p className="mt-2 text-xs leading-5 text-[#667085]">1. Настройте сообщение /start и кнопки.<br/>2. При необходимости наполните Mini App.<br/>3. Подключите Telegram и опубликуйте.</p></div>
+ return <main className="min-h-screen bg-[#f9fafb] text-[#080b2b]">
+  <div className="mx-auto grid min-h-screen max-w-[1600px] xl:grid-cols-[270px_minmax(0,1fr)]">
+   <aside className="flex flex-col border-r border-[#cbd5e0] bg-[#f1f2f4] px-4 py-5">
+    <Link href="/workspace" className="flex items-center gap-2 rounded-lg px-1 no-underline"><span className="grid size-9 place-items-center rounded-[9px] bg-[#4420e7] text-white"><Bot className="size-5"/></span><strong className="text-[18px] tracking-[-.02em] text-[#080b2b]">BotStudio</strong></Link>
+    <div className="mt-5 flex h-10 items-center gap-2 rounded-lg border border-[#cbd5e0] bg-[#f8f9fb] px-3 text-[#718096]"><Eye className="size-4"/><span className="text-xs">Поиск смысла</span><span className="ml-auto rounded border px-1 text-[10px]">⌘1</span></div>
+    <nav className="mt-7 space-y-1 text-sm">
+     <Link href="/workspace" className="flex h-[42px] items-center gap-3 rounded-lg px-3 text-[#080b2b] no-underline"><Bot size={19}/>Главная</Link>
+     <Link href="/workspace" className="flex h-[42px] items-center gap-3 rounded-lg px-3 text-[#080b2b] no-underline"><Save size={19}/>Заказы</Link>
+     <Link href="/workspace" className="flex h-[42px] items-center gap-3 rounded-lg px-3 text-[#080b2b] no-underline"><Smartphone size={19}/>Продукты</Link>
+     <Link href="/workspace" className="flex h-[42px] items-center gap-3 rounded-lg px-3 text-[#080b2b] no-underline"><Eye size={19}/>Аналитика</Link>
+     <Link href="/workspace" className="flex h-[42px] items-center gap-3 rounded-lg px-3 text-[#080b2b] no-underline"><MessageCircle size={19}/>Клиенты</Link>
+    </nav>
+    <p className="mt-7 px-3 text-[11px] font-semibold uppercase tracking-[.06em]">Интеграция</p>
+    <div className="mt-3 rounded-[9px] bg-[#4420e7] px-3 py-3 text-[14px] font-medium text-white"><span className="flex items-center gap-2"><Send size={17}/>Телеграм бот <ChevronRight className="ml-auto size-4 rotate-90"/></span></div>
+    <nav className="ml-4 border-l border-[#c5bafa] pl-2 text-sm">
+     <button type="button" onClick={()=>{setActiveSection("message");setPreviewMode("telegram")}} className={`mt-1 flex h-10 w-full items-center justify-between rounded-[8px] px-3 text-left ${activeSection==="message"?"bg-[#e8e2ff] text-[#4420e7]":"text-[#080b2b]"}`}>Все боты<ChevronRight size={14}/></button>
+     <button type="button" onClick={()=>setActiveSection("buttons")} className={`mt-1 flex h-10 w-full items-center justify-between rounded-[8px] px-3 text-left ${activeSection==="buttons"?"bg-[#e8e2ff] text-[#4420e7]":"text-[#080b2b]"}`}>Все WorkFlow<ChevronRight size={14}/></button>
+     <button type="button" onClick={()=>setActiveSection("miniapp")} className={`mt-1 flex h-10 w-full items-center justify-between rounded-[8px] px-3 text-left ${activeSection==="miniapp"?"bg-[#e8e2ff] text-[#4420e7]":"text-[#080b2b]"}`}>Мини-приложение<ChevronRight size={14}/></button>
+     <button type="button" onClick={()=>setActiveSection("publish")} className={`mt-1 flex h-10 w-full items-center justify-between rounded-[8px] px-3 text-left ${activeSection==="publish"?"bg-[#e8e2ff] text-[#4420e7]":"text-[#080b2b]"}`}>Подключение<ChevronRight size={14}/></button>
+    </nav>
+    <div className="mt-auto space-y-3 border-t border-[#dfe4ea] pt-5 text-sm text-[#718096]"><Link href="/workspace" className="block no-underline">⚙ Настройки</Link><span className="block">☾ Тёмная сторона</span><span className="block border-t border-[#dfe4ea] pt-3 text-xs">Bot Studio · Редактор</span></div>
    </aside>
-   <section className="space-y-5">
-    {activeSection==="message" && <div className="rounded-[22px] border border-[#e4e7ec] bg-white p-5 sm:p-7">
-      <span className="text-xs font-semibold text-[#6d45f5]">Шаг 1 · Telegram</span>
-      <h1 className="mt-2 text-2xl font-semibold">Приветственное сообщение</h1>
-      <p className="mt-2 text-sm leading-6 text-[#667085]">Именно это сообщение клиент получит в чате, когда нажмёт <strong>/start</strong>. Меняйте текст и сразу смотрите результат справа.</p>
-      <div className="mt-6 space-y-5">
-       <Field label="Название бота"><input value={name} maxLength={64} onChange={e=>change(()=>setName(e.target.value))}/></Field>
-       <Field label="Текст сообщения /start"><textarea rows={6} maxLength={512} value={description} placeholder="Здравствуйте! Добро пожаловать. Чем можем помочь?" onChange={e=>change(()=>setDescription(e.target.value))}/></Field>
-       <p className="text-xs text-[#98a2b3]">{description.length}/512 символов · сейчас текст хранится как описание бота</p>
-       <button type="button" onClick={()=>setActiveSection("buttons")} className="inline-flex items-center gap-2 rounded-xl bg-[#6541f5] px-5 py-3 text-sm font-semibold text-white">Настроить кнопки <ChevronRight className="size-4"/></button>
+   <div className="min-w-0 px-5 py-5 sm:px-8 xl:px-12">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+     <Link href="/workspace" className="flex items-center gap-3 text-sm font-semibold text-[#080b2b] no-underline"><ArrowLeft className="size-5 text-[#4420e7]"/>Изменить данные</Link>
+     <div className="flex gap-2"><button onClick={save} disabled={!dirty} className="h-10 rounded-[8px] border border-[#cbd5e0] px-4 text-sm font-medium disabled:opacity-50">Сохранить</button><button onClick={publish} className="h-10 rounded-[8px] bg-[#4420e7] px-4 text-sm font-semibold !text-white">Опубликовать</button></div>
+    </div>
+    <div className={`mx-auto mt-12 ${activeSection==="message"?"grid max-w-[850px] items-start gap-6 lg:grid-cols-[minmax(0,460px)_minmax(0,370px)]":"grid max-w-[1150px] items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,370px)]"}`}>
+    <section className="min-w-0 space-y-5">
+    {activeSection==="message" && <div className="rounded-[10px] border border-[#dadadd] bg-white px-4 py-5">
+      <div className="space-y-4 text-[14px]">
+       <Field label="Название бота *"><input value={name} maxLength={64} onChange={e=>change(()=>setName(e.target.value))} placeholder="Название бота"/></Field>
+       <Field label="Токен бота *"><div className="flex h-10 items-center justify-between rounded-[8px] border border-[#cbd5e0] bg-[#f8f9fb] px-3 text-sm"><span className="truncate text-[#718096]">{connection?.status==="connected"?`@ ${connection.username||"Подключён"} · защищён`:"Подключается в отдельном разделе"}</span><button onClick={()=>setActiveSection("publish")} className="ml-2 shrink-0 text-[#4420e7]"><KeyRound size={17}/></button></div></Field>
+       <Field label="Описание бота"><textarea rows={3} maxLength={512} value={description} onChange={e=>change(()=>setDescription(e.target.value))} placeholder="Опишите своего бота"/></Field>
+       <Field label="Привет бота"><textarea rows={3} maxLength={512} value={description} onChange={e=>change(()=>setDescription(e.target.value))} placeholder="Напишите что-нибудь"/></Field>
+       <p className="text-[12px] text-[#94a3b8]">ⓘ Не более 512 символов · сейчас приветствие использует описание бота</p>
+       <div className="grid grid-cols-2 gap-3 pt-1"><Link href="/workspace" className="grid h-10 place-items-center rounded-[8px] border border-[#cbd5e0] text-[13px] font-medium text-[#718096] no-underline">Отмена</Link><button type="button" disabled={!dirty} onClick={()=>void save()} className="h-10 rounded-[8px] bg-[#4420e7] text-[13px] font-semibold !text-white disabled:opacity-60">Сохранить</button></div>
       </div>
     </div>}
     {activeSection==="buttons" && <div className="rounded-[22px] border border-[#e4e7ec] bg-white p-5 sm:p-7">
@@ -153,23 +171,21 @@ export default function BotBuilder(){
       {connectionError&&<p role="alert" className="mt-4 rounded-xl bg-[#fff1f3] px-4 py-3 text-sm text-[#b42318]">{connectionError}</p>}
       <p className="mt-4 text-xs text-[#98a2b3]">Предпросмотр справа не отправляет сообщения в Telegram, пока бот не подключён и не опубликован.</p>
     </div>}
-   </section>
-   <aside className="xl:sticky xl:top-[92px] xl:h-fit">
-     <div className="mb-3"><div className="flex items-center justify-between gap-2"><span className="flex items-center gap-2 text-sm font-semibold"><Eye className="size-4"/>Предпросмотр клиента</span><span className="text-xs text-[#667085]">Не отправляется в Telegram</span></div>
-      <div className="mt-3 grid grid-cols-2 rounded-xl bg-[#e9edf3] p-1"><button type="button" onClick={()=>setPreviewMode("telegram")} className={`flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-semibold ${previewMode==="telegram"?"bg-white text-[#101828] shadow-sm":"text-[#667085]"}`}><MessageCircle className="size-4"/>Telegram</button><button type="button" onClick={()=>setPreviewMode("miniapp")} className={`flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-semibold ${previewMode==="miniapp"?"bg-white text-[#101828] shadow-sm":"text-[#667085]"}`}><Smartphone className="size-4"/>Mini App</button></div></div>
-     {previewMode==="telegram" ? <div className="mx-auto max-w-[360px] overflow-hidden rounded-[24px] border border-[#dbe1ea] bg-[#dbe8e5] shadow-[0_20px_60px_rgba(16,24,40,.13)]">
-       <div className="flex items-center gap-3 bg-white px-4 py-3"><ArrowLeft className="size-4 text-[#667085]"/><span className="grid size-10 place-items-center rounded-full text-white" style={{backgroundColor:color}}><Bot className="size-5"/></span><div className="min-w-0"><strong className="block truncate text-sm">{name||"Ваш Telegram-бот"}</strong><small className="text-[#4c9a76]">бот · предпросмотр</small></div></div>
-       <div className="flex min-h-[360px] flex-col justify-end gap-3 bg-[radial-gradient(#b9d0c7_1px,transparent_1px)] bg-[length:18px_18px] p-4 sm:min-h-[490px]">
-        <div className="ml-auto max-w-[78%] rounded-2xl rounded-br-sm bg-[#dbffc8] px-3 py-2 text-sm shadow-sm">/start <small className="ml-2 text-[10px] text-[#8b9b87]">12:30</small></div>
-        <div className="max-w-[94%] overflow-hidden rounded-2xl rounded-bl-sm bg-white shadow-sm">
-         <div className="whitespace-pre-wrap break-words px-3 py-3 text-sm leading-6">{description.trim()||"Здравствуйте! Добро пожаловать в наш бот."}<small className="ml-2 text-[10px] text-[#98a2b3]">12:30</small></div>
-         <div className="border-t border-[#e4e7ec]">{(buttons.length?buttons:[{id:"default",label:"Открыть приложение",action:"home"}]).map(button=><div key={button.id} className="flex min-h-11 items-center justify-center gap-2 border-b border-[#f2f4f7] px-3 py-2 text-center text-sm font-semibold text-[#3784b6]">{button.label||"Открыть приложение"}<ExternalLink className="size-3"/></div>)}</div>
-        </div>
-       </div>
-       <div className="flex items-center gap-3 bg-white px-4 py-3 text-[#98a2b3]"><span className="flex-1 rounded-full bg-[#f2f4f7] px-4 py-2 text-sm">Сообщение…</span><Send className="size-5"/></div>
-      </div> :
-      <div className="mx-auto max-w-[360px] overflow-hidden rounded-[34px] border-[8px] border-[#101828] bg-[#f5f6f8] shadow-[0_28px_70px_rgba(16,24,40,.18)]"><div className="flex items-center justify-center bg-white px-4 py-3 text-xs font-semibold">{name}</div><div className="min-h-[510px] p-4"><div className="rounded-[24px] p-5 text-white" style={{background:color}}><span className="grid size-12 place-items-center rounded-2xl bg-white/20"><Bot/></span><h3 className="mt-5 text-xl font-semibold">{name||"Название бота"}</h3><p className="mt-2 text-sm leading-5 text-white/80">{description||"Описание появится здесь"}</p></div><div className="mt-4 rounded-2xl border border-[#e4e7ec] bg-white p-5 text-center text-sm text-[#667085]">Здесь появятся товары и услуги из каталога.</div></div><div className="border-t border-[#e4e7ec] bg-white px-4 py-3 text-center text-[11px] text-[#98a2b3]">Макет Mini App · навигация появится в рабочем приложении</div></div>}
-   </aside>
+    </section>
+    <aside className="min-w-0">
+     <div className="mb-3 flex items-center justify-between gap-2">
+      <span className="text-xs font-semibold text-[#080b2b]">Предпросмотр</span>
+      <div className="flex gap-1 rounded-lg bg-[#eef0f4] p-1">
+       <button type="button" onClick={()=>{setPreviewMode("telegram");setFigmaPreview("profile")}} className={`rounded-md px-2 py-1 text-[11px] ${previewMode==="telegram"&&figmaPreview==="profile"?"bg-white text-[#4420e7] shadow-sm":"text-[#718096]"}`}>Профиль</button>
+       <button type="button" onClick={()=>{setPreviewMode("telegram");setFigmaPreview("chat")}} className={`rounded-md px-2 py-1 text-[11px] ${previewMode==="telegram"&&figmaPreview==="chat"?"bg-white text-[#4420e7] shadow-sm":"text-[#718096]"}`}>Чат</button>
+       <button type="button" onClick={()=>setPreviewMode("miniapp")} className={`rounded-md px-2 py-1 text-[11px] ${previewMode==="miniapp"?"bg-white text-[#4420e7] shadow-sm":"text-[#718096]"}`}>Mini App</button>
+      </div>
+     </div>
+     {previewMode==="telegram"?<FigmaTelegramPreview name={name} description={description} buttons={buttons} color={color} view={figmaPreview}/>:
+     <div className="overflow-hidden rounded-xl border border-[#cbd5e0] bg-white p-5"><div className="rounded-lg p-6 text-white" style={{background:color}}><h3 className="text-lg font-semibold">{name}</h3><p className="mt-3 text-sm">{description}</p></div><p className="mt-5 text-xs text-[#718096]">Предпросмотр Mini App · полный клиентский интерфейс открывается через Telegram</p></div>}
+    </aside>
+    </div>
+   </div>
   </div>
   {publishState!=="idle"&&publishState!=="published"&&publishState!=="connection"&&publishState!=="error"&&<PublishOverlay state={publishState}/>} 
   {publishState==="published"&&<div className="fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-2xl bg-[#101828] px-5 py-4 text-sm font-semibold text-white shadow-xl"><Check className="size-5 text-[#6ce9a6]"/>Бот опубликован. Изменения доступны в Telegram.</div>}
