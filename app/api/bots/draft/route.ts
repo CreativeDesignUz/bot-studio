@@ -40,7 +40,7 @@ export async function POST(request: Request) {
     p_bot_id: payload.botId,
     p_owner_id: appUser.id,
     p_name: payload.name.trim(),
-    p_description: payload.description.trim(),
+    p_description: (payload.description ?? "").trim(),
     p_primary_color: payload.color ?? "#6541F5",
     p_home_buttons: buttons,
   });
