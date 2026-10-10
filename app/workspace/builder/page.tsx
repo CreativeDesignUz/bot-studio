@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import FigmaTelegramPreview from "./figma-telegram-preview";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, Bot, Check, ChevronRight, Eye, GripVertical, LoaderCircle, Plus, Save, Send, Trash2, MessageCircle, Smartphone, ExternalLink, KeyRound, ShieldCheck, Unplug } from "lucide-react";
+import { ArrowLeft, Bot, Check, ChevronRight, Eye, GripVertical, LoaderCircle, Plus, Save, Send, Trash2, MessageCircle, Smartphone, ExternalLink, KeyRound, ShieldCheck, Unplug, Settings } from "lucide-react";
 
 type ActionButton={id:string;label:string;action:"home"|"url"|"reply";url?:string;replyText?:string;nextButtons?:ActionButton[]};
 type PublishState="idle"|"validating"|"saving"|"publishing"|"published"|"connection"|"error";
@@ -37,12 +37,12 @@ export default function BotBuilder(){
    if(!botId){setLoadError("Не указан бот для редактирования.");setLoadState("error");return}
    setLoadState("loading");setLoadError("");
    try{
-    const response=await fetch(`/api/bots/draft?bot=${encodeURIComponent(botId)}`,{headers:{"x-telegram-init-data":tg?.initData??""},signal:controller.signal});
+    const response=await fetch(`/api/bots/draft?bot=${encodeURIComponent(botId??"")}`,{headers:{"x-telegram-init-data":tg?.initData??""},signal:controller.signal});
     const result=await response.json() as DraftResponse;
     if(!response.ok||!result.bot)throw new Error(result.error||"Не удалось загрузить бота.");
     setName(result.bot.name);setDescription(result.bot.description);setBio(result.bot.settings?.telegram_bio??"");setWelcome(result.bot.settings?.welcome_message??result.bot.description);setAvatar(result.bot.logo_url??null);setColor(result.bot.primary_color);setButtons((result.bot.settings?.home_buttons??[]).map(button=>({...button,id:button.id??crypto.randomUUID(),action:button.action==="url"?"url":button.action==="reply"?"reply":"home",nextButtons:button.nextButtons?.map(next=>({...next,id:next.id??crypto.randomUUID()}))})));
     setDirty(false);setSaved(true);setLoadState("ready");
-    const connectionResponse=await fetch(`/api/channels/telegram/token?bot=${encodeURIComponent(botId)}`,{headers:{"x-telegram-init-data":tg?.initData??""},signal:controller.signal});
+    const connectionResponse=await fetch(`/api/channels/telegram/token?bot=${encodeURIComponent(botId??"")}`,{headers:{"x-telegram-init-data":tg?.initData??""},signal:controller.signal});
     if(connectionResponse.ok){const connectionResult=await connectionResponse.json() as {connection?:TelegramConnection};setConnection(connectionResult.connection??null)}
    }catch(error){
     if(controller.signal.aborted)return;
@@ -113,8 +113,8 @@ export default function BotBuilder(){
     {searchQuery.trim()&&<div className="absolute left-0 right-0 top-11 z-40 overflow-hidden rounded-lg border border-[#cbd5e0] bg-white shadow-lg">{([["profile","Профиль бота"],["message","Приветствие"],["buttons","Кнопки и сценарии"],["miniapp","Мини-приложение"],["publish","Подключение и запуск"]] as const).filter(([,label])=>label.toLowerCase().includes(searchQuery.toLowerCase())).map(([id,label])=><button type="button" key={id} className="block w-full px-3 py-3 text-left text-xs hover:bg-[#f0ecff]" onClick={()=>{setActiveSection(id);setSearchQuery("")}}>{label}</button>)}{!["Профиль бота","Приветствие","Кнопки и сценарии","Мини-приложение","Подключение и запуск"].some(label=>label.toLowerCase().includes(searchQuery.toLowerCase()))&&<p className="px-3 py-3 text-xs text-[#718096]">Настройки не найдены</p>}</div>}
    </div>
     <nav className="mt-7 space-y-1 text-sm">
-     <Link href={`/workspace?bot=${encodeURIComponent(botId)}`} className="flex h-11 items-center gap-3 rounded-xl px-3 text-[#667085] no-underline hover:bg-[#f9fafb]"><Bot size={18}/>Обзор</Link>
-     <Link href={`/workspace?bot=${encodeURIComponent(botId)}`} className="flex h-11 items-center gap-3 rounded-xl px-3 text-[#667085] no-underline hover:bg-[#f9fafb]"><Save size={18}/>Заказы и заявки</Link>
+     <Link href={`/workspace?bot=${encodeURIComponent(botId??"")}`} className="flex h-11 items-center gap-3 rounded-xl px-3 text-[#667085] no-underline hover:bg-[#f9fafb]"><Bot size={18}/>Обзор</Link>
+     <Link href={`/workspace?bot=${encodeURIComponent(botId??"")}`} className="flex h-11 items-center gap-3 rounded-xl px-3 text-[#667085] no-underline hover:bg-[#f9fafb]"><Save size={18}/>Заказы и заявки</Link>
     </nav>
     <p className="mt-7 px-3 text-[11px] font-semibold uppercase tracking-[.06em]">Интеграция</p>
     <div className="mt-3 rounded-[10px] bg-[#6541F5] px-3 py-3 text-[14px] font-medium text-white"><span className="flex items-center gap-2"><Send size={17}/>Телеграм бот <ChevronRight className="ml-auto size-4 rotate-90"/></span></div>
@@ -129,7 +129,7 @@ export default function BotBuilder(){
    </aside>
    <div className="flex min-h-0 min-w-0 flex-col px-5 py-5 sm:px-8 xl:h-full xl:overflow-hidden xl:px-9">
     <div className="flex flex-wrap items-center justify-between gap-3">
-     <Link href={`/workspace?bot=${encodeURIComponent(botId)}`} className="flex items-center gap-3 text-sm font-semibold text-[#101828] no-underline"><ArrowLeft className="size-5 text-[#6541F5]"/>Назад в кабинет</Link>
+     <Link href={`/workspace?bot=${encodeURIComponent(botId??"")}`} className="flex items-center gap-3 text-sm font-semibold text-[#101828] no-underline"><ArrowLeft className="size-5 text-[#6541F5]"/>Назад в кабинет</Link>
      <div className="flex gap-2"><button onClick={save} disabled={!dirty} className="h-10 rounded-[8px] border border-[#cbd5e0] px-4 text-sm font-medium disabled:opacity-50">Сохранить</button><button onClick={publish} className="h-10 rounded-[8px] bg-[#4420e7] px-4 text-sm font-semibold !text-white">Опубликовать</button></div>
     </div>
     <div className={`mt-7 min-h-0 flex-1 ${(activeSection==="profile"||activeSection==="message")?"grid max-w-[850px] items-start gap-6 lg:grid-cols-[minmax(0,460px)_minmax(0,370px)]":"grid max-w-[1150px] items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,370px)]"} xl:ml-[clamp(0px,7vw,120px)] xl:overflow-hidden`}>
