@@ -19,7 +19,7 @@ export default function LoginPage({callback=false}:{callback?:boolean}){
  const clientRef=useRef<SupabaseClient|null>(null);
  const isCallback=callback;
  const [isPublicDomain,setIsPublicDomain]=useState(false);
- useEffect(()=>{setIsPublicDomain(window.location.protocol==="https:"&&!["localhost","127.0.0.1"].includes(window.location.hostname))},[]);
+ useEffect(()=>{void Promise.resolve().then(()=>setIsPublicDomain(window.location.protocol==="https:"&&!["localhost","127.0.0.1"].includes(window.location.hostname)))},[]);
  const getClient=useCallback((config:Providers["google"])=>{
   if(!config)throw new Error("Google OAuth не настроен в Supabase.");
   if(!clientRef.current)clientRef.current=createClient(config.supabaseUrl,config.publishableKey,{auth:{persistSession:true,detectSessionInUrl:true,flowType:"implicit",storageKey:"bot-studio-supabase-google"}});
