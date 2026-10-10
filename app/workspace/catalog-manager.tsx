@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { LoaderCircle, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { formatCatalogPrice, formatStoredPrice, priceToMinor, type CatalogCurrency } from "@/lib/catalog/price";
 
 type Item = { id: string; name: string; description: string; price_minor: number | null; is_active: boolean; currency: string };
 type ApiResult = { items?: Item[]; item?: Item; error?: string };
-const formatMoney = (minor: number) => (minor / 100).toLocaleString("ru-RU") + " сум";
+const formatMoney = (minor: number, currency: string) => `${formatStoredPrice(minor, currency === "USD" ? "USD" : "UZS")} ${currency === "USD" ? "$" : "сум"}`;
 const telegramData = () => (window as typeof window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData ?? "";
 
 export default function CatalogManager({ botId, type }: { botId: string; type: "service" | "store" | "delivery" }) {
@@ -18,6 +19,7 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
+  const [currency, setCurrency] = useState<CatalogCurrency>("UZS");
   const [active, setActive] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -35,19 +37,21 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
 
   function open(item?: Item) {
     setEditing(item ?? "new"); setName(item?.name ?? ""); setDescription(item?.description ?? "");
-    setPrice(item?.price_minor == null ? "" : String(item.price_minor / 100)); setActive(item?.is_active ?? true); setError("");
+    const nextCurrency: CatalogCurrency = item?.currency === "USD" ? "USD" : "UZS";
+    setCurrency(nextCurrency);
+    setPrice(item?.price_minor == null ? "" : formatStoredPrice(item.price_minor, nextCurrency)); setActive(item?.is_active ?? true); setError("");
   }
 
   async function save() {
-    const unit = price.trim() === "" ? null : Number(price.replace(",", "."));
-    if (!name.trim() || (unit !== null && (!Number.isFinite(unit) || unit < 0 || !Number.isSafeInteger(Math.round(unit * 100))))) {
-      setError("Введите название и корректную цену."); return;
-    }
+    let priceMinor: number | null;
+    try { priceMinor = priceToMinor(price, currency); }
+    catch { setError("Введите корректную сумму. Для UZS — целое число, для USD — максимум 2 знака после точки."); return; }
+    if (!name.trim()) { setError("Введите название."); return; }
     setSaving(true); setError("");
     try {
       const response = await fetch("/api/catalog", { method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ botId, initData: telegramData(), ...(editing !== "new" && editing ? { id: editing.id } : {}),
-          name: name.trim(), description: description.trim(), priceMinor: unit === null ? null : Math.round(unit * 100), isActive: active }) });
+          name: name.trim(), description: description.trim(), priceMinor, currency, isActive: active }) });
       const body = await response.json() as ApiResult;
       if (!response.ok) throw new Error(body.error ?? "Не удалось сохранить.");
       setEditing(null); await refresh();
@@ -82,7 +86,7 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
           <button type="button" onClick={()=>open()} className="mt-5 rounded-xl bg-[#6541f5] px-5 py-3 text-sm font-semibold !text-white">Добавить {noun}</button></div>
       : <div className="divide-y divide-[#eaecf0]">{items.filter(item=>[item.name,item.description].join(" ").toLowerCase().includes(query.toLowerCase())).map(item=><div key={item.id} className="flex flex-wrap items-center gap-4 p-5">
           <div className="min-w-0 flex-1"><strong className="block truncate text-sm">{item.name}</strong><p className="mt-1 line-clamp-2 text-xs text-[#667085]">{item.description || "Без описания"}</p></div>
-          <span className="text-sm font-semibold">{item.price_minor === null ? "Цена по запросу" : formatMoney(item.price_minor)}</span>
+          <span className="text-sm font-semibold">{item.price_minor === null ? "Цена по запросу" : formatMoney(item.price_minor,item.currency)}</span>
           <span className={item.is_active?"rounded-full bg-[#ecfdf3] px-2 py-1 text-xs text-[#027a48]":"rounded-full bg-[#f2f4f7] px-2 py-1 text-xs text-[#667085]"}>{item.is_active?"Активен":"Скрыт"}</span>
           <button type="button" onClick={()=>open(item)} aria-label={"Изменить "+item.name} className="grid size-10 place-items-center rounded-xl border border-[#d0d5dd]"><Pencil className="size-4"/></button>
           {item.is_active&&<button type="button" disabled={saving} onClick={()=>void archive(item)} aria-label={"Скрыть "+item.name} className="grid size-10 place-items-center rounded-xl border border-[#d0d5dd] text-[#b42318]"><Trash2 className="size-4"/></button>}
@@ -92,7 +96,11 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
         <div className="flex items-center justify-between"><h2 className="text-xl font-semibold">{editing==="new"?"Добавить":"Редактировать"} {noun}</h2><button type="button" onClick={()=>setEditing(null)} aria-label="Закрыть"><X/></button></div>
         <div className="mt-5 space-y-4"><label className="block text-sm font-medium">Название<input maxLength={120} value={name} onChange={e=>setName(e.target.value)} className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/></label>
           <label className="block text-sm font-medium">Описание<textarea maxLength={2000} value={description} onChange={e=>setDescription(e.target.value)} rows={3} className="mt-2 w-full rounded-xl border border-[#d0d5dd] p-3"/></label>
-          <label className="block text-sm font-medium">Цена (сум)<input inputMode="decimal" value={price} onChange={e=>setPrice(e.target.value)} placeholder="50000" className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/></label>
+          <div className="block text-sm font-medium"><span>Цена</span><div className="mt-2 flex items-stretch overflow-hidden rounded-xl border border-[#d0d5dd] focus-within:border-[#6541f5]">
+            <input aria-label="Стоимость" inputMode={currency==="UZS"?"numeric":"decimal"} value={price} onChange={e=>setPrice(formatCatalogPrice(e.target.value,currency))} placeholder={currency==="UZS"?"10 000":"100.00"} className="h-11 min-w-0 flex-1 px-3 outline-none"/>
+            <select aria-label="Валюта" value={currency} onChange={e=>{const next=e.target.value as CatalogCurrency;setPrice(formatCatalogPrice(price.replace(/\\s/g,"").split(".")[0],next));setCurrency(next);}} className="min-w-28 border-l border-[#d0d5dd] bg-[#f9fafb] px-3 text-sm font-semibold outline-none">
+              <option value="UZS">UZS · сум</option><option value="USD">USD · $</option>
+            </select></div><p className="mt-1 text-xs font-normal text-[#667085]">Валюта сохраняется вместе с ценой, конвертация не выполняется.</p></div>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={active} onChange={e=>setActive(e.target.checked)}/>Показывать в Mini App</label></div>
         <div className="mt-6 flex justify-end gap-3"><button type="button" onClick={()=>setEditing(null)} className="h-11 rounded-xl border px-4 text-sm">Отмена</button>
           <button type="button" disabled={saving} onClick={()=>void save()} className="h-11 rounded-xl bg-[#6541f5] px-5 text-sm font-semibold !text-white disabled:opacity-60">{saving?"Сохраняем…":"Сохранить"}</button></div>
