@@ -20,9 +20,10 @@ export default function BotBuilder(){
  const [name,setName]=useState(""),[description,setDescription]=useState(""),[color,setColor]=useState("#6541F5");
  const [buttons,setButtons]=useState<ActionButton[]>([]);
  const [bio,setBio]=useState(""),[welcome,setWelcome]=useState(""),[avatar,setAvatar]=useState<string|null>(null),[avatarBusy,setAvatarBusy]=useState(false);
- const [activeSection,setActiveSection]=useState<"message"|"buttons"|"miniapp"|"publish">("message");
- const [previewMode,setPreviewMode]=useState<"telegram"|"miniapp">("telegram");
- const [figmaPreview,setFigmaPreview]=useState<"profile"|"chat">("chat");
+ const [activeSection,setActiveSection]=useState<"profile"|"message"|"buttons"|"miniapp"|"publish">("profile");
+ const [searchQuery,setSearchQuery]=useState("");
+ const previewMode=activeSection==="miniapp"?"miniapp":"telegram";
+ const figmaPreview=activeSection==="profile"?"profile":"chat";
  const [connectUrl,setConnectUrl]=useState<string|null>(null);
  const [dirty,setDirty]=useState(false),[saved,setSaved]=useState(true),[publishState,setPublishState]=useState<PublishState>("idle");
  const [loadState,setLoadState]=useState<LoadState>("loading"),[loadError,setLoadError]=useState("");
@@ -107,7 +108,10 @@ export default function BotBuilder(){
   <div className="mx-auto grid min-h-dvh max-w-[1600px] xl:h-full xl:min-h-0 xl:grid-cols-[270px_minmax(0,1fr)]">
    <aside className="flex min-h-0 flex-col border-r border-[#cbd5e0] bg-[#f1f2f4] px-4 py-5 xl:h-full xl:overflow-y-auto">
     <Link href="/workspace" className="flex items-center gap-2 rounded-lg px-1 no-underline"><span className="grid size-9 place-items-center rounded-[9px] bg-[#4420e7] text-white"><Bot className="size-5"/></span><strong className="text-[18px] tracking-[-.02em] text-[#080b2b]">BotStudio</strong></Link>
-    <div className="mt-5 flex h-10 items-center gap-2 rounded-lg border border-[#cbd5e0] bg-[#f8f9fb] px-3 text-[#718096]"><Eye className="size-4"/><span className="text-xs">Поиск смысла</span><span className="ml-auto rounded border px-1 text-[10px]">⌘1</span></div>
+    <div className="relative mt-5">
+    <label className="flex h-10 items-center gap-2 rounded-lg border border-[#cbd5e0] bg-[#f8f9fb] px-3 text-[#718096]"><Eye className="size-4"/><input aria-label="Поиск настроек" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Поиск настроек" className="min-w-0 flex-1 bg-transparent text-xs text-[#080b2b] outline-none placeholder:text-[#718096]"/><span className="rounded border px-1 text-[10px]">⌘K</span></label>
+    {searchQuery.trim()&&<div className="absolute left-0 right-0 top-11 z-40 overflow-hidden rounded-lg border border-[#cbd5e0] bg-white shadow-lg">{([["profile","Профиль бота"],["message","Приветствие"],["buttons","Кнопки и сценарии"],["miniapp","Мини-приложение"],["publish","Подключение и запуск"]] as const).filter(([,label])=>label.toLowerCase().includes(searchQuery.toLowerCase())).map(([id,label])=><button type="button" key={id} className="block w-full px-3 py-3 text-left text-xs hover:bg-[#f0ecff]" onClick={()=>{setActiveSection(id);setSearchQuery("")}}>{label}</button>)}{!["Профиль бота","Приветствие","Кнопки и сценарии","Мини-приложение","Подключение и запуск"].some(label=>label.toLowerCase().includes(searchQuery.toLowerCase()))&&<p className="px-3 py-3 text-xs text-[#718096]">Настройки не найдены</p>}</div>}
+   </div>
     <nav className="mt-7 space-y-1 text-sm">
      <Link href="/workspace" className="flex h-[42px] items-center gap-3 rounded-lg px-3 text-[#080b2b] no-underline"><Bot size={19}/>Главная</Link>
      <Link href="/workspace" className="flex h-[42px] items-center gap-3 rounded-lg px-3 text-[#080b2b] no-underline"><Save size={19}/>Заказы</Link>
@@ -118,7 +122,8 @@ export default function BotBuilder(){
     <p className="mt-7 px-3 text-[11px] font-semibold uppercase tracking-[.06em]">Интеграция</p>
     <div className="mt-3 rounded-[9px] bg-[#4420e7] px-3 py-3 text-[14px] font-medium text-white"><span className="flex items-center gap-2"><Send size={17}/>Телеграм бот <ChevronRight className="ml-auto size-4 rotate-90"/></span></div>
     <nav className="ml-4 border-l border-[#c5bafa] pl-2 text-sm">
-     <button type="button" onClick={()=>{setActiveSection("message");setPreviewMode("telegram")}} className={`mt-1 flex h-10 w-full items-center justify-between rounded-[8px] px-3 text-left ${activeSection==="message"?"bg-[#e8e2ff] text-[#4420e7]":"text-[#080b2b]"}`}>Все боты<ChevronRight size={14}/></button>
+     <button type="button" onClick={()=>setActiveSection("message")} className={`mt-1 flex h-10 w-full items-center justify-between rounded-[8px] px-3 text-left ${activeSection==="message"?"bg-[#e8e2ff] text-[#4420e7]":"text-[#080b2b]"}`}>Приветствие<ChevronRight size={14}/></button>
+     <button type="button" onClick={()=>setActiveSection("profile")} className={`mt-1 flex h-10 w-full items-center justify-between rounded-[8px] px-3 text-left ${activeSection==="profile"?"bg-[#e8e2ff] text-[#4420e7]":"text-[#080b2b]"}`}>Профиль бота<ChevronRight size={14}/></button>
      <button type="button" onClick={()=>setActiveSection("buttons")} className={`mt-1 flex h-10 w-full items-center justify-between rounded-[8px] px-3 text-left ${activeSection==="buttons"?"bg-[#e8e2ff] text-[#4420e7]":"text-[#080b2b]"}`}>Все WorkFlow<ChevronRight size={14}/></button>
      <button type="button" onClick={()=>setActiveSection("miniapp")} className={`mt-1 flex h-10 w-full items-center justify-between rounded-[8px] px-3 text-left ${activeSection==="miniapp"?"bg-[#e8e2ff] text-[#4420e7]":"text-[#080b2b]"}`}>Мини-приложение<ChevronRight size={14}/></button>
      <button type="button" onClick={()=>setActiveSection("publish")} className={`mt-1 flex h-10 w-full items-center justify-between rounded-[8px] px-3 text-left ${activeSection==="publish"?"bg-[#e8e2ff] text-[#4420e7]":"text-[#080b2b]"}`}>Подключение<ChevronRight size={14}/></button>
@@ -130,10 +135,11 @@ export default function BotBuilder(){
      <Link href="/workspace" className="flex items-center gap-3 text-sm font-semibold text-[#080b2b] no-underline"><ArrowLeft className="size-5 text-[#4420e7]"/>Изменить данные</Link>
      <div className="flex gap-2"><button onClick={save} disabled={!dirty} className="h-10 rounded-[8px] border border-[#cbd5e0] px-4 text-sm font-medium disabled:opacity-50">Сохранить</button><button onClick={publish} className="h-10 rounded-[8px] bg-[#4420e7] px-4 text-sm font-semibold !text-white">Опубликовать</button></div>
     </div>
-    <div className={`mt-7 min-h-0 flex-1 ${activeSection==="message"?"grid max-w-[850px] items-start gap-6 lg:grid-cols-[minmax(0,460px)_minmax(0,370px)]":"grid max-w-[1150px] items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,370px)]"} xl:ml-[clamp(0px,7vw,120px)] xl:overflow-hidden`}>
+    <div className={`mt-7 min-h-0 flex-1 ${(activeSection==="profile"||activeSection==="message")?"grid max-w-[850px] items-start gap-6 lg:grid-cols-[minmax(0,460px)_minmax(0,370px)]":"grid max-w-[1150px] items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,370px)]"} xl:ml-[clamp(0px,7vw,120px)] xl:overflow-hidden`}>
     <section className="min-h-0 min-w-0 space-y-5 xl:h-full xl:overflow-y-auto xl:pr-1">
-    {activeSection==="message" && <div className="rounded-[10px] border border-[#dadadd] bg-white px-4 py-5">
+    {(activeSection==="profile"||activeSection==="message") && <div className="rounded-[10px] border border-[#dadadd] bg-white px-4 py-5">
       <div className="space-y-4 text-[14px]">
+       {activeSection==="profile"&&<><h2 className="text-base font-semibold">Профиль Telegram-бота</h2>
        <div className="flex items-center gap-4">
         <div className="grid size-[82px] shrink-0 place-items-center overflow-hidden rounded-full bg-[#e8e2ff] text-[#4420e7]">{avatar?<img src={avatar} alt="Аватар бота" className="size-full object-cover"/>:<Bot size={28}/>}</div>
         <label className="min-w-0 flex-1 text-sm font-medium">Аватар Telegram
@@ -150,9 +156,9 @@ export default function BotBuilder(){
         <p className="text-[11px] text-[#718096]">Токен используется только для защищённой привязки. В предпросмотре отображается имя подключённого бота.</p>
        </div>
        <Field label="Описание бота"><textarea rows={3} maxLength={512} value={description} onChange={e=>change(()=>setDescription(e.target.value))} placeholder="Опишите своего бота"/></Field>
-       <Field label="Bio — короткая информация"><input maxLength={120} value={bio} onChange={e=>change(()=>setBio(e.target.value))} placeholder="Кратко о боте · до 120 символов"/></Field>
-       <Field label="Приветствие после /start"><textarea rows={3} maxLength={4096} value={welcome} onChange={e=>change(()=>setWelcome(e.target.value))} placeholder="Здравствуйте! Чем можем помочь?"/></Field>
-       <p className="text-[12px] text-[#94a3b8]">ⓘ Bio: {bio.length}/120 · Описание: {description.length}/512 · Приветствие: {welcome.length}/4096</p>
+       <Field label="Bio — короткая информация"><input maxLength={120} value={bio} onChange={e=>change(()=>setBio(e.target.value))} placeholder="Кратко о боте · до 120 символов"/></Field></>}
+       {activeSection==="message"&&<><h2 className="text-base font-semibold">Приветствие после /start</h2><p className="text-xs text-[#718096]">Введите приветствие — оно сразу появится в чате справа.</p><Field label="Текст сообщения"><textarea rows={6} maxLength={4096} value={welcome} onChange={e=>change(()=>setWelcome(e.target.value))} placeholder="Здравствуйте! Чем можем помочь?"/></Field></>}
+       <p className="text-[12px] text-[#94a3b8]">ⓘ {activeSection==="profile"?`Bio: ${bio.length}/120 · Описание: ${description.length}/512`:`Приветствие: ${welcome.length}/4096`}</p>
        <div className="grid grid-cols-2 gap-3 pt-1"><Link href="/workspace" className="grid h-10 place-items-center rounded-[8px] border border-[#cbd5e0] text-[13px] font-medium text-[#718096] no-underline">Отмена</Link><button type="button" disabled={!dirty} onClick={()=>void save()} className="h-10 rounded-[8px] bg-[#4420e7] text-[13px] font-semibold !text-white disabled:opacity-60">Сохранить</button></div>
       </div>
     </div>}
@@ -201,14 +207,7 @@ export default function BotBuilder(){
     </div>}
     </section>
     <aside className="min-h-0 min-w-0 xl:h-full xl:overflow-hidden">
-     <div className="mb-3 flex items-center justify-between gap-2">
-      <span className="text-xs font-semibold text-[#080b2b]">Предпросмотр</span>
-      <div className="flex gap-1 rounded-lg bg-[#eef0f4] p-1">
-       <button type="button" onClick={()=>{setPreviewMode("telegram");setFigmaPreview("profile")}} className={`rounded-md px-2 py-1 text-[11px] ${previewMode==="telegram"&&figmaPreview==="profile"?"bg-white text-[#4420e7] shadow-sm":"text-[#718096]"}`}>Профиль</button>
-       <button type="button" onClick={()=>{setPreviewMode("telegram");setFigmaPreview("chat")}} className={`rounded-md px-2 py-1 text-[11px] ${previewMode==="telegram"&&figmaPreview==="chat"?"bg-white text-[#4420e7] shadow-sm":"text-[#718096]"}`}>Чат</button>
-       <button type="button" onClick={()=>setPreviewMode("miniapp")} className={`rounded-md px-2 py-1 text-[11px] ${previewMode==="miniapp"?"bg-white text-[#4420e7] shadow-sm":"text-[#718096]"}`}>Mini App</button>
-      </div>
-     </div>
+     <div className="mb-3 text-xs font-semibold text-[#080b2b]">Предпросмотр · {activeSection==="profile"?"Профиль":activeSection==="miniapp"?"Mini App":"Чат Telegram"}</div>
      {previewMode==="telegram"?<FigmaTelegramPreview name={name} description={figmaPreview==="chat"?welcome:description} buttons={buttons} color={color} view={figmaPreview} avatar={avatar} bio={bio}/>:
      <div className="overflow-hidden rounded-xl border border-[#cbd5e0] bg-white p-5"><div className="rounded-lg p-6 text-white" style={{background:color}}><h3 className="text-lg font-semibold">{name}</h3><p className="mt-3 text-sm">{description}</p></div><p className="mt-5 text-xs text-[#718096]">Предпросмотр Mini App · полный клиентский интерфейс открывается через Telegram</p></div>}
     </aside>
