@@ -24,6 +24,12 @@ export default function BotBuilder(){
  const [searchQuery,setSearchQuery]=useState("");
  const previewMode=activeSection==="miniapp"?"miniapp":"telegram";
  const figmaPreview=activeSection==="profile"?"profile":"chat";
+ const [foodTemplate,setFoodTemplate]=useState<"food01"|"food02">("food01");
+ const [foodDark,setFoodDark]=useState(false);
+ const [foodAccent,setFoodAccent]=useState("#E65D35");
+ const [foodBot,setFoodBot]=useState(false);
+ const [foodSaving,setFoodSaving]=useState(false);
+ const [foodNotice,setFoodNotice]=useState("");
  const [connectUrl,setConnectUrl]=useState<string|null>(null);
  const [dirty,setDirty]=useState(false),[saved,setSaved]=useState(true),[publishState,setPublishState]=useState<PublishState>("idle");
  const [loadState,setLoadState]=useState<LoadState>("loading"),[loadError,setLoadError]=useState("");
@@ -41,6 +47,14 @@ export default function BotBuilder(){
     const result=await response.json() as DraftResponse;
     if(!response.ok||!result.bot)throw new Error(result.error||"Не удалось загрузить бота.");
     setName(result.bot.name);setDescription(result.bot.description);setBio(result.bot.settings?.telegram_bio??"");setWelcome(result.bot.settings?.welcome_message??result.bot.description);setAvatar(result.bot.logo_url??null);setColor(result.bot.primary_color);setButtons((result.bot.settings?.home_buttons??[]).map(button=>({...button,id:button.id??crypto.randomUUID(),action:button.action==="url"?"url":button.action==="reply"?"reply":"home",nextButtons:button.nextButtons?.map(next=>({...next,id:next.id??crypto.randomUUID()}))})));
+    const designResponse=await fetch(`/api/miniapp/design?bot=${encodeURIComponent(botId)}`,{headers:{"x-telegram-init-data":tg?.initData??""},signal:controller.signal});
+    if(designResponse.ok){
+      const theme=await designResponse.json() as {design?:{layout?:"food01"|"food02";color?:string;dark?:boolean};templateType?:string};
+      setFoodBot(theme.templateType==="delivery");
+      setFoodTemplate(theme.design?.layout==="food02"?"food02":"food01");
+      setFoodDark(theme.design?.dark===true);
+      setFoodAccent(theme.design?.color??"#E65D35");
+    }
     setDirty(false);setSaved(true);setLoadState("ready");
     const connectionResponse=await fetch(`/api/channels/telegram/token?bot=${encodeURIComponent(botId??"")}`,{headers:{"x-telegram-init-data":tg?.initData??""},signal:controller.signal});
     if(connectionResponse.ok){const connectionResult=await connectionResponse.json() as {connection?:TelegramConnection};setConnection(connectionResult.connection??null)}
@@ -63,6 +77,18 @@ export default function BotBuilder(){
    if(!response.ok)throw new Error(result.error||"Не удалось сохранить изменения.");
    setDirty(false);setSaved(true);setPublishState("idle");return true;
   }catch(error){setLoadError(error instanceof Error?error.message:"Не удалось сохранить изменения.");setPublishState("error");return false}
+ }
+ async function saveFoodDesign(next?:{layout:"food01"|"food02";color:string;dark:boolean}){
+  if(!botId)return;
+  const design=next??{layout:foodTemplate,color:foodAccent,dark:foodDark};
+  setFoodSaving(true);setFoodNotice("");
+  try{
+    const response=await fetch("/api/miniapp/design",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({botId,initData:telegramInitData(),...design})});
+    const body=await response.json() as {error?:string};
+    if(!response.ok)throw new Error(body.error??"Не удалось сохранить оформление");
+    setFoodNotice("Оформление сохранено для этого бота.");
+  }catch(e){setFoodNotice(e instanceof Error?e.message:"Ошибка сохранения")}
+  finally{setFoodSaving(false)}
  }
  async function uploadAvatar(file:File){
   if(!botId)return;
@@ -181,10 +207,23 @@ export default function BotBuilder(){
       <p className="mt-4 text-xs text-[#667085]">Кнопки открывают Mini App, переходят на HTTPS-сайт или отправляют сообщение в Telegram. После ответа можно показать кнопки второго шага. Условия и более длинные цепочки добавим позже.</p>
     </div>}
     {activeSection==="miniapp" && <div className="rounded-[22px] border border-[#e4e7ec] bg-white p-5 sm:p-7">
-      <span className="text-xs font-semibold text-[#6d45f5]">Шаг 3 · Mini App</span>
-      <h1 className="mt-2 text-2xl font-semibold">Мини-приложение для клиентов</h1>
-      <p className="mt-2 text-sm leading-6 text-[#667085]">Mini App — это отдельный интерфейс с каталогом, корзиной и заказами. Для создания Telegram-бота добавлять блюдо не обязательно.</p>
-      <div className="mt-6 space-y-4"><Field label="Основной цвет Mini App"><div className="flex items-center gap-3"><input type="color" value={color} onChange={e=>change(()=>setColor(e.target.value))} className="size-11 rounded-xl border border-[#d0d5dd] p-1"/><input value={color} onChange={e=>change(()=>setColor(e.target.value))} className="h-11 flex-1 rounded-xl border border-[#d0d5dd] px-3"/></div></Field><div className="rounded-2xl bg-[#f9fafb] p-4 text-sm leading-6 text-[#667085]">Товары, фотографии и категории настраиваются в каталоге кабинета. Отсутствие товаров не мешает сохранить бота.</div><Link href="/workspace" className="inline-flex items-center gap-2 rounded-xl border border-[#d0d5dd] px-4 py-3 text-sm font-semibold">Перейти в кабинет <ExternalLink className="size-4"/></Link></div>
+      <span className="text-xs font-semibold text-[#6d45f5]">Mini App · Оформление</span>
+      <h1 className="mt-2 text-2xl font-semibold">Дизайн приложения</h1>
+      <p className="mt-2 text-sm leading-6 text-[#667085]">Выберите стиль, цвет и режим Mini App. Изменения сохраняются отдельно для выбранного бота.</p>
+      {foodBot?<div className="mt-6 space-y-6">
+       <div><h2 className="mb-3 text-sm font-semibold">Стиль доставки еды</h2><div className="grid grid-cols-2 gap-3">
+         {([{id:"food01",label:"Food 01 · Minimal",detail:"Светлый, с категориями и списком"},{id:"food02",label:"Food 02 · Expressive",detail:"Яркий, с крупными карточками"}] as const).map(theme=><button key={theme.id} type="button" onClick={()=>setFoodTemplate(theme.id)} className={`rounded-xl border p-3 text-left ${foodTemplate===theme.id?"border-[#6541F5] bg-[#f3efff]":"border-[#e4e7ec]"}`}><span className="text-sm font-semibold">{theme.label}</span><p className="mt-1 text-xs text-[#667085]">{theme.detail}</p></button>)}
+        </div></div>
+       <div><h2 className="mb-3 text-sm font-semibold">Основной цвет</h2><div className="flex flex-wrap items-center gap-3">
+        {["#E65D35","#FF5A3C","#6541F5","#13A874","#2563EB"].map(hex=><button aria-label={`Цвет ${hex}`} key={hex} type="button" onClick={()=>setFoodAccent(hex)} className={`size-10 rounded-full border-4 border-white ${foodAccent===hex?"ring-2 ring-[#6541F5]":""}`} style={{background:hex}}/>)}
+        <input type="color" aria-label="Свой цвет" value={foodAccent} onChange={e=>setFoodAccent(e.target.value)} className="size-10"/>
+       </div></div>
+       <label className="flex items-center justify-between rounded-xl border border-[#e4e7ec] p-4"><span><strong className="block text-sm">Тёмная тема</strong><small className="text-[#667085]">Светлый или тёмный Mini App</small></span><input type="checkbox" checked={foodDark} onChange={e=>setFoodDark(e.target.checked)} className="size-5 accent-[#6541F5]"/></label>
+       <button type="button" disabled={foodSaving} onClick={()=>void saveFoodDesign()} className="h-11 w-full rounded-xl bg-[#6541F5] px-4 text-sm font-semibold text-white disabled:opacity-50">{foodSaving?"Сохраняем…":"Сохранить оформление"}</button>
+       {foodNotice&&<p role="status" className="text-sm text-[#475467]">{foodNotice}</p>}
+       <a href={botId?`/miniapp?bot=${encodeURIComponent(botId)}`:"/miniapp"} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm font-semibold text-[#6541F5]">Открыть клиентский Mini App <ExternalLink size={16}/></a>
+       <p className="text-xs text-[#667085]">Здесь отображается выбранный стиль. Для сохранения нажмите кнопку. Клиентская версия обновится после повторного открытия Mini App.</p>
+      </div>:<div className="mt-6 space-y-4"><Field label="Основной цвет"><input type="color" value={color} onChange={e=>change(()=>setColor(e.target.value))}/></Field><p className="text-sm text-[#667085]">Food-темы доступны для ботов доставки еды. Каталог настраивается в кабинете.</p></div>}
     </div>}
     {activeSection==="publish" && <div className="rounded-[22px] border border-[#e4e7ec] bg-white p-5 sm:p-7">
       <span className="text-xs font-semibold text-[#6d45f5]">Шаг 4 · Запуск</span>
@@ -206,7 +245,9 @@ export default function BotBuilder(){
     <aside className="min-h-0 min-w-0 xl:h-full xl:overflow-hidden">
      <div className="mb-3 text-xs font-semibold text-[#080b2b]">Предпросмотр · {activeSection==="profile"?"Профиль":activeSection==="miniapp"?"Mini App":"Чат Telegram"}</div>
      {previewMode==="telegram"?<FigmaTelegramPreview name={name} description={figmaPreview==="chat"?welcome:description} buttons={buttons} color={color} view={figmaPreview} avatar={avatar} bio={bio}/>:
-     <div className="overflow-hidden rounded-xl border border-[#cbd5e0] bg-white p-5"><div className="rounded-lg p-6 text-white" style={{background:color}}><h3 className="text-lg font-semibold">{name}</h3><p className="mt-3 text-sm">{description}</p></div><p className="mt-5 text-xs text-[#718096]">Предпросмотр Mini App · полный клиентский интерфейс открывается через Telegram</p></div>}
+     <div className="overflow-hidden rounded-xl border border-[#cbd5e0] p-3" style={{background:foodBot&&foodDark?"#16191d":"#f7f8fa",color:foodBot&&foodDark?"#fff":"#18212b"}}>
+      {foodBot?<><div className="mb-3 text-sm font-semibold">{foodTemplate==="food01"?"Food 01 · Minimal":"Food 02 · Expressive"}</div><div className="rounded-xl p-4 text-white" style={{background:foodTemplate==="food01"?"#f1d5c5":foodAccent,color:foodTemplate==="food01"?"#18212b":"white"}}><h3 className="text-lg font-bold">{name}</h3><p className="mt-2 text-sm">{description}</p></div><div className="mt-4 flex flex-wrap gap-2">{["Плов","Горячие блюда","Шашлык"].map(label=><span key={label} className="rounded-xl px-3 py-2 text-xs" style={{background:foodTemplate==="food01"?"white":foodAccent,color:foodTemplate==="food01"?"#18212b":"white"}}>{label}</span>)}</div><p className="mt-4 text-xs opacity-70">Полное оформление и фото блюд доступны в клиентском Mini App.</p></>:<><div className="rounded-lg p-6 text-white" style={{background:color}}><h3 className="text-lg font-semibold">{name}</h3><p className="mt-3 text-sm">{description}</p></div></>}
+     </div>}
     </aside>
     </div>
    </div>
