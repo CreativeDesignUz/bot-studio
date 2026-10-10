@@ -134,6 +134,7 @@ export default function OnboardingPage(){
     </section>}
     {stage===1&&<section>
      <h1 className="text-3xl font-semibold tracking-tight">Выберите шаблон</h1><p className="mt-2 text-sm text-[#667085]">Кабинет и Mini App подстроятся под тип бизнеса. Шаблон можно доработать позже.</p>
+     {templateId==="delivery"&&<Link href="/food-templates" className="mt-5 inline-flex items-center gap-2 rounded-xl border border-[#6541F5] bg-[#f4f0ff] px-4 py-3 text-sm font-semibold text-[#5934dc] no-underline">Посмотреть 2 дизайна доставки еды <ArrowRight size={16}/></Link>}
      <div className="mt-8 grid gap-3 sm:grid-cols-2">{templates.map(item=><button type="button" key={item.id} onClick={()=>setTemplateId(item.id)} className={`${card} flex min-h-[145px] flex-col items-start text-left ${templateId===item.id?"!border-[#6541F5] !bg-[#f8f6ff]":""}`}><item.Icon className="text-[#6541F5]" size={25}/><strong className="mt-3 text-base">{item.title}</strong><span className="mt-1 text-sm text-[#667085]">{item.description}</span></button>)}</div>
     </section>}
     {stage===2&&<section>
