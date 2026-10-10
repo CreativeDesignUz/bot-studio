@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   try {
     const supabase = getSupabaseServer({ privileged: true });
     const { data: bot, error } = await supabase.from("bots")
-      .select("id,name,description,logo_url,primary_color,template_type,status,publish_status,published_snapshot")
+      .select("id,name,description,logo_url,primary_color,template_type,status,publish_status,published_snapshot,settings")
       .eq("id", botId).single();
     if (error || !bot || bot.status !== "active" || bot.publish_status !== "published")
       return jsonError("Магазин ещё не опубликован", 404);
@@ -26,13 +26,14 @@ export async function GET(request: Request) {
     const { data: categories, error: categoryError } = await supabase.from("catalog_categories").select("id,name,position").eq("bot_id",botId).eq("is_active",true).order("position");
     if(categoryError)throw categoryError;
     const published = (bot.published_snapshot ?? {}) as Record<string, unknown>;
+    const designSettings=((bot.settings??{}) as Record<string,unknown>).miniapp_design;
     return Response.json({
       bot: {
         id: bot.id, name: published.name ?? bot.name, description: published.description ?? bot.description,
         logoUrl: published.logo_url ?? bot.logo_url, color: published.primary_color ?? bot.primary_color,
         template: published.template_type ?? bot.template_type,
       },
-      items: items ?? [], categories: categories??[],
+      items: items ?? [], categories: categories??[], design:designSettings??null,
     }, { headers: { "cache-control": "no-store" } });
   } catch {
     return jsonError("Временная ошибка загрузки каталога", 503);
