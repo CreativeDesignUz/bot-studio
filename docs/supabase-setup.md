@@ -17,6 +17,7 @@ Configure these only in the hosting environment; never commit their values:
 - `SUPABASE_SECRET_KEY` — server-only secret key used by authenticated API routes.
 - `TELEGRAM_MANAGER_TOKEN` — token for the manager bot.
 - `TELEGRAM_MANAGER_WEBHOOK_SECRET` — random secret checked on webhook requests.
+- `PUBLIC_APP_URL` — stable public HTTPS origin of the deployed SaaS (for example `https://app.example.com`). Telegram webhook and Mini App URLs are generated only from this value; request headers are not trusted in production.
 
 The publishable key can call only the public `bot_studio_health()` function. Application table writes use the server-only key and require a valid Telegram Mini App `initData` signature.
 

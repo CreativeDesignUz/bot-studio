@@ -4,6 +4,7 @@ import { resolveAppUser, withSessionCookie } from "@/lib/auth/app-user";
 import { getManagedBotToken, telegramCall } from "@/lib/channels/telegram-api";
 import { PublicationError, publicationRequestKey, publicPublicationError, runTelegramPublication } from "@/lib/bots/publication";
 import { buildBindingStartParameter, createBindingToken, hashBindingToken } from "@/lib/telegram/managed-binding";
+import { resolvePublicAppOrigin } from "@/lib/http/public-origin";
 
 type PublishPayload = { initData?: string; botId?: string; name?: string; description?: string; color?: string; buttons?: unknown };
 type PreparedPublication = { attempt_id: string; completed_steps?: string[]; snapshot: { name: string; description: string; username?: string | null } };
@@ -24,6 +25,9 @@ export async function POST(request: Request) {
   const identity = await resolveAppUser(request, payload.initData ?? "");
   if ("error" in identity) return Response.json({ error: identity.error }, { status: identity.status });
   const { supabase, user: appUser, setCookie } = identity;
+  let origin: string;
+  try { origin = resolvePublicAppOrigin(request.url, env.PUBLIC_APP_URL); }
+  catch { return withSessionCookie({ error: "Публичный адрес приложения не настроен.", status: "failed" }, 503, setCookie); }
   const requestKey = await publicationRequestKey(botId, { name: payload.name.trim(), description: payload.description.trim(), color: payload.color ?? "#6541F5", buttons });
   const { data: prepared, error: prepareError } = await supabase.rpc("prepare_bot_publication", {
     p_bot_id: botId, p_owner_id: appUser.id, p_request_key: requestKey, p_name: payload.name.trim(),
@@ -31,7 +35,6 @@ export async function POST(request: Request) {
   });
   if (prepareError || !prepared) return Response.json({ error: "Бот не найден или у вас нет доступа." }, { status: 404 });
   const publication = prepared as PreparedPublication;
-  const origin = new URL(request.url).origin;
   const { data: channel, error: channelError } = await supabase.from("bot_channels").select("id,status,external_account_id,external_username,configuration").eq("bot_id", botId).eq("channel", "telegram").maybeSingle();
   if (channelError) return Response.json({ error: "Не удалось проверить подключение Telegram." }, { status: 500 });
 

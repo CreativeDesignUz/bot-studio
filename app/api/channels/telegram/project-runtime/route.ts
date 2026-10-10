@@ -2,6 +2,7 @@ import { normalizeBotButtons, resolveReplyPath, telegramInlineKeyboard } from "@
 import { env } from "cloudflare:workers";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { getManagedBotToken, telegramCall } from "@/lib/channels/telegram-api";
+import { resolvePublicAppOrigin } from "@/lib/http/public-origin";
 
 type RuntimeUpdate={message?:{text?:string;chat?:{id?:number};from?:{id?:number;first_name?:string;username?:string}};callback_query?:{id?:string;data?:string;message?:{chat?:{id?:number}};from?:{id?:number}}};
 
@@ -27,7 +28,8 @@ export async function POST(request:Request){
  const publishedName=published.name??bot.name,publishedDescription=published.description??bot.description;
  const configuredButtons=((published.settings??bot.settings as {home_buttons?:{label?:string;action?:string}[]}|null)?.home_buttons??[]).slice(0,8);
  const buttons=normalizeBotButtons(configuredButtons);
- const origin=new URL(request.url).origin;
+ let origin:string;
+ try{origin=resolvePublicAppOrigin(request.url,env.PUBLIC_APP_URL)}catch{return new Response("Public application URL is not configured",{status:503})}
  const token=await getManagedBotToken(env.TELEGRAM_MANAGER_TOKEN,channel.external_account_id);
  if(update.callback_query){
   const query=update.callback_query;

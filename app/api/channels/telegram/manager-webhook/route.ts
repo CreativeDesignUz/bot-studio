@@ -5,6 +5,7 @@ import { botProfile, channelConnections, commands } from "@/db/schema";
 import { getManagedBotToken, telegramCall } from "@/lib/channels/telegram-api";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { hashBindingToken, parseBindingStart } from "@/lib/telegram/managed-binding";
+import { resolvePublicAppOrigin } from "@/lib/http/public-origin";
 
 type TelegramUser = { id: number; username?: string; first_name?: string };
 type TelegramMessage = { text?: string; chat?: { id?: number }; from?: TelegramUser; managed_bot_created?: { bot: TelegramUser } };
@@ -59,7 +60,9 @@ async function handleSupabaseManagedBot(request: Request, managed: TelegramUser,
   const binding = data as ClaimedBinding;
   const { data: bot } = await supabase.from("bots").select("id,name,description").eq("id", binding.bot_id).single();
   if (!bot) return new Response("Project not found", { status: 404 });
-  const origin = new URL(request.url).origin;
+  let origin: string;
+  try { origin = resolvePublicAppOrigin(request.url, env.PUBLIC_APP_URL); }
+  catch { return new Response("Public application URL is not configured", { status: 503 }); }
   const runtimeSecret = crypto.randomUUID().replaceAll("-", "");
   const miniAppUrl = new URL(`/miniapp?bot=${bot.id}`, origin).toString();
   try {
@@ -85,6 +88,9 @@ export async function POST(request: Request) {
   const managerToken = env.TELEGRAM_MANAGER_TOKEN;
   if (request.headers.get("x-telegram-bot-api-secret-token") !== env.TELEGRAM_MANAGER_WEBHOOK_SECRET) return new Response("Forbidden", { status: 403 });
   const update = await request.json() as ManagerUpdate;
+  let publicOrigin: string;
+  try { publicOrigin = resolvePublicAppOrigin(request.url, env.PUBLIC_APP_URL); }
+  catch { return new Response("Public application URL is not configured", { status: 503 }); }
   const message = update.message;
   const bindingToken = parseBindingStart(message?.text);
   if (bindingToken && message) return handleBindingStart(request, message, bindingToken, managerToken);
@@ -92,10 +98,9 @@ export async function POST(request: Request) {
   const chatId = message?.chat?.id;
   const command = message?.text?.trim().split(/\s+/, 1)[0]?.split("@", 1)[0];
   if (chatId && ["/start", "/help", "/create", "/bots"].includes(command ?? "")) {
-    const origin = new URL(request.url).origin;
-    const createUrl = new URL("/onboarding", origin).toString();
-    const workspaceUrl = new URL("/workspace", origin).toString();
-    await configureManagerBot(env.TELEGRAM_MANAGER_TOKEN, origin).catch(() => undefined);
+    const createUrl = new URL("/onboarding", publicOrigin).toString();
+    const workspaceUrl = new URL("/workspace", publicOrigin).toString();
+    await configureManagerBot(env.TELEGRAM_MANAGER_TOKEN, publicOrigin).catch(() => undefined);
     const isCreate = command === "/create", isBots = command === "/bots";
     await telegramCall(env.TELEGRAM_MANAGER_TOKEN, "sendMessage", {
       chat_id: chatId,
@@ -105,10 +110,9 @@ export async function POST(request: Request) {
     return Response.json({ ok: true });
   }
   if (chatId && message?.text) {
-    const origin = new URL(request.url).origin;
     await telegramCall(env.TELEGRAM_MANAGER_TOKEN, "sendMessage", {
       chat_id: chatId, text: "Я помогу создать и запустить бизнес-бота. Выберите действие ниже или используйте команды /create, /bots и /help.",
-      reply_markup: { inline_keyboard: [[{ text: "✨ Создать бота", web_app: { url: new URL("/onboarding", origin).toString() } }], [{ text: "📊 Мои боты", web_app: { url: new URL("/workspace", origin).toString() } }]] },
+      reply_markup: { inline_keyboard: [[{ text: "✨ Создать бота", web_app: { url: new URL("/onboarding", publicOrigin).toString() } }], [{ text: "📊 Мои боты", web_app: { url: new URL("/workspace", publicOrigin).toString() } }]] },
     });
     return Response.json({ ok: true });
   }
@@ -131,8 +135,7 @@ export async function POST(request: Request) {
     const commandRows = await db.select().from(commands);
     if (profile) { await telegramCall(token, "setMyName", { name: profile.name }); await telegramCall(token, "setMyDescription", { description: profile.description }); }
     if (commandRows.length) await telegramCall(token, "setMyCommands", { commands: commandRows.map((item) => ({ command: item.command, description: item.description || item.command })) });
-    const origin = new URL(request.url).origin;
-    await telegramCall(token, "setWebhook", { url: `${origin}/api/channels/telegram/runtime?connection=${encodeURIComponent(connection.id)}`, secret_token: runtimeSecret, allowed_updates: ["message", "callback_query"] });
+    await telegramCall(token, "setWebhook", { url: `${publicOrigin}/api/channels/telegram/runtime?connection=${encodeURIComponent(connection.id)}`, secret_token: runtimeSecret, allowed_updates: ["message", "callback_query"] });
   } catch {
     await db.update(channelConnections).set({ status: "error", updatedAt: new Date().toISOString() }).where(eq(channelConnections.id, connection.id));
   }
