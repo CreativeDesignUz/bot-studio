@@ -1,4 +1,5 @@
 import { normalizeBotButtons } from "@/lib/telegram/button-actions";
+import { syncTelegramBotProfile } from "@/lib/telegram/profile";
 import { env } from "cloudflare:workers";
 import { resolveAppUser, withSessionCookie } from "@/lib/auth/app-user";
 import { telegramCall } from "@/lib/channels/telegram-api";
@@ -7,7 +8,7 @@ import { PublicationError, publicationRequestKey, publicPublicationError, runTel
 import { buildBindingStartParameter, createBindingToken, hashBindingToken } from "@/lib/telegram/managed-binding";
 import { resolvePublicAppOrigin } from "@/lib/http/public-origin";
 
-type PublishPayload = { initData?: string; botId?: string; name?: string; description?: string; color?: string; buttons?: unknown };
+type PublishPayload = { initData?: string; botId?: string; name?: string; description?: string; bio?: string; welcome?: string; color?: string; buttons?: unknown };
 type PreparedPublication = { attempt_id: string; completed_steps?: string[]; snapshot: { name: string; description: string; username?: string | null } };
 
 function suggestedUsername(botId: string, current?: string | null) {
@@ -25,7 +26,7 @@ function bindingFailure(code?: string) {
 
 export async function POST(request: Request) {
   const payload = await request.json() as PublishPayload;
-  if (!payload.botId || !payload.name?.trim() || !payload.description?.trim()) return Response.json({ error: "Заполните название и описание." }, { status: 400 });
+  if (!payload.botId || !payload.name?.trim() || (payload.bio?.length??0)>120 || (payload.welcome?.length??0)>4096) return Response.json({ error: "Проверьте название, Bio и приветствие." }, { status: 400 });
   let buttons;
   try { buttons = payload.buttons == null ? [] : normalizeBotButtons(payload.buttons); }
   catch { return Response.json({ error: "Проверьте названия и адреса кнопок." }, { status: 400 }); }
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
   let origin: string;
   try { origin = resolvePublicAppOrigin(request.url, env.PUBLIC_APP_URL); }
   catch { return withSessionCookie({ error: "Публичный адрес приложения не настроен.", status: "failed" }, 503, setCookie); }
-  const requestKey = await publicationRequestKey(botId, { name: payload.name.trim(), description: payload.description.trim(), color: payload.color ?? "#6541F5", buttons });
+  const requestKey = await publicationRequestKey(botId, { name: payload.name.trim(), description: payload.description.trim(), bio:payload.bio??"", welcome:payload.welcome??"", color: payload.color ?? "#6541F5", buttons });
   const { data: prepared, error: prepareError } = await supabase.rpc("prepare_bot_publication", {
     p_bot_id: botId, p_owner_id: appUser.id, p_request_key: requestKey, p_name: payload.name.trim(),
     p_description: payload.description.trim(), p_primary_color: payload.color ?? "#6541F5", p_home_buttons: buttons,
@@ -68,6 +69,9 @@ export async function POST(request: Request) {
     return withSessionCookie({ ok: true, botId, status: "connection_required", requiresTelegramConnection: true, connectUrl, expiresInSeconds: 900 }, 202, setCookie);
   }
 
+  const {data:profileBot, error:profileError}=await supabase.from("bots").select("logo_url,settings").eq("id",botId).eq("owner_id",appUser.id).maybeSingle();
+  if(profileError||!profileBot)return Response.json({error:"Не удалось прочитать профиль бота."},{status:500});
+  const profileSettings=(profileBot.settings??{}) as {telegram_bio?:string};
   const configuration = (channel.configuration ?? {}) as Record<string, unknown>;
   const runtimeSecret = typeof configuration.runtime_secret === "string" ? configuration.runtime_secret : crypto.randomUUID().replaceAll("-", "");
   const miniAppUrl = new URL(`/miniapp?bot=${botId}`, origin).toString();
@@ -76,6 +80,11 @@ export async function POST(request: Request) {
     const token = await getProjectBotToken(supabase, channel, {
       managerToken: env.TELEGRAM_MANAGER_TOKEN,
       encryptionKey: env.TELEGRAM_TOKEN_ENCRYPTION_KEY,
+    });
+    await syncTelegramBotProfile(token,{
+      bio:profileSettings.telegram_bio??"",
+      avatarUrl:profileBot.logo_url,
+      supabaseUrl:env.SUPABASE_URL??"",
     });
     await runTelegramPublication({
       token, name: publication.snapshot.name, description: publication.snapshot.description, miniAppUrl, webhookUrl, runtimeSecret,
