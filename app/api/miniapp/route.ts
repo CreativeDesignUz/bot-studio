@@ -20,9 +20,11 @@ export async function GET(request: Request) {
     if (error || !bot || bot.status !== "active" || bot.publish_status !== "published")
       return jsonError("Магазин ещё не опубликован", 404);
     const { data: items, error: itemsError } = await supabase.from("catalog_items")
-      .select("id,name,description,image_url,price_minor,currency,item_type")
+      .select("id,name,description,image_url,price_minor,currency,item_type,category_id")
       .eq("bot_id", botId).eq("is_active", true).order("position", { ascending: true }).limit(200);
     if (itemsError) throw itemsError;
+    const { data: categories, error: categoryError } = await supabase.from("catalog_categories").select("id,name,position").eq("bot_id",botId).eq("is_active",true).order("position");
+    if(categoryError)throw categoryError;
     const published = (bot.published_snapshot ?? {}) as Record<string, unknown>;
     return Response.json({
       bot: {
@@ -30,7 +32,7 @@ export async function GET(request: Request) {
         logoUrl: published.logo_url ?? bot.logo_url, color: published.primary_color ?? bot.primary_color,
         template: published.template_type ?? bot.template_type,
       },
-      items: items ?? [],
+      items: items ?? [], categories: categories??[],
     }, { headers: { "cache-control": "no-store" } });
   } catch {
     return jsonError("Временная ошибка загрузки каталога", 503);
