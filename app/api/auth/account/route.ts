@@ -70,7 +70,7 @@ export async function POST(request:Request){
   const guest=readGuestHash(request),hash=guest?await hexSha(guest):null;
   const {data:unclaimed}=hash?await supabase.from("app_users").select("id,auth_user_id,telegram_id").eq("web_session_hash",hash).maybeSingle():{data:null};
   if(unclaimed&&!unclaimed.auth_user_id&&!unclaimed.telegram_id){
-   const {data:linked,error:linkError}=await supabase.from("app_users").update(account).eq("id",unclaimed.id).is("auth_user_id",null).is("telegram_id",null).select("id").maybeSingle();
+   const {data:linked,error:linkError}=await supabase.from("app_users").update({...account,web_session_hash:null}).eq("id",unclaimed.id).is("auth_user_id",null).is("telegram_id",null).select("id").maybeSingle();
    if(linkError||!linked)return fail("Не удалось привязать существующий кабинет.",409);
    id=linked.id;
   }else{
@@ -79,6 +79,8 @@ export async function POST(request:Request){
    id=created.id;
   }
  }
+ // Revoke legacy guest access after successful verified login.
+ await supabase.from("app_users").update({web_session_hash:null}).eq("id",id);
  let cookie:string;
  try{cookie=await issueAuthCookie(id)}catch{return fail("Вход ещё не настроен на сервере. Требуется BOT_STUDIO_AUTH_SECRET.",503)}
  return new Response(JSON.stringify({ok:true,redirectTo:"/workspace"}),{status:200,headers:{"content-type":"application/json","set-cookie":cookie,"cache-control":"no-store"}});
