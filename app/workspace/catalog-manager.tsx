@@ -4,14 +4,20 @@ import { useCallback, useEffect, useState } from "react";
 import { LoaderCircle, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { formatCatalogPrice, formatStoredPrice, priceToMinor, type CatalogCurrency } from "@/lib/catalog/price";
 
-type Item = { id: string; name: string; description: string; price_minor: number | null; is_active: boolean; currency: string };
-type ApiResult = { items?: Item[]; item?: Item; error?: string };
+type Item = { id: string; name: string; description: string; price_minor: number | null; is_active: boolean; currency: string; image_url?:string|null;category_id?:string|null };
+type Category={id:string;name:string;position:number};
+type ApiResult = { items?: Item[]; categories?:Category[]; item?: Item; created?:number; error?: string };
 const formatMoney = (minor: number, currency: string) => `${formatStoredPrice(minor, currency === "USD" ? "USD" : "UZS")} ${currency === "USD" ? "$" : "сум"}`;
 const telegramData = () => (window as typeof window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData ?? "";
 
 export default function CatalogManager({ botId, type }: { botId: string; type: "service" | "store" | "delivery" }) {
   const noun = type === "service" ? "услугу" : type === "delivery" ? "блюдо" : "товар";
   const [items, setItems] = useState<Item[]>([]);
+  const [categories,setCategories]=useState<Category[]>([]);
+  const [categoryId,setCategoryId]=useState("");
+  const [imageUrl,setImageUrl]=useState("");
+  const [chosenCategory,setChosenCategory]=useState("all");
+  const [notice,setNotice]=useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
@@ -29,14 +35,14 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
       const response = await fetch("/api/catalog?bot=" + encodeURIComponent(botId), { headers: { "x-telegram-init-data": telegramData() }, cache: "no-store" });
       const body = await response.json() as ApiResult;
       if (!response.ok) throw new Error(body.error ?? "Не удалось загрузить каталог.");
-      setItems(body.items ?? []);
+      setItems(body.items ?? []);setCategories(body.categories??[]);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Ошибка загрузки."); }
     finally { setLoading(false); }
   }, [botId]);
   useEffect(() => { void Promise.resolve().then(refresh); }, [refresh]);
 
   function open(item?: Item) {
-    setEditing(item ?? "new"); setName(item?.name ?? ""); setDescription(item?.description ?? "");
+    setEditing(item ?? "new"); setName(item?.name ?? ""); setDescription(item?.description ?? "");setCategoryId(item?.category_id??"");setImageUrl(item?.image_url??"");
     const nextCurrency: CatalogCurrency = item?.currency === "USD" ? "USD" : "UZS";
     setCurrency(nextCurrency);
     setPrice(item?.price_minor == null ? "" : formatStoredPrice(item.price_minor, nextCurrency)); setActive(item?.is_active ?? true); setError("");
@@ -51,12 +57,25 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
     try {
       const response = await fetch("/api/catalog", { method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ botId, initData: telegramData(), ...(editing !== "new" && editing ? { id: editing.id } : {}),
-          name: name.trim(), description: description.trim(), priceMinor, currency, isActive: active }) });
+          name: name.trim(), description: description.trim(), priceMinor, currency, isActive: active, categoryId:categoryId||null,imageUrl:imageUrl||null }) });
       const body = await response.json() as ApiResult;
       if (!response.ok) throw new Error(body.error ?? "Не удалось сохранить.");
       setEditing(null); await refresh();
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось сохранить."); }
     finally { setSaving(false); }
+  }
+
+  async function fillUzbekMenu(){
+    if(!window.confirm("Добавить 12 демонстрационных узбекских блюд с категориями и примерными ценами? Только в пустой каталог выбранного бота."))return;
+    setSaving(true);setError("");setNotice("");
+    try{
+      const response=await fetch("/api/catalog/seed-uzbek",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({botId,initData:telegramData()})});
+      const body=await response.json() as ApiResult;
+      if(!response.ok)throw new Error(body.error??"Не удалось заполнить каталог");
+      setNotice(`Добавлено ${body.created??0} демонстрационных блюд. Цены и фотографии можно изменить.`);
+      await refresh();
+    }catch(e){setError(e instanceof Error?e.message:"Не удалось добавить меню")}
+    finally{setSaving(false)}
   }
 
   async function archive(item: Item) {
@@ -76,16 +95,20 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
     <div className="flex flex-wrap items-center gap-3 border-b border-[#eaecf0] p-5">
       <label className="relative min-w-[180px] flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#98a2b3]"/>
         <input value={query} onChange={e=>setQuery(e.target.value)} className="h-11 w-full rounded-xl border border-[#e4e7ec] pl-10 pr-3 text-sm" placeholder="Поиск по каталогу"/></label>
+      {type==="delivery"&&items.length===0&&!loading&&<button type="button" disabled={saving} onClick={()=>void fillUzbekMenu()} className="inline-flex h-11 items-center gap-2 rounded-xl border border-[#6541f5] px-4 text-sm font-semibold text-[#5934dc] disabled:opacity-50">Добавить узбекское меню</button>}
       <button type="button" onClick={()=>open()} className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#101828] px-4 text-sm font-semibold !text-white"><Plus className="size-4"/>Добавить {noun}</button>
     </div>
+    {notice&&<p role="status" className="mx-5 mt-4 rounded-lg bg-[#ecfdf3] p-3 text-sm text-[#027a48]">{notice}</p>}
     {error && <p role="alert" className="m-5 rounded-xl bg-[#fff1f2] p-3 text-sm text-[#be123c]">{error}</p>}
+    {type==="delivery"&&categories.length>0&&<div className="flex gap-2 overflow-x-auto border-b border-[#eaecf0] px-5 py-3"><button onClick={()=>setChosenCategory("all")} className={`shrink-0 rounded-full px-4 py-2 text-xs font-semibold ${chosenCategory==="all"?"bg-[#6541f5] text-white":"bg-[#f2f4f7] text-[#667085]"}`}>Все блюда</button>{categories.map(c=><button key={c.id} onClick={()=>setChosenCategory(c.id)} className={`shrink-0 rounded-full px-4 py-2 text-xs font-semibold ${chosenCategory===c.id?"bg-[#6541f5] text-white":"bg-[#f2f4f7] text-[#667085]"}`}>{c.name}</button>)}</div>}
     {loading ? <div className="flex items-center justify-center gap-2 p-14 text-sm text-[#667085]"><LoaderCircle className="size-4 animate-spin"/>Загружаем реальные данные…</div> :
-      items.filter(item=>[item.name,item.description].join(" ").toLowerCase().includes(query.toLowerCase())).length === 0
+      items.filter(item=>(chosenCategory==="all"||item.category_id===chosenCategory)&&[item.name,item.description].join(" ").toLowerCase().includes(query.toLowerCase())).length === 0
       ? <div className="p-12 text-center"><h2 className="text-lg font-semibold">Пока нет {type==="service"?"услуг":type==="delivery"?"блюд":"товаров"}</h2>
           <p className="mt-2 text-sm text-[#667085]">Добавьте первый элемент, и он появится в Mini App после обновления.</p>
           <button type="button" onClick={()=>open()} className="mt-5 rounded-xl bg-[#6541f5] px-5 py-3 text-sm font-semibold !text-white">Добавить {noun}</button></div>
-      : <div className="divide-y divide-[#eaecf0]">{items.filter(item=>[item.name,item.description].join(" ").toLowerCase().includes(query.toLowerCase())).map(item=><div key={item.id} className="flex flex-wrap items-center gap-4 p-5">
-          <div className="min-w-0 flex-1"><strong className="block truncate text-sm">{item.name}</strong><p className="mt-1 line-clamp-2 text-xs text-[#667085]">{item.description || "Без описания"}</p></div>
+      : <div className="divide-y divide-[#eaecf0]">{items.filter(item=>(chosenCategory==="all"||item.category_id===chosenCategory)&&[item.name,item.description].join(" ").toLowerCase().includes(query.toLowerCase())).map(item=><div key={item.id} className="flex flex-wrap items-center gap-4 p-5">
+          {item.image_url&&<img src={item.image_url} alt="" className="size-16 shrink-0 rounded-xl object-cover"/>}
+          <div className="min-w-0 flex-1"><strong className="block truncate text-sm">{item.name}</strong><p className="mt-1 text-xs text-[#6541f5]">{categories.find(c=>c.id===item.category_id)?.name??""}</p><p className="mt-1 line-clamp-2 text-xs text-[#667085]">{item.description || "Без описания"}</p></div>
           <span className="text-sm font-semibold">{item.price_minor === null ? "Цена по запросу" : formatMoney(item.price_minor,item.currency)}</span>
           <span className={item.is_active?"rounded-full bg-[#ecfdf3] px-2 py-1 text-xs text-[#027a48]":"rounded-full bg-[#f2f4f7] px-2 py-1 text-xs text-[#667085]"}>{item.is_active?"Активен":"Скрыт"}</span>
           <button type="button" onClick={()=>open(item)} aria-label={"Изменить "+item.name} className="grid size-10 place-items-center rounded-xl border border-[#d0d5dd]"><Pencil className="size-4"/></button>
@@ -96,6 +119,8 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
         <div className="flex items-center justify-between"><h2 className="text-xl font-semibold">{editing==="new"?"Добавить":"Редактировать"} {noun}</h2><button type="button" onClick={()=>setEditing(null)} aria-label="Закрыть"><X/></button></div>
         <div className="mt-5 space-y-4"><label className="block text-sm font-medium">Название<input maxLength={120} value={name} onChange={e=>setName(e.target.value)} className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/></label>
           <label className="block text-sm font-medium">Описание<textarea maxLength={2000} value={description} onChange={e=>setDescription(e.target.value)} rows={3} className="mt-2 w-full rounded-xl border border-[#d0d5dd] p-3"/></label>
+          {type==="delivery"&&<label className="block text-sm font-medium">Категория<select value={categoryId} onChange={e=>setCategoryId(e.target.value)} className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"><option value="">Без категории</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
+          <label className="block text-sm font-medium">Фото блюда (HTTPS-ссылка)<input type="url" value={imageUrl} onChange={e=>setImageUrl(e.target.value)} placeholder="https://..." className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/></label>
           <div className="block text-sm font-medium"><span>Цена</span><div className="mt-2 flex items-stretch overflow-hidden rounded-xl border border-[#d0d5dd] focus-within:border-[#6541f5]">
             <input aria-label="Стоимость" inputMode={currency==="UZS"?"numeric":"decimal"} value={price} onChange={e=>setPrice(formatCatalogPrice(e.target.value,currency))} placeholder={currency==="UZS"?"10 000":"100.00"} className="h-11 min-w-0 flex-1 px-3 outline-none"/>
             <select aria-label="Валюта" value={currency} onChange={e=>{const next=e.target.value as CatalogCurrency;setPrice(formatCatalogPrice(price.replace(/\s/g,"").split(".")[0],next));setCurrency(next);}} className="min-w-28 border-l border-[#d0d5dd] bg-[#f9fafb] px-3 text-sm font-semibold outline-none">
