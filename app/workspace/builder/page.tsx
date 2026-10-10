@@ -9,7 +9,7 @@ import { ArrowLeft, Bot, Check, ChevronRight, Eye, GripVertical, LoaderCircle, P
 type ActionButton={id:string;label:string;action:"home"|"url"|"reply";url?:string;replyText?:string;nextButtons?:ActionButton[]};
 type PublishState="idle"|"validating"|"saving"|"publishing"|"published"|"connection"|"error";
 type LoadState="loading"|"ready"|"error";
-type DraftResponse={bot?:{name:string;description:string;primary_color:string;settings?:{home_buttons?:ActionButton[]}};error?:string};
+type DraftResponse={bot?:{name:string;description:string;primary_color:string;logo_url?:string|null;settings?:{home_buttons?:ActionButton[];telegram_bio?:string;welcome_message?:string}};error?:string};
 type ErrorResponse={error?:string};
 type TelegramConnection={status:string;username?:string|null;mode?:"botfather"|"manager"}|null;
 type InspectedBot={credentialId:string;bot:{id:number;name:string;username:string}};
@@ -19,6 +19,7 @@ export default function BotBuilder(){
  const botId=searchParams.get("bot");
  const [name,setName]=useState(""),[description,setDescription]=useState(""),[color,setColor]=useState("#6541F5");
  const [buttons,setButtons]=useState<ActionButton[]>([]);
+ const [bio,setBio]=useState(""),[welcome,setWelcome]=useState(""),[avatar,setAvatar]=useState<string|null>(null),[avatarBusy,setAvatarBusy]=useState(false);
  const [activeSection,setActiveSection]=useState<"message"|"buttons"|"miniapp"|"publish">("message");
  const [previewMode,setPreviewMode]=useState<"telegram"|"miniapp">("telegram");
  const [figmaPreview,setFigmaPreview]=useState<"profile"|"chat">("chat");
@@ -38,7 +39,7 @@ export default function BotBuilder(){
     const response=await fetch(`/api/bots/draft?bot=${encodeURIComponent(botId)}`,{headers:{"x-telegram-init-data":tg?.initData??""},signal:controller.signal});
     const result=await response.json() as DraftResponse;
     if(!response.ok||!result.bot)throw new Error(result.error||"Не удалось загрузить бота.");
-    setName(result.bot.name);setDescription(result.bot.description);setColor(result.bot.primary_color);setButtons((result.bot.settings?.home_buttons??[]).map(button=>({...button,id:button.id??crypto.randomUUID(),action:button.action==="url"?"url":button.action==="reply"?"reply":"home",nextButtons:button.nextButtons?.map(next=>({...next,id:next.id??crypto.randomUUID()}))})));
+    setName(result.bot.name);setDescription(result.bot.description);setBio(result.bot.settings?.telegram_bio??"");setWelcome(result.bot.settings?.welcome_message??result.bot.description);setAvatar(result.bot.logo_url??null);setColor(result.bot.primary_color);setButtons((result.bot.settings?.home_buttons??[]).map(button=>({...button,id:button.id??crypto.randomUUID(),action:button.action==="url"?"url":button.action==="reply"?"reply":"home",nextButtons:button.nextButtons?.map(next=>({...next,id:next.id??crypto.randomUUID()}))})));
     setDirty(false);setSaved(true);setLoadState("ready");
     const connectionResponse=await fetch(`/api/channels/telegram/token?bot=${encodeURIComponent(botId)}`,{headers:{"x-telegram-init-data":tg?.initData??""},signal:controller.signal});
     if(connectionResponse.ok){const connectionResult=await connectionResponse.json() as {connection?:TelegramConnection};setConnection(connectionResult.connection??null)}
@@ -56,18 +57,31 @@ export default function BotBuilder(){
   setLoadError("");setPublishState("saving");
   const telegram=(window as typeof window&{Telegram?:{WebApp?:{initData?:string}}}).Telegram?.WebApp;
   try{
-   const response=await fetch("/api/bots/draft",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({initData:telegram?.initData,botId,name,description,color,buttons})});
+   const response=await fetch("/api/bots/draft",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({initData:telegram?.initData,botId,name,description,bio,welcome,color,buttons})});
    const result=await response.json() as ErrorResponse;
    if(!response.ok)throw new Error(result.error||"Не удалось сохранить изменения.");
    setDirty(false);setSaved(true);setPublishState("idle");return true;
   }catch(error){setLoadError(error instanceof Error?error.message:"Не удалось сохранить изменения.");setPublishState("error");return false}
+ }
+ async function uploadAvatar(file:File){
+  if(!botId)return;
+  if(!["image/png","image/jpeg","image/webp"].includes(file.type)||file.size>2*1024*1024){setLoadError("Загрузите квадратное изображение PNG, JPG или WebP размером до 2 МБ.");return}
+  setAvatarBusy(true);setLoadError("");
+  try{
+   const form=new FormData();form.append("botId",botId);form.append("logo",file);form.append("initData",telegramInitData()??"");
+   const response=await fetch("/api/bots/logo",{method:"POST",body:form});
+   const result=await response.json() as {logoUrl?:string;error?:string};
+   if(!response.ok||!result.logoUrl)throw new Error(result.error??"Не удалось загрузить аватар.");
+   setAvatar(result.logoUrl);setSaved(false);setDirty(true);if(publishState==="published")setPublishState("idle");
+  }catch(e){setLoadError(e instanceof Error?e.message:"Ошибка загрузки аватара.");}
+  finally{setAvatarBusy(false)}
  }
  async function publish(){
   if(dirty&&!(await save()))return;
   setLoadError("");setPublishState("validating");await new Promise(r=>setTimeout(r,500));setPublishState("publishing");
   const telegram=(window as typeof window&{Telegram?:{WebApp?:{initData?:string}}}).Telegram?.WebApp;
   try{
-   const response=await fetch("/api/publish",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({initData:telegram?.initData,botId,name,description,color,buttons})});
+   const response=await fetch("/api/publish",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({initData:telegram?.initData,botId,name,description,bio,welcome,color,buttons})});
    const result=await response.json() as {status?:string;requiresTelegramConnection?:boolean;connectUrl?:string;error?:string};
    if(result.requiresTelegramConnection&&result.connectUrl){setConnectUrl(result.connectUrl);setPublishState("connection");return}
    if(!response.ok||result.status!=="published")throw new Error(result.error||"Публикация не завершена. Повторите попытку.");
@@ -120,11 +134,19 @@ export default function BotBuilder(){
     <section className="min-h-0 min-w-0 space-y-5 xl:h-full xl:overflow-y-auto xl:pr-1">
     {activeSection==="message" && <div className="rounded-[10px] border border-[#dadadd] bg-white px-4 py-5">
       <div className="space-y-4 text-[14px]">
+       <div className="flex items-center gap-4">
+        <div className="grid size-[82px] shrink-0 place-items-center overflow-hidden rounded-full bg-[#e8e2ff] text-[#4420e7]">{avatar?<img src={avatar} alt="Аватар бота" className="size-full object-cover"/>:<Bot size={28}/>}</div>
+        <label className="min-w-0 flex-1 text-sm font-medium">Аватар Telegram
+         <span className="mt-1 block text-xs font-normal text-[#718096]">Рекомендуем квадратное фото. PNG, JPG или WebP до 2 МБ.</span>
+         <input type="file" accept="image/png,image/jpeg,image/webp" disabled={avatarBusy} onChange={event=>{const file=event.target.files?.[0];if(file)void uploadAvatar(file);event.currentTarget.value="";}} className="mt-2 block w-full text-xs file:mr-3 file:rounded-[8px] file:border file:border-[#cbd5e0] file:bg-white file:px-3 file:py-2 file:text-[#4420e7]"/>
+        </label>
+       </div>
        <Field label="Название бота *"><input value={name} maxLength={64} onChange={e=>change(()=>setName(e.target.value))} placeholder="Название бота"/></Field>
        <Field label="Токен бота *"><div className="flex h-10 items-center justify-between rounded-[8px] border border-[#cbd5e0] bg-[#f8f9fb] px-3 text-sm"><span className="truncate text-[#718096]">{connection?.status==="connected"?`@ ${connection.username||"Подключён"} · защищён`:"Подключается в отдельном разделе"}</span><button onClick={()=>setActiveSection("publish")} className="ml-2 shrink-0 text-[#4420e7]"><KeyRound size={17}/></button></div></Field>
        <Field label="Описание бота"><textarea rows={3} maxLength={512} value={description} onChange={e=>change(()=>setDescription(e.target.value))} placeholder="Опишите своего бота"/></Field>
-       <Field label="Привет бота"><textarea rows={3} maxLength={512} value={description} onChange={e=>change(()=>setDescription(e.target.value))} placeholder="Напишите что-нибудь"/></Field>
-       <p className="text-[12px] text-[#94a3b8]">ⓘ Не более 512 символов · сейчас приветствие использует описание бота</p>
+       <Field label="Bio — короткая информация"><input maxLength={120} value={bio} onChange={e=>change(()=>setBio(e.target.value))} placeholder="Кратко о боте · до 120 символов"/></Field>
+       <Field label="Приветствие после /start"><textarea rows={3} maxLength={4096} value={welcome} onChange={e=>change(()=>setWelcome(e.target.value))} placeholder="Здравствуйте! Чем можем помочь?"/></Field>
+       <p className="text-[12px] text-[#94a3b8]">ⓘ Bio: {bio.length}/120 · Описание: {description.length}/512 · Приветствие: {welcome.length}/4096</p>
        <div className="grid grid-cols-2 gap-3 pt-1"><Link href="/workspace" className="grid h-10 place-items-center rounded-[8px] border border-[#cbd5e0] text-[13px] font-medium text-[#718096] no-underline">Отмена</Link><button type="button" disabled={!dirty} onClick={()=>void save()} className="h-10 rounded-[8px] bg-[#4420e7] text-[13px] font-semibold !text-white disabled:opacity-60">Сохранить</button></div>
       </div>
     </div>}
@@ -181,7 +203,7 @@ export default function BotBuilder(){
        <button type="button" onClick={()=>setPreviewMode("miniapp")} className={`rounded-md px-2 py-1 text-[11px] ${previewMode==="miniapp"?"bg-white text-[#4420e7] shadow-sm":"text-[#718096]"}`}>Mini App</button>
       </div>
      </div>
-     {previewMode==="telegram"?<FigmaTelegramPreview name={name} description={description} buttons={buttons} color={color} view={figmaPreview}/>:
+     {previewMode==="telegram"?<FigmaTelegramPreview name={name} description={figmaPreview==="chat"?welcome:description} buttons={buttons} color={color} view={figmaPreview} avatar={avatar} bio={bio}/>:
      <div className="overflow-hidden rounded-xl border border-[#cbd5e0] bg-white p-5"><div className="rounded-lg p-6 text-white" style={{background:color}}><h3 className="text-lg font-semibold">{name}</h3><p className="mt-3 text-sm">{description}</p></div><p className="mt-5 text-xs text-[#718096]">Предпросмотр Mini App · полный клиентский интерфейс открывается через Telegram</p></div>}
     </aside>
     </div>
