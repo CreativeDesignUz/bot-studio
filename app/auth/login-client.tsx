@@ -32,7 +32,7 @@ export default function LoginPage({callback=false}:{callback?:boolean}){
 
  useEffect(()=>{
   const controller=new AbortController();
-  void fetch("/api/auth/providers",{signal:controller.signal}).then(r=>r.json()).then((data:Providers)=>{if(!controller.signal.aborted)setProviders(data)}).catch(()=>{if(!controller.signal.aborted)setError("Не удалось загрузить способы входа.")});
+  void fetch("/api/auth/providers",{signal:controller.signal}).then(r=>r.json() as Promise<Providers>).then(data=>{if(!controller.signal.aborted)setProviders(data)}).catch(()=>{if(!controller.signal.aborted)setError("Не удалось загрузить способы входа.")});
   return()=>controller.abort();
  },[]);
  useEffect(()=>{
