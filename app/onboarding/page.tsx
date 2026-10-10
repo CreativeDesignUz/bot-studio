@@ -106,14 +106,20 @@ export default function OnboardingPage(){
  return <main className="min-h-dvh bg-[#f6f7fa] text-[#101828]">
   <header className="border-b border-[#e5e7eb] bg-white"><div className="mx-auto flex h-[76px] max-w-[1240px] items-center justify-between px-5">
     <Link href="/workspace" className="flex items-center gap-3 text-lg font-bold text-[#101828] no-underline"><span className="grid size-10 place-items-center rounded-xl bg-[#4420e7] text-white"><Bot size={22}/></span>Bot Studio</Link>
-    <Link href="/workspace" className="text-sm font-medium text-[#667085] no-underline">В кабинет <ArrowRight size={15} className="inline"/></Link>
+
   </div></header>
   <div className="mx-auto grid max-w-[1240px] gap-10 px-5 py-10 lg:grid-cols-[270px_minmax(0,1fr)]">
-   <aside className="lg:sticky lg:top-8 lg:self-start">
+   <aside className="self-start lg:sticky lg:top-8">
+    <div className="rounded-[16px] border border-[#e0e5ed] bg-white p-5 shadow-[0_6px_24px_rgba(16,24,40,0.03)]">
     <p className="text-xs font-semibold uppercase tracking-widest text-[#98a2b3]">Создание бота</p>
     <nav aria-label="Этапы создания" className="mt-5 flex flex-wrap gap-2 lg:flex-col">{stages.map((title,i)=><div key={title} aria-current={stage===i?"step":undefined} className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm ${stage===i?"bg-[#eee9ff] font-semibold text-[#4420e7]":i<stage?"text-[#166534]":"text-[#667085]"}`}><span className={`grid size-8 shrink-0 place-items-center rounded-full ${stage===i?"bg-[#4420e7] text-white":i<stage?"bg-[#dcfce7] text-[#166534]":"bg-[#edf0f5]"}`}>{i<stage?<Check size={16}/>:i+1}</span><span>{title}</span></div>)}</nav>
     <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-[#e6e9f1]"><div className="h-full rounded-full bg-[#6541F5] transition-all" style={{width:`${(stage+1)*25}%`}}/></div>
     <p className="mt-3 text-xs text-[#98a2b3]">Шаг {stage+1} из 4</p>
+    </div>
+    <div className="mt-4 flex flex-col gap-1 px-2">
+     {stage>0&&<button type="button" onClick={goBack} className="flex min-h-10 items-center gap-2 rounded-[10px] px-3 text-left text-sm font-medium text-[#475467] hover:bg-white"><ArrowLeft size={17}/>Назад к предыдущему шагу</button>}
+     <Link href="/workspace" className="flex min-h-10 items-center gap-2 rounded-[10px] px-3 text-sm font-medium text-[#475467] no-underline hover:bg-white"><ArrowLeft size={17}/>В кабинет</Link>
+    </div>
    </aside>
    <div className="min-w-0">
     {error&&<div role="alert" className="mb-5 rounded-xl border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#b42318]">{error}</div>}
@@ -135,7 +141,20 @@ export default function OnboardingPage(){
      <div className="mt-8 grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_260px]"><div className={card+" space-y-4"}>
       <label className="block text-sm font-medium">Название бота <span className="text-red-500">*</span><input maxLength={64} value={name} onChange={event=>setName(event.target.value)} placeholder="Например, Мой магазин" className="mt-2 h-11 w-full rounded-lg border border-[#d7dce6] px-3 outline-[#6541F5]"/></label>
       <label className="block text-sm font-medium">Описание<textarea maxLength={512} rows={3} value={description} onChange={event=>setDescription(event.target.value)} placeholder="Чем бот поможет вашим клиентам?" className="mt-2 w-full rounded-lg border border-[#d7dce6] p-3 outline-[#6541F5]"/></label>
-      <div className="flex items-center gap-3"><div className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-full bg-[#eee9ff] text-[#6541F5]">{avatarUrl?<img src={avatarUrl} alt="Предпросмотр аватара" className="size-full object-cover"/>:<ImagePlus size={23}/>}</div><label className="block min-w-0 text-sm font-medium">Аватар (необязательно)<input type="file" accept="image/png,image/jpeg,image/webp" onChange={event=>{const f=event.target.files?.[0]??null;if(f&&f.size>2*1024*1024){setError("Максимальный размер изображения — 2 МБ.");return}setAvatar(f);setAvatarUrl(f?URL.createObjectURL(f):"")}} className="mt-2 block w-full text-xs"/></label></div>
+      <div className="rounded-xl border border-[#e0e5ed] bg-[#fbfbfe] p-4">
+       <p className="text-sm font-semibold">Аватар бота <span className="font-normal text-[#98a2b3]">(необязательно)</span></p>
+       <div className="mt-3 flex items-center gap-4">
+        <div className="grid size-[76px] shrink-0 place-items-center overflow-hidden rounded-[16px] bg-[#eee9ff] text-[#6541F5]">{avatarUrl?<img src={avatarUrl} alt="Загруженный аватар бота" className="size-full object-cover"/>:<ImagePlus size={26}/>}</div>
+        <div className="min-w-0 flex-1">
+         <label className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-[10px] border border-[#c9c4fa] bg-white px-4 text-sm font-semibold text-[#4420e7] hover:bg-[#f5f2ff]">
+          <ImagePlus size={17}/>{avatar?"Заменить аватар":"Загрузить аватар"}
+          <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" aria-label="Загрузить аватар бота" onChange={event=>{const f=event.target.files?.[0]??null;if(f&&f.size>2*1024*1024){setError("Максимальный размер изображения — 2 МБ.");event.currentTarget.value="";return}setError("");setAvatar(f);setAvatarUrl(f?URL.createObjectURL(f):"");event.currentTarget.value=""}}/>
+         </label>
+         <p className="mt-2 text-xs leading-5 text-[#667085]">Квадратное изображение · JPG, PNG или WebP · до 2 МБ</p>
+         {avatar&&<p className="mt-1 max-w-[280px] truncate text-xs text-[#475467]" title={avatar.name}>Выбрано: {avatar.name}</p>}
+        </div>
+       </div>
+      </div>
       <label className="flex items-center gap-3 text-sm font-medium">Основной цвет <input type="color" value={color} onChange={e=>setColor(e.target.value)} className="size-10 cursor-pointer rounded-lg"/><span className="font-mono text-xs text-[#667085]">{color}</span></label>
       {choice!=="later"&&!connected&&<div className="border-t border-[#e5e7eb] pt-5">
        <p className="text-sm font-semibold">Подключение через BotFather</p>
