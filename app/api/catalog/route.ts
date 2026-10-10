@@ -3,7 +3,7 @@ import { resolveAppUser, withSessionCookie } from "@/lib/auth/app-user";
 type ItemPayload = {
   botId?: string; id?: string; initData?: string;
   name?: string; description?: string; priceMinor?: number | null;
-  isActive?: boolean;
+  isActive?: boolean; currency?: string;
 };
 const bad = (error: string, status: number) => Response.json({ error }, { status });
 const validId = (value: unknown) => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -46,9 +46,10 @@ export async function POST(request: Request) {
   if (input.priceMinor != null && (!Number.isSafeInteger(input.priceMinor) || input.priceMinor < 0 || input.priceMinor > 9_000_000_000_000))
     return bad("Укажите корректную цену.", 400);
   if (input.id != null && !validId(input.id)) return bad("Некорректный элемент.", 400);
+  if (input.currency != null && !["UZS", "USD"].includes(input.currency)) return bad("Недопустимая валюта.", 400);
   const auth = await authorize(request, input.botId!, input.initData ?? "");
   if ("error" in auth) return auth.error;
-  const values = { name, description, price_minor: input.priceMinor ?? null, ...(typeof input.isActive === "boolean" ? { is_active: input.isActive } : {}) };
+  const values = { name, description, price_minor: input.priceMinor ?? null, ...(input.currency ? { currency: input.currency } : {}), ...(typeof input.isActive === "boolean" ? { is_active: input.isActive } : {}) };
   const query = input.id
     ? auth.supabase.from("catalog_items").update(values).eq("id", input.id).eq("bot_id", input.botId!).eq("item_type", auth.itemType)
     : auth.supabase.from("catalog_items").insert({ ...values, bot_id: input.botId, item_type: auth.itemType, currency: "UZS" });
