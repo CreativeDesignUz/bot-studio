@@ -10,7 +10,7 @@ const validId = (value: unknown) => typeof value === "string" && /^[0-9a-f]{8}-[
 
 async function authorize(request: Request, botId: string, initData: string) {
   const identity = await resolveAppUser(request, initData);
-  if ("error" in identity) return { error: bad(identity.error, identity.status) };
+  if ("error" in identity) return { error: bad(identity.error ?? "Не удалось проверить сессию.", identity.status ?? 401) };
   const { supabase, user, setCookie } = identity;
   if (!user) return { error: bad("Не удалось определить пользователя.", 401) };
   const { data: bot, error } = await supabase.from("bots").select("id,template_type")
