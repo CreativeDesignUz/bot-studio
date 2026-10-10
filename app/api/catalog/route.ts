@@ -3,7 +3,7 @@ import { resolveAppUser, withSessionCookie } from "@/lib/auth/app-user";
 type ItemPayload = {
   botId?: string; id?: string; initData?: string;
   name?: string; description?: string; priceMinor?: number | null;
-  isActive?: boolean; currency?: string;
+  isActive?: boolean; currency?: string; categoryId?: string | null; imageUrl?: string | null;
 };
 const bad = (error: string, status: number) => Response.json({ error }, { status });
 const validId = (value: unknown) => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -29,11 +29,13 @@ export async function GET(request: Request) {
   const auth = await authorize(request, botId, request.headers.get("x-telegram-init-data") ?? "");
   if ("error" in auth) return auth.error;
   const { data, error } = await auth.supabase.from("catalog_items")
-    .select("id,name,description,price_minor,currency,is_active,item_type,image_url,position")
+    .select("id,name,description,price_minor,currency,is_active,item_type,image_url,category_id,position")
     .eq("bot_id", botId).eq("item_type", auth.itemType)
     .order("position", { ascending: true }).order("created_at", { ascending: false }).limit(200);
   if (error) return bad("Не удалось загрузить каталог.", 500);
-  return withSessionCookie({ items: data ?? [] }, 200, auth.setCookie);
+  const { data: categories, error: categoryError } = await auth.supabase.from("catalog_categories").select("id,name,position").eq("bot_id",botId).eq("is_active",true).order("position");
+  if(categoryError)return bad("Не удалось загрузить категории.",500);
+  return withSessionCookie({ items: data ?? [], categories: categories??[] }, 200, auth.setCookie);
 }
 
 export async function POST(request: Request) {
@@ -49,7 +51,13 @@ export async function POST(request: Request) {
   if (input.currency != null && !["UZS", "USD"].includes(input.currency)) return bad("Недопустимая валюта.", 400);
   const auth = await authorize(request, input.botId!, input.initData ?? "");
   if ("error" in auth) return auth.error;
-  const values = { name, description, price_minor: input.priceMinor ?? null, ...(input.currency ? { currency: input.currency } : {}), ...(typeof input.isActive === "boolean" ? { is_active: input.isActive } : {}) };
+  if(input.imageUrl!=null && (typeof input.imageUrl!=="string" || input.imageUrl.length>2048 || !/^https:\/\//i.test(input.imageUrl)))return bad("Некорректная ссылка на фото.",400);
+  if(input.categoryId!=null && !validId(input.categoryId))return bad("Некорректная категория.",400);
+  if(input.categoryId){
+    const {data:category}=await auth.supabase.from("catalog_categories").select("id").eq("bot_id",input.botId!).eq("id",input.categoryId).maybeSingle();
+    if(!category)return bad("Категория не принадлежит этому боту.",400);
+  }
+  const values = { name, description, price_minor: input.priceMinor ?? null, ...(input.categoryId!==undefined?{category_id:input.categoryId}:{}), ...(input.imageUrl!==undefined?{image_url:input.imageUrl}:{}), ...(input.currency ? { currency: input.currency } : {}), ...(typeof input.isActive === "boolean" ? { is_active: input.isActive } : {}) };
   const query = input.id
     ? auth.supabase.from("catalog_items").update(values).eq("id", input.id).eq("bot_id", input.botId!).eq("item_type", auth.itemType)
     : auth.supabase.from("catalog_items").insert({ ...values, bot_id: input.botId, item_type: auth.itemType, currency: "UZS" });
