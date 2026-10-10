@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { readAuthUserId } from "@/lib/auth/account-session";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { verifyTelegramInitData } from "@/lib/telegram/init-data";
 
@@ -30,7 +31,13 @@ export async function resolveAppUser(request: Request, initData = "", allowGuest
     if (error) throw error;
     return { user: data, supabase, setCookie: null };
   }
-  if (!allowGuest) return { error: "Telegram session is required", status: 401 as const };
+  const authenticatedId=await readAuthUserId(request);
+  if(authenticatedId){
+    const {data:account,error}=await supabase.from("app_users").select("id,telegram_id,first_name").eq("id",authenticatedId).maybeSingle();
+    if(error||!account)return {error:"Недействительная сессия. Войдите повторно.",status:401 as const};
+    return {user:account,supabase,setCookie:null};
+  }
+  if (!allowGuest) return { error: "Войдите в аккаунт.", status: 401 as const };
 
   let session = cookieValue(request);
   let setCookie: string | null = null;
