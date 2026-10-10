@@ -1,3 +1,4 @@
+import CatalogManager from "./catalog-manager";
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -78,8 +79,8 @@ export default function WorkspacePage() {
         </header>
         <div className="border-b border-[#e4e7ec] bg-white px-4 py-2 lg:hidden"><div className="flex gap-1 overflow-x-auto">{template.modules.map(({ id, label }) => <button key={id} onClick={() => setSection(id)} className={`shrink-0 rounded-full px-3 py-2 text-xs font-semibold ${currentSection === id ? "bg-[#101828] text-white" : "bg-[#f2f4f7] text-[#667085]"}`}>{label}</button>)}</div></div>
         <div className="p-4 pb-24 sm:p-7 sm:pb-24 lg:p-9">
-          <div className="mb-7 flex flex-wrap items-end justify-between gap-4"><div><p className="mb-2 text-xs font-semibold text-[#6d45f5]">{template.label} · @{bot.username}</p><h1 className="text-2xl font-semibold tracking-[-.035em] sm:text-3xl">{sectionName}</h1><p className="mt-1.5 text-sm text-[#667085]">{currentSection === "overview" ? "Главное за сегодня и следующий шаг для роста." : `Управляйте разделом «${sectionName}» без перехода в другие сервисы.`}</p></div><button className="flex h-11 items-center gap-2 rounded-xl bg-[#101828] px-4 text-sm font-semibold text-white"><Plus className="size-4" />Добавить {template.itemLabel}</button></div>
-          {bot.type === "delivery" && currentSection === "catalog" ? <RestaurantMenuEntry /> : currentSection === "overview" ? <Overview page={page} botType={bot.type} /> : <ModuleView name={sectionName} itemLabel={template.itemLabel} botType={bot.type} />}
+          <div className="mb-7 flex flex-wrap items-end justify-between gap-4"><div><p className="mb-2 text-xs font-semibold text-[#6d45f5]">{template.label} · @{bot.username}</p><h1 className="text-2xl font-semibold tracking-[-.035em] sm:text-3xl">{sectionName}</h1><p className="mt-1.5 text-sm text-[#667085]">{currentSection === "overview" ? "Главное за сегодня и следующий шаг для роста." : `Управляйте разделом «${sectionName}» без перехода в другие сервисы.`}</p></div></div>
+          {currentSection === "catalog" ? <CatalogManager key={bot.id} botId={bot.id} type={bot.type} /> : currentSection === "overview" ? <Overview page={page} botType={bot.type} /> : <ModuleView name={sectionName} itemLabel={template.itemLabel} botType={bot.type} />}
         </div>
       </section>
     </div>
@@ -99,7 +100,11 @@ function Overview({ page, botType }: { page: {kpis:string[][];rows:string[][];go
   </div>;
 }
 
-function ModuleView({ name, itemLabel, botType }: { name: string; itemLabel: string; botType: BotTemplateId }) {
-  const empty = ["Поддержка", "Отзывы", "Отчёты"].includes(name);
-  return <section className="overflow-hidden rounded-[22px] border border-[#e4e7ec] bg-white"><div className="flex items-center gap-3 border-b border-[#eaecf0] p-5"><label className="relative min-w-[180px] flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#98a2b3]" /><input className="h-10 w-full rounded-xl border border-[#e4e7ec] pl-10 pr-3 text-sm" placeholder={`Поиск: ${name.toLowerCase()}`} /></label><button className="grid size-10 place-items-center rounded-xl border border-[#e4e7ec]"><MoreHorizontal className="size-5" /></button></div>{empty ? <div className="grid min-h-[360px] place-items-center p-8 text-center"><div><span className="mx-auto grid size-12 place-items-center rounded-2xl bg-[#f0ecff] text-[#6d45f5]"><TrendingUp /></span><h2 className="mt-4 text-lg font-semibold">Данные появятся после первых операций</h2><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#667085]">Раздел «{name}» уже подключён к структуре {productTemplates[botType].label.toLowerCase()}.</p></div></div> : <div className="divide-y divide-[#eaecf0]">{[1,2,3,4].map((index) => <div key={index} className="flex items-center gap-4 p-5"><span className="grid size-11 place-items-center rounded-xl bg-[#f2f4f7] font-semibold text-[#475467]">{index}</span><div className="min-w-0 flex-1"><strong className="block text-sm">{name}: запись {index}</strong><span className="mt-1 block truncate text-xs text-[#98a2b3]">Реальные поля и действия сохраняются в Supabase</span></div><span className="rounded-full bg-[#ecfdf3] px-2.5 py-1 text-xs font-medium text-[#027a48]">Активен</span></div>)}</div>}<div className="border-t border-[#eaecf0] bg-[#f9fafb] px-5 py-4 text-xs text-[#667085]">Следующий шаг: добавить первый {itemLabel} и проверить клиентский путь в Telegram.</div></section>;
+function ModuleView({ name }: { name: string; itemLabel: string; botType: BotTemplateId }) {
+  return <section className="rounded-[22px] border border-[#e4e7ec] bg-white p-9 text-center">
+    <h2 className="text-lg font-semibold">{name}</h2>
+    <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#667085]">
+      В этом разделе пока нет подключённого рабочего интерфейса. Демонстрационные записи скрыты, чтобы не вводить вас в заблуждение.
+    </p>
+  </section>;
 }
