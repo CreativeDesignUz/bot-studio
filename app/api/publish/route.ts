@@ -37,10 +37,10 @@ export async function POST(request: Request) {
   let origin: string;
   try { origin = resolvePublicAppOrigin(request.url, env.PUBLIC_APP_URL); }
   catch { return withSessionCookie({ error: "Публичный адрес приложения не настроен.", status: "failed" }, 503, setCookie); }
-  const requestKey = await publicationRequestKey(botId, { name: payload.name.trim(), description: payload.description.trim(), bio:payload.bio??"", welcome:payload.welcome??"", color: payload.color ?? "#6541F5", buttons });
+  const requestKey = await publicationRequestKey(botId, { name: payload.name.trim(), description: (payload.description ?? "").trim(), bio:payload.bio??"", welcome:payload.welcome??"", color: payload.color ?? "#6541F5", buttons });
   const { data: prepared, error: prepareError } = await supabase.rpc("prepare_bot_publication", {
     p_bot_id: botId, p_owner_id: appUser.id, p_request_key: requestKey, p_name: payload.name.trim(),
-    p_description: payload.description.trim(), p_primary_color: payload.color ?? "#6541F5", p_home_buttons: buttons,
+    p_description: (payload.description ?? "").trim(), p_primary_color: payload.color ?? "#6541F5", p_home_buttons: buttons,
   });
   if (prepareError || !prepared) return Response.json({ error: "Бот не найден или у вас нет доступа." }, { status: 404 });
   const publication = prepared as PreparedPublication;
