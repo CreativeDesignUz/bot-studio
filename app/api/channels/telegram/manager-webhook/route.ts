@@ -73,7 +73,7 @@ async function handleSupabaseManagedBot(request: Request, managed: TelegramUser,
     await telegramCall(token, "setWebhook", { url: new URL(`/api/channels/telegram/project-runtime?channel=${binding.channel_id}`, origin).toString(), secret_token: runtimeSecret, allowed_updates: ["message", "callback_query"] });
     const { error: completeError } = await supabase.rpc("complete_telegram_binding", {
       p_binding_id: binding.binding_id, p_bot_id: binding.bot_id, p_channel_id: binding.channel_id,
-      p_external_account_id: String(managed.id), p_configuration: { runtime_secret: runtimeSecret, mini_app_url: miniAppUrl },
+      p_external_account_id: String(managed.id), p_configuration: { auth_mode: "managed", runtime_secret: runtimeSecret, mini_app_url: miniAppUrl },
     });
     if (completeError) throw new Error(completeError.message);
     return Response.json({ ok: true });

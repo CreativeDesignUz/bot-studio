@@ -1,7 +1,8 @@
 import { normalizeBotButtons } from "@/lib/telegram/button-actions";
 import { env } from "cloudflare:workers";
 import { resolveAppUser, withSessionCookie } from "@/lib/auth/app-user";
-import { getManagedBotToken, telegramCall } from "@/lib/channels/telegram-api";
+import { telegramCall } from "@/lib/channels/telegram-api";
+import { getProjectBotToken } from "@/lib/channels/project-bot-token";
 import { PublicationError, publicationRequestKey, publicPublicationError, runTelegramPublication } from "@/lib/bots/publication";
 import { buildBindingStartParameter, createBindingToken, hashBindingToken } from "@/lib/telegram/managed-binding";
 import { resolvePublicAppOrigin } from "@/lib/http/public-origin";
@@ -13,6 +14,13 @@ function suggestedUsername(botId: string, current?: string | null) {
   const normalized = (current ?? "").replace(/^@/, "").replace(/[^A-Za-z0-9_]/g, "");
   if (/^[A-Za-z][A-Za-z0-9_]{3,27}bot$/i.test(normalized)) return normalized;
   return `studio_${botId.replaceAll("-", "").slice(0, 12)}_bot`;
+}
+
+function bindingFailure(code?: string) {
+  if (["PGRST202", "42P01", "42883"].includes(code ?? "")) return { status: 503, message: "Безопасное подключение Telegram ожидает миграцию базы данных." };
+  if (code === "P0002") return { status: 404, message: "Бот не найден или у вас нет доступа." };
+  if (code === "23505") return { status: 409, message: "Telegram уже подключён. Обновите страницу и повторите публикацию." };
+  return { status: 500, message: "Не удалось подготовить безопасное подключение Telegram." };
 }
 
 export async function POST(request: Request) {
@@ -35,14 +43,14 @@ export async function POST(request: Request) {
   });
   if (prepareError || !prepared) return Response.json({ error: "Бот не найден или у вас нет доступа." }, { status: 404 });
   const publication = prepared as PreparedPublication;
-  const { data: channel, error: channelError } = await supabase.from("bot_channels").select("id,status,external_account_id,external_username,configuration").eq("bot_id", botId).eq("channel", "telegram").maybeSingle();
+  const { data: channel, error: channelError } = await supabase.from("bot_channels").select("id,status,external_account_id,external_username,secret_reference,configuration").eq("bot_id", botId).eq("channel", "telegram").maybeSingle();
   if (channelError) return Response.json({ error: "Не удалось проверить подключение Telegram." }, { status: 500 });
 
   if (channel?.status !== "connected" || !channel.external_account_id) {
     const manager = (env.TELEGRAM_MANAGER_USERNAME ?? "").replace(/^@/, "");
     if (!manager) {
       await supabase.rpc("fail_bot_publication", { p_attempt_id: publication.attempt_id, p_bot_id: botId, p_owner_id: appUser.id, p_step: "telegram_connection", p_message: "Telegram manager is not configured" });
-      return withSessionCookie({ error: "Подключение Telegram временно недоступно.", status: "failed" }, 503, setCookie);
+      return withSessionCookie({ error: "Подключите бота через BotFather или настройте Bot Studio Manager.", status: "failed", requiresDirectConnection: true }, 503, setCookie);
     }
     const token = createBindingToken();
     const expectedUsername = suggestedUsername(botId, publication.snapshot.username);
@@ -50,19 +58,25 @@ export async function POST(request: Request) {
       p_bot_id: botId, p_owner_id: appUser.id, p_token_hash: await hashBindingToken(token), p_expected_username: expectedUsername,
       p_expires_at: new Date(Date.now() + 15 * 60_000).toISOString(),
     });
-    if (bindingError) return withSessionCookie({ error: "Не удалось подготовить безопасное подключение Telegram.", status: "failed" }, 500, setCookie);
+    if (bindingError) {
+      const failure = bindingFailure(bindingError.code);
+      await supabase.rpc("fail_bot_publication", { p_attempt_id: publication.attempt_id, p_bot_id: botId, p_owner_id: appUser.id, p_step: "telegram_connection", p_message: `Telegram binding failed (${bindingError.code ?? "unknown"})` });
+      return withSessionCookie({ error: failure.message, status: "failed", retryable: failure.status >= 500 }, failure.status, setCookie);
+    }
     await supabase.rpc("fail_bot_publication", { p_attempt_id: publication.attempt_id, p_bot_id: botId, p_owner_id: appUser.id, p_step: "telegram_connection", p_message: "Telegram connection required" });
     const connectUrl = `https://t.me/${manager}?start=${buildBindingStartParameter(token)}`;
     return withSessionCookie({ ok: true, botId, status: "connection_required", requiresTelegramConnection: true, connectUrl, expiresInSeconds: 900 }, 202, setCookie);
   }
 
-  if (!env.TELEGRAM_MANAGER_TOKEN) return withSessionCookie({ error: "Telegram manager is not configured.", status: "failed" }, 503, setCookie);
   const configuration = (channel.configuration ?? {}) as Record<string, unknown>;
   const runtimeSecret = typeof configuration.runtime_secret === "string" ? configuration.runtime_secret : crypto.randomUUID().replaceAll("-", "");
   const miniAppUrl = new URL(`/miniapp?bot=${botId}`, origin).toString();
   const webhookUrl = new URL(`/api/channels/telegram/project-runtime?channel=${channel.id}`, origin).toString();
   try {
-    const token = await getManagedBotToken(env.TELEGRAM_MANAGER_TOKEN, channel.external_account_id);
+    const token = await getProjectBotToken(supabase, channel, {
+      managerToken: env.TELEGRAM_MANAGER_TOKEN,
+      encryptionKey: env.TELEGRAM_TOKEN_ENCRYPTION_KEY,
+    });
     await runTelegramPublication({
       token, name: publication.snapshot.name, description: publication.snapshot.description, miniAppUrl, webhookUrl, runtimeSecret,
       completedSteps: publication.completed_steps, call: telegramCall,

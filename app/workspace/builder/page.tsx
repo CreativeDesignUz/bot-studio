@@ -3,13 +3,15 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, Bot, Check, ChevronRight, Eye, GripVertical, LoaderCircle, Plus, Save, Send, Trash2, MessageCircle, Smartphone, ExternalLink } from "lucide-react";
+import { ArrowLeft, Bot, Check, ChevronRight, Eye, GripVertical, LoaderCircle, Plus, Save, Send, Trash2, MessageCircle, Smartphone, ExternalLink, KeyRound, ShieldCheck, Unplug } from "lucide-react";
 
 type ActionButton={id:string;label:string;action:"home"|"url"|"reply";url?:string;replyText?:string;nextButtons?:ActionButton[]};
 type PublishState="idle"|"validating"|"saving"|"publishing"|"published"|"connection"|"error";
 type LoadState="loading"|"ready"|"error";
 type DraftResponse={bot?:{name:string;description:string;primary_color:string;settings?:{home_buttons?:ActionButton[]}};error?:string};
 type ErrorResponse={error?:string};
+type TelegramConnection={status:string;username?:string|null;mode?:"botfather"|"manager"}|null;
+type InspectedBot={credentialId:string;bot:{id:number;name:string;username:string}};
 
 export default function BotBuilder(){
  const searchParams=useSearchParams();
@@ -21,6 +23,8 @@ export default function BotBuilder(){
  const [connectUrl,setConnectUrl]=useState<string|null>(null);
  const [dirty,setDirty]=useState(false),[saved,setSaved]=useState(true),[publishState,setPublishState]=useState<PublishState>("idle");
  const [loadState,setLoadState]=useState<LoadState>("loading"),[loadError,setLoadError]=useState("");
+ const [connection,setConnection]=useState<TelegramConnection>(null),[telegramToken,setTelegramToken]=useState(""),[inspectedBot,setInspectedBot]=useState<InspectedBot|null>(null);
+ const [connectionState,setConnectionState]=useState<"idle"|"checking"|"connecting"|"disconnecting">("idle"),[connectionError,setConnectionError]=useState("");
  useEffect(()=>{
   const tg=(window as typeof window&{Telegram?:{WebApp?:{ready?:()=>void;expand?:()=>void;initData?:string}}}).Telegram?.WebApp;
   tg?.ready?.();tg?.expand?.();
@@ -34,6 +38,8 @@ export default function BotBuilder(){
     if(!response.ok||!result.bot)throw new Error(result.error||"Не удалось загрузить бота.");
     setName(result.bot.name);setDescription(result.bot.description);setColor(result.bot.primary_color);setButtons((result.bot.settings?.home_buttons??[]).map(button=>({...button,id:button.id??crypto.randomUUID(),action:button.action==="url"?"url":button.action==="reply"?"reply":"home",nextButtons:button.nextButtons?.map(next=>({...next,id:next.id??crypto.randomUUID()}))})));
     setDirty(false);setSaved(true);setLoadState("ready");
+    const connectionResponse=await fetch(`/api/channels/telegram/token?bot=${encodeURIComponent(botId)}`,{headers:{"x-telegram-init-data":tg?.initData??""},signal:controller.signal});
+    if(connectionResponse.ok){const connectionResult=await connectionResponse.json() as {connection?:TelegramConnection};setConnection(connectionResult.connection??null)}
    }catch(error){
     if(controller.signal.aborted)return;
     setLoadError(error instanceof Error?error.message:"Не удалось загрузить бота.");setLoadState("error");
@@ -64,12 +70,25 @@ export default function BotBuilder(){
    if(result.requiresTelegramConnection&&result.connectUrl){setConnectUrl(result.connectUrl);setPublishState("connection");return}
    if(!response.ok||result.status!=="published")throw new Error(result.error||"Публикация не завершена. Повторите попытку.");
    setPublishState("published");
-  }catch(error){setLoadError(error instanceof Error?error.message:"Не удалось опубликовать бота.");setPublishState("error")}
+  }catch(error){setLoadError(error instanceof Error?error.message:"Не удалось опубликовать бота.");setActiveSection("publish");setPublishState("error")}
+ }
+ const telegramInitData=()=>(window as typeof window&{Telegram?:{WebApp?:{initData?:string}}}).Telegram?.WebApp?.initData;
+ async function inspectTelegramToken(){
+  if(!botId||!telegramToken.trim())return;setConnectionError("");setConnectionState("checking");setInspectedBot(null);
+  try{const response=await fetch("/api/channels/telegram/token",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"inspect",botId,token:telegramToken.trim(),initData:telegramInitData()})});const result=await response.json() as {credentialId?:string;alreadyConnected?:boolean;bot?:{id:number;name:string;username:string};error?:string};if(!response.ok||!result.bot)throw new Error(result.error||"Не удалось проверить токен");setTelegramToken("");if(result.alreadyConnected){setConnection({status:"connected",username:result.bot.username,mode:"botfather"});return}if(!result.credentialId)throw new Error("Не удалось подготовить подключение");setInspectedBot({credentialId:result.credentialId,bot:result.bot})}catch(error){setConnectionError(error instanceof Error?error.message:"Не удалось проверить токен")}finally{setConnectionState("idle")}
+ }
+ async function confirmTelegramConnection(){
+  if(!botId||!inspectedBot)return;setConnectionError("");setConnectionState("connecting");
+  try{const response=await fetch("/api/channels/telegram/token",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"connect",botId,credentialId:inspectedBot.credentialId,initData:telegramInitData()})});const result=await response.json() as {connected?:boolean;bot?:{username?:string};error?:string};if(!response.ok||!result.connected)throw new Error(result.error||"Не удалось подключить бота");setConnection({status:"connected",username:result.bot?.username??inspectedBot.bot.username,mode:"botfather"});setInspectedBot(null)}catch(error){setConnectionError(error instanceof Error?error.message:"Не удалось подключить бота")}finally{setConnectionState("idle")}
+ }
+ async function disconnectTelegram(){
+  if(!botId)return;setConnectionError("");setConnectionState("disconnecting");
+  try{const response=await fetch("/api/channels/telegram/token",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"disconnect",botId,initData:telegramInitData()})});const result=await response.json() as {disconnected?:boolean;error?:string};if(!response.ok||!result.disconnected)throw new Error(result.error||"Не удалось отключить бота");setConnection(null);setPublishState("idle")}catch(error){setConnectionError(error instanceof Error?error.message:"Не удалось отключить бота")}finally{setConnectionState("idle")}
  }
  if(loadState==="loading")return <main className="grid min-h-screen place-items-center bg-[#f4f6f8] text-sm text-[#667085]"><span className="flex items-center gap-3"><LoaderCircle className="size-5 animate-spin"/>Загружаем данные бота…</span></main>;
  if(loadState==="error")return <main className="grid min-h-screen place-items-center bg-[#f4f6f8] p-5 text-[#101828]"><section className="w-full max-w-lg rounded-[24px] border border-[#e4e7ec] bg-white p-8 text-center"><span className="mx-auto grid size-14 place-items-center rounded-2xl bg-[#fff1f3] text-[#c01048]"><Bot/></span><h1 className="mt-5 text-2xl font-semibold">Не удалось открыть редактор</h1><p className="mt-2 text-sm leading-6 text-[#667085]">{loadError}</p><div className="mt-6 flex justify-center gap-3"><Link href="/workspace" className="inline-flex h-11 items-center rounded-xl border border-[#d0d5dd] px-4 text-sm font-semibold no-underline">В кабинет</Link><button onClick={()=>location.reload()} className="h-11 rounded-xl bg-[#101828] px-5 text-sm font-semibold text-white">Повторить</button></div></section></main>;
  return <main className="min-h-screen bg-[#f4f6f8] text-[#101828]">
-  <header className="sticky top-0 z-30 flex min-h-[68px] flex-wrap items-center gap-3 border-b border-[#e4e7ec] bg-white/95 px-4 py-3 backdrop-blur sm:px-7"><Link href="/workspace" className="grid size-10 place-items-center rounded-xl border border-[#e4e7ec]"><ArrowLeft className="size-4"/></Link><span className="grid size-10 place-items-center rounded-xl bg-[#f0ecff] text-[#6d45f5]"><Bot className="size-5"/></span><div><strong className="block text-sm">Редактор бота</strong><span className="text-xs text-[#98a2b3]">{saved&&!dirty?"Все изменения сохранены":"Есть несохранённые изменения"}</span></div><div className="ml-auto flex gap-2"><button onClick={save} disabled={!dirty||publishState!=="idle"} className="flex h-10 items-center gap-2 rounded-xl border border-[#d0d5dd] px-3 text-sm font-semibold disabled:opacity-40"><Save className="size-4"/><span className="hidden sm:inline">Сохранить</span></button><button type="button" onClick={publish} disabled={publishState!=="idle"&&publishState!=="published"} style={{color:"#ffffff"}} className="inline-flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-[#101828] px-4 text-sm font-semibold disabled:opacity-60"><Send className="size-4 shrink-0"/><span>{publishState==="published"?"Опубликовано":"Опубликовать"}</span></button></div></header>
+  <header className="sticky top-0 z-30 flex min-h-[68px] flex-wrap items-center gap-3 border-b border-[#e4e7ec] bg-white/95 px-4 py-3 backdrop-blur sm:px-7"><Link href="/workspace" className="grid size-10 place-items-center rounded-xl border border-[#e4e7ec]"><ArrowLeft className="size-4"/></Link><span className="grid size-10 place-items-center rounded-xl bg-[#f0ecff] text-[#6d45f5]"><Bot className="size-5"/></span><div><strong className="block text-sm">Редактор бота</strong><span className="text-xs text-[#98a2b3]">{saved&&!dirty?"Все изменения сохранены":"Есть несохранённые изменения"}</span></div><div className="ml-auto flex gap-2"><button onClick={save} disabled={!dirty||publishState!=="idle"} className="flex h-10 items-center gap-2 rounded-xl border border-[#d0d5dd] px-3 text-sm font-semibold disabled:opacity-40"><Save className="size-4"/><span className="hidden sm:inline">Сохранить</span></button><button type="button" onClick={publish} disabled={publishState!=="idle"&&publishState!=="published"} className="app-primary-button h-10 shrink-0 whitespace-nowrap px-4"><Send className="size-4 shrink-0"/><span>{publishState==="published"?"Опубликовано":"Опубликовать"}</span></button></div></header>
   <div className="mx-auto grid max-w-[1580px] gap-5 p-4 sm:p-7 xl:grid-cols-[250px_minmax(0,1fr)_360px]">
    <aside className="rounded-[22px] border border-[#e4e7ec] bg-white p-3 xl:sticky xl:top-[92px] xl:h-fit">
     <p className="px-3 py-3 text-[11px] font-semibold uppercase tracking-[.14em] text-[#98a2b3]">Telegram-бот</p>
@@ -121,8 +140,17 @@ export default function BotBuilder(){
     {activeSection==="publish" && <div className="rounded-[22px] border border-[#e4e7ec] bg-white p-5 sm:p-7">
       <span className="text-xs font-semibold text-[#6d45f5]">Шаг 4 · Запуск</span>
       <h1 className="mt-2 text-2xl font-semibold">Подключить Telegram</h1>
-      <p className="mt-2 text-sm leading-6 text-[#667085]">Сохраните приветствие и кнопки, затем нажмите «Опубликовать» вверху. Если Telegram ещё не подключён, система предложит подтвердить создание бота через управляющий аккаунт.</p>
-      <button type="button" onClick={publish} disabled={publishState!=="idle"&&publishState!=="published"} className="mt-6 inline-flex h-12 items-center gap-2 rounded-xl bg-[#101828] px-6 text-sm font-semibold text-white disabled:opacity-40"><Send className="size-4"/>Опубликовать бота</button>
+      <p className="mt-2 text-sm leading-6 text-[#667085]">Основной способ для MVP — создать бота через официальный @BotFather и безопасно подключить его токен. Токен шифруется на сервере и никогда не возвращается в интерфейс.</p>
+      {connection?.status==="connected" ? <div className="mt-6 rounded-2xl border border-[#b7ebcd] bg-[#f0fdf4] p-5">
+        <div className="flex flex-wrap items-center gap-3"><span className="grid size-11 place-items-center rounded-xl bg-white text-[#079455]"><ShieldCheck className="size-5"/></span><div className="min-w-0 flex-1"><strong className="block text-sm">Telegram подключён</strong><span className="mt-1 block truncate text-xs text-[#4f6f5c]">@{connection.username||"telegram_bot"} · {connection.mode==="botfather"?"BotFather":"Bot Studio Manager"}</span></div><button type="button" onClick={disconnectTelegram} disabled={connectionState!=="idle"} className="inline-flex h-10 items-center gap-2 rounded-xl border border-[#b7ebcd] bg-white px-3 text-xs font-semibold text-[#344b3d] disabled:opacity-50"><Unplug className="size-4"/>{connectionState==="disconnecting"?"Отключаем…":"Отключить"}</button></div>
+        <button type="button" onClick={publish} disabled={publishState!=="idle"&&publishState!=="published"} className="app-primary-button mt-5 h-12 px-6"><Send className="size-4"/>Опубликовать бота</button>
+      </div> : <div className="mt-6 space-y-4">
+        <section className="rounded-2xl border border-[#e4e7ec] p-5"><div className="flex items-start gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#f0ecff] text-[#6541f5]"><KeyRound className="size-5"/></span><div><strong className="text-sm">Подключить токен BotFather</strong><p className="mt-1 text-xs leading-5 text-[#667085]">Откройте @BotFather → /newbot или /mybots → API Token. Вставьте токен ниже и подтвердите найденного бота.</p></div></div>
+          {!inspectedBot ? <div className="mt-4 flex flex-col gap-2 sm:flex-row"><label className="min-w-0 flex-1"><span className="sr-only">Telegram Bot API token</span><input type="password" autoComplete="off" value={telegramToken} onChange={event=>setTelegramToken(event.target.value)} placeholder="123456789:AA…" className="h-12 w-full rounded-xl border border-[#d0d5dd] px-4 text-sm outline-none focus:border-[#7654f6] focus:ring-2 focus:ring-[#7654f6]/15"/></label><button type="button" onClick={inspectTelegramToken} disabled={!telegramToken.trim()||connectionState!=="idle"} className="app-primary-button h-12 px-5">{connectionState==="checking"?<LoaderCircle className="size-4 animate-spin"/>:<ShieldCheck className="size-4"/>}{connectionState==="checking"?"Проверяем…":"Проверить"}</button></div> : <div className="mt-4 rounded-xl bg-[#f8f7ff] p-4"><span className="text-xs text-[#667085]">Найден Telegram-бот</span><strong className="mt-1 block text-sm">{inspectedBot.bot.name} · @{inspectedBot.bot.username}</strong><div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={confirmTelegramConnection} disabled={connectionState!=="idle"} className="app-primary-button h-11 px-5">{connectionState==="connecting"?<LoaderCircle className="size-4 animate-spin"/>:<Check className="size-4"/>}{connectionState==="connecting"?"Подключаем…":"Подтвердить подключение"}</button><button type="button" onClick={()=>setInspectedBot(null)} disabled={connectionState!=="idle"} className="h-11 rounded-xl border border-[#d0d5dd] bg-white px-4 text-sm font-semibold">Другой токен</button></div></div>}
+        </section>
+        <section className="rounded-2xl bg-[#f9fafb] p-5"><strong className="text-sm">Автоматическое создание через Manager</strong><p className="mt-1 text-xs leading-5 text-[#667085]">Альтернативный способ. Telegram попросит подтвердить аккаунт, после чего Bot Studio Manager создаст и привяжет бота.</p><button type="button" onClick={publish} disabled={publishState!=="idle"&&publishState!=="published"} className="mt-4 h-11 rounded-xl border border-[#d0d5dd] bg-white px-4 text-sm font-semibold disabled:opacity-40">Продолжить через Manager</button></section>
+      </div>}
+      {connectionError&&<p role="alert" className="mt-4 rounded-xl bg-[#fff1f3] px-4 py-3 text-sm text-[#b42318]">{connectionError}</p>}
       <p className="mt-4 text-xs text-[#98a2b3]">Предпросмотр справа не отправляет сообщения в Telegram, пока бот не подключён и не опубликован.</p>
     </div>}
    </section>
@@ -131,7 +159,7 @@ export default function BotBuilder(){
       <div className="mt-3 grid grid-cols-2 rounded-xl bg-[#e9edf3] p-1"><button type="button" onClick={()=>setPreviewMode("telegram")} className={`flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-semibold ${previewMode==="telegram"?"bg-white text-[#101828] shadow-sm":"text-[#667085]"}`}><MessageCircle className="size-4"/>Telegram</button><button type="button" onClick={()=>setPreviewMode("miniapp")} className={`flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-semibold ${previewMode==="miniapp"?"bg-white text-[#101828] shadow-sm":"text-[#667085]"}`}><Smartphone className="size-4"/>Mini App</button></div></div>
      {previewMode==="telegram" ? <div className="mx-auto max-w-[360px] overflow-hidden rounded-[24px] border border-[#dbe1ea] bg-[#dbe8e5] shadow-[0_20px_60px_rgba(16,24,40,.13)]">
        <div className="flex items-center gap-3 bg-white px-4 py-3"><ArrowLeft className="size-4 text-[#667085]"/><span className="grid size-10 place-items-center rounded-full text-white" style={{backgroundColor:color}}><Bot className="size-5"/></span><div className="min-w-0"><strong className="block truncate text-sm">{name||"Ваш Telegram-бот"}</strong><small className="text-[#4c9a76]">бот · предпросмотр</small></div></div>
-       <div className="flex min-h-[490px] flex-col justify-end gap-3 bg-[radial-gradient(#b9d0c7_1px,transparent_1px)] bg-[length:18px_18px] p-4">
+       <div className="flex min-h-[360px] flex-col justify-end gap-3 bg-[radial-gradient(#b9d0c7_1px,transparent_1px)] bg-[length:18px_18px] p-4 sm:min-h-[490px]">
         <div className="ml-auto max-w-[78%] rounded-2xl rounded-br-sm bg-[#dbffc8] px-3 py-2 text-sm shadow-sm">/start <small className="ml-2 text-[10px] text-[#8b9b87]">12:30</small></div>
         <div className="max-w-[94%] overflow-hidden rounded-2xl rounded-bl-sm bg-white shadow-sm">
          <div className="whitespace-pre-wrap break-words px-3 py-3 text-sm leading-6">{description.trim()||"Здравствуйте! Добро пожаловать в наш бот."}<small className="ml-2 text-[10px] text-[#98a2b3]">12:30</small></div>

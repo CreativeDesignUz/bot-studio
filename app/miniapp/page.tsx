@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Check, Minus, Plus, ShoppingBag, Store, Truck, UserRound, X } from "lucide-react";
 
 type Item = { id: string; name: string; description: string; image_url: string | null; price_minor: number | null; currency: string };
@@ -23,6 +23,7 @@ export default function MiniAppPage() {
   const [sending, setSending] = useState(false);
   const [success, setSuccess] = useState("");
   const [quantityError, setQuantityError] = useState("");
+  const checkoutKey = useRef<string | null>(null);
 
   useEffect(() => {
     const telegram = (window as typeof window & { Telegram?: { WebApp?: { ready?: () => void; expand?: () => void; initData?: string; initDataUnsafe?: { user?: { first_name?: string } } } } }).Telegram?.WebApp;
@@ -42,6 +43,7 @@ export default function MiniAppPage() {
   const color = /^#[\da-f]{6}$/i.test(shop?.bot.color ?? "") ? shop!.bot.color : "#6541F5";
 
   function adjust(id: string, delta: number) {
+    checkoutKey.current = null;
     setQuantityError("");
     setCart(current => {
       const next = Math.max(0, Math.min(99, (current[id] ?? 0) + delta));
@@ -54,16 +56,17 @@ export default function MiniAppPage() {
     if (!shop || sending || !selected.length) return;
     const telegram = (window as typeof window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp;
     if (!telegram?.initData) { setError("Для оформления заказа откройте магазин через Telegram"); return; }
+    checkoutKey.current ??= crypto.randomUUID().replaceAll("-", "");
     setError(""); setSending(true);
     try {
       const response = await fetch("/api/miniapp", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ botId: shop.bot.id, initData: telegram.initData, name, fulfillment, address,
+        body: JSON.stringify({ botId: shop.bot.id, initData: telegram.initData, requestKey: checkoutKey.current, name, fulfillment, address,
           items: selected.map(item => ({ id: item.id, quantity: cart[item.id] })) }),
       });
       const body = await response.json() as { error?: string; orderId?: string };
       if (!response.ok) throw new Error(body.error ?? "Не удалось оформить заказ");
-      setSuccess(body.orderId ?? ""); setCart({}); setTab("catalog");
+      setSuccess(body.orderId ?? ""); setCart({}); checkoutKey.current = null; setTab("catalog");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка заказа");
     } finally { setSending(false); }
@@ -114,9 +117,9 @@ export default function MiniAppPage() {
           <div className="min-w-0 flex-1"><h3 className="truncate font-semibold">{item.name}</h3><span className="text-sm text-[#667085]">{money(Number(item.price_minor ?? 0), item.currency)}</span></div>
           <div className="flex items-center gap-2"><button onClick={()=>adjust(item.id,-1)} aria-label="Уменьшить"><Minus size={17}/></button><b>{cart[item.id]}</b><button onClick={()=>adjust(item.id,1)} aria-label="Увеличить"><Plus size={17}/></button></div>
         </article>)}</div>
-          <div className="mt-6 rounded-2xl bg-white p-5"><h3 className="mb-4 font-bold">Оформление заказа</h3><label className="mb-3 block text-sm">Имя получателя<input value={name} onChange={e=>setName(e.target.value)} maxLength={100} className="mt-1 block h-12 w-full rounded-xl border border-[#d0d5dd] px-3 outline-none focus:border-[#667085]" placeholder="Ваше имя"/></label>
-            <div className="mb-3 grid grid-cols-2 gap-2"><button onClick={()=>setFulfillment("pickup")} className={`flex items-center justify-center gap-2 rounded-xl border p-3 text-sm ${fulfillment==="pickup"?"border-[#101828] bg-[#f2f4f7]":"border-[#d0d5dd]"}`}><Store size={16}/> Самовывоз</button><button onClick={()=>setFulfillment("delivery")} className={`flex items-center justify-center gap-2 rounded-xl border p-3 text-sm ${fulfillment==="delivery"?"border-[#101828] bg-[#f2f4f7]":"border-[#d0d5dd]"}`}><Truck size={16}/> Доставка</button></div>
-            {fulfillment==="delivery" && <label className="block text-sm">Адрес доставки<textarea value={address} onChange={e=>setAddress(e.target.value)} maxLength={500} className="mt-1 block min-h-20 w-full rounded-xl border border-[#d0d5dd] p-3" placeholder="Улица, дом, квартира"/></label>}
+          <div className="mt-6 rounded-2xl bg-white p-5"><h3 className="mb-4 font-bold">Оформление заказа</h3><label className="mb-3 block text-sm">Имя получателя<input value={name} onChange={e=>{checkoutKey.current=null;setName(e.target.value)}} maxLength={100} className="mt-1 block h-12 w-full rounded-xl border border-[#d0d5dd] px-3 outline-none focus:border-[#667085]" placeholder="Ваше имя"/></label>
+            <div className="mb-3 grid grid-cols-2 gap-2"><button onClick={()=>{checkoutKey.current=null;setFulfillment("pickup")}} className={`flex items-center justify-center gap-2 rounded-xl border p-3 text-sm ${fulfillment==="pickup"?"border-[#101828] bg-[#f2f4f7]":"border-[#d0d5dd]"}`}><Store size={16}/> Самовывоз</button><button onClick={()=>{checkoutKey.current=null;setFulfillment("delivery")}} className={`flex items-center justify-center gap-2 rounded-xl border p-3 text-sm ${fulfillment==="delivery"?"border-[#101828] bg-[#f2f4f7]":"border-[#d0d5dd]"}`}><Truck size={16}/> Доставка</button></div>
+            {fulfillment==="delivery" && <label className="block text-sm">Адрес доставки<textarea value={address} onChange={e=>{checkoutKey.current=null;setAddress(e.target.value)}} maxLength={500} className="mt-1 block min-h-20 w-full rounded-xl border border-[#d0d5dd] p-3" placeholder="Улица, дом, квартира"/></label>}
             <div className="my-4 flex items-center justify-between border-t border-[#eaecf0] pt-4"><span className="text-[#667085]">Итого</span><b className="text-xl">{money(total,currency)}</b></div>
             <p className="mb-4 text-xs text-[#667085]">Оплата при получении. Стоимость доставки уточняется магазином.</p>
             <button onClick={checkout} disabled={sending || !name.trim() || (fulfillment==="delivery" && !address.trim())} style={{backgroundColor:color}} className="w-full rounded-xl py-4 font-semibold text-white disabled:opacity-50">{sending?"Оформляем…":"Оформить заказ"}</button>

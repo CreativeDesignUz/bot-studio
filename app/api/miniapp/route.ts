@@ -1,10 +1,10 @@
 import { env } from "cloudflare:workers";
 import { getSupabaseServer } from "@/lib/supabase/server";
-import { getManagedBotToken } from "@/lib/channels/telegram-api";
+import { getProjectBotToken } from "@/lib/channels/project-bot-token";
 import { verifyTelegramInitData } from "@/lib/telegram/init-data";
 
 type OrderItem = { id: string; quantity: number };
-type Checkout = { botId?: string; initData?: string; name?: string; items?: OrderItem[]; fulfillment?: "pickup" | "delivery"; address?: string };
+type Checkout = { botId?: string; initData?: string; requestKey?: string; name?: string; items?: OrderItem[]; fulfillment?: "pickup" | "delivery"; address?: string };
 
 const jsonError = (message: string, status: number) => Response.json({ error: message }, { status });
 const isUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -41,6 +41,7 @@ export async function POST(request: Request) {
   let input: Checkout;
   try { input = await request.json() as Checkout; } catch { return jsonError("Некорректный запрос", 400); }
   if (!input.botId || !isUuid(input.botId) || !input.initData || !Array.isArray(input.items) ||
+      !/^[A-Za-z0-9_-]{16,128}$/.test(input.requestKey ?? "") ||
       !input.items.length || input.items.length > 50 ||
       !input.items.every(item => isUuid(item.id) && Number.isInteger(item.quantity) && item.quantity > 0 && item.quantity <= 99) ||
       !["pickup", "delivery"].includes(input.fulfillment ?? "")) return jsonError("Проверьте данные заказа", 400);
@@ -55,11 +56,11 @@ export async function POST(request: Request) {
     if (!bot || bot.status !== "active" || bot.publish_status !== "published")
       return jsonError("Магазин недоступен", 404);
 
-    const { data: channel } = await supabase.from("bot_channels").select("external_account_id,status")
+    const { data: channel } = await supabase.from("bot_channels").select("external_account_id,status,secret_reference,configuration")
       .eq("bot_id", input.botId).eq("channel", "telegram").single();
-    if (!channel || channel.status !== "connected" || !channel.external_account_id || !env.TELEGRAM_MANAGER_TOKEN)
+    if (!channel || channel.status !== "connected" || !channel.external_account_id)
       return jsonError("Telegram-подключение недоступно", 503);
-    const token = await getManagedBotToken(env.TELEGRAM_MANAGER_TOKEN, channel.external_account_id);
+    const token = await getProjectBotToken(supabase, channel, { managerToken: env.TELEGRAM_MANAGER_TOKEN, encryptionKey: env.TELEGRAM_TOKEN_ENCRYPTION_KEY });
     const telegramUser = await verifyTelegramInitData(input.initData, token);
     if (!telegramUser) return jsonError("Откройте магазин через Telegram", 401);
 
@@ -76,6 +77,7 @@ export async function POST(request: Request) {
       p_fulfillment: input.fulfillment,
       p_delivery_address: address,
       p_items: [...quantities].map(([id, quantity]) => ({ id, quantity })),
+      p_request_key: input.requestKey,
     });
     if (checkoutError || !order) {
       if (checkoutError?.code === "22023") return jsonError("Проверьте доступность товаров и состав заказа", 409);

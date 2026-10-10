@@ -153,17 +153,24 @@ export default function OnboardingPage() {
 }
 
 function DetailsStep({ template, botName, setBotName, botDescription, setBotDescription, primaryColor, setPrimaryColor, secondaryColor, setSecondaryColor, logoPreview, setLogoFile, onNext }: { template:Template; botName:string; setBotName:(value:string)=>void; botDescription:string; setBotDescription:(value:string)=>void; primaryColor:string; setPrimaryColor:(value:string)=>void; secondaryColor:string; setSecondaryColor:(value:string)=>void; logoPreview:string; setLogoFile:(file:File|null)=>void; onNext:()=>void }) {
+  const [attempted, setAttempted] = useState(false);
+  const nameMissing = !botName.trim();
+  const descriptionMissing = !botDescription.trim();
+  const continueToType = () => {
+    setAttempted(true);
+    if (!nameMissing && !descriptionMissing) onNext();
+  };
   return <div className="flow-step"><div className="flow-heading"><span>Шаг 1 из 5</span><h1>Создайте основу бота</h1><p>Дайте боту название, коротко опишите его и настройте внешний вид.</p></div>
     <div className="bot-setup-layout"><div className="bot-setup-form">
       <div className="setup-fields">
         <label className="setup-logo"><span>Логотип</span><div>{logoPreview ? <img src={logoPreview} alt="Предпросмотр логотипа" /> : <ImagePlus />}<strong>{logoPreview ? "Заменить логотип" : "Загрузить логотип"}</strong><small>PNG или JPG до 2 МБ</small><input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event)=>setLogoFile(event.target.files?.[0]??null)} /></div></label>
-        <label><span>Название бота</span><input value={botName} onChange={(event)=>setBotName(event.target.value)} placeholder="Например, Mono Store" /></label>
-        <label className="full"><span>Описание</span><textarea value={botDescription} onChange={(event)=>setBotDescription(event.target.value)} placeholder="Коротко расскажите клиенту, что умеет бот" /></label>
+        <label><span>Название бота</span><input aria-invalid={attempted&&nameMissing} aria-describedby={attempted&&nameMissing?"bot-name-error":undefined} value={botName} onChange={(event)=>setBotName(event.target.value)} placeholder="Например, Mono Store" />{attempted&&nameMissing&&<small id="bot-name-error" className="field-error">Введите название бота.</small>}</label>
+        <label className="full"><span>Описание</span><textarea aria-invalid={attempted&&descriptionMissing} aria-describedby={attempted&&descriptionMissing?"bot-description-error":undefined} value={botDescription} onChange={(event)=>setBotDescription(event.target.value)} placeholder="Коротко расскажите клиенту, что умеет бот" />{attempted&&descriptionMissing&&<small id="bot-description-error" className="field-error">Добавьте короткое описание.</small>}</label>
         <label className="color-field"><span>Основной цвет</span><div><input type="color" value={primaryColor} onChange={(event)=>setPrimaryColor(event.target.value)} /><b>{primaryColor.toUpperCase()}</b></div></label>
         <label className="color-field"><span>Дополнительный цвет</span><div><input type="color" value={secondaryColor} onChange={(event)=>setSecondaryColor(event.target.value)} /><b>{secondaryColor.toUpperCase()}</b></div></label>
       </div>
     </div><BotPreview template={template} name={botName} description={botDescription} primaryColor={primaryColor} secondaryColor={secondaryColor} logo={logoPreview} /></div>
-    <div className="flow-actions"><span /><button className="flow-primary" disabled={!botName.trim() || !botDescription.trim()} onClick={onNext}>Выбрать тип бота <ArrowRight /></button></div>
+    <div className="flow-actions"><span /><button className="flow-primary" onClick={continueToType}>Выбрать тип бота <ArrowRight /></button></div>
   </div>;
 }
 
