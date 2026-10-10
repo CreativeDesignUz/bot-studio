@@ -49,6 +49,7 @@ export async function POST(request: Request) {
     }
     const published = (bot.published_snapshot ?? {}) as { name?: string; description?: string; settings?: { home_buttons?: { label?: string; action?: string }[] } };
     const publishedName = published.name ?? bot.name, publishedDescription = published.description ?? bot.description;
+    const welcome = (published.settings as {welcome_message?:string}|undefined)?.welcome_message ?? (bot.settings as {welcome_message?:string}|null)?.welcome_message ?? publishedDescription;
     const configuredButtons = ((published.settings ?? bot.settings as { home_buttons?: { label?: string; action?: string }[] } | null)?.home_buttons ?? []).slice(0, 8);
     const buttons = normalizeBotButtons(configuredButtons);
     const origin = resolvePublicAppOrigin(request.url, env.PUBLIC_APP_URL);
@@ -70,7 +71,7 @@ export async function POST(request: Request) {
       return Response.json({ ok: true });
     }
     if (/^\/start(?:@\w+)?(?:\s|$)/.test(text ?? "")) {
-      await telegramCall(token, "sendMessage", { chat_id: chatId, text: `${publishedName}\n\n${publishedDescription}`, reply_markup: { inline_keyboard: telegramInlineKeyboard(buttons, new URL(`/miniapp?bot=${channel.bot_id}`, origin).toString()) } });
+      await telegramCall(token, "sendMessage", { chat_id: chatId, text: welcome.trim() || publishedName, reply_markup: { inline_keyboard: telegramInlineKeyboard(buttons, new URL(`/miniapp?bot=${channel.bot_id}`, origin).toString()) } });
     } else {
       await telegramCall(token, "sendMessage", { chat_id: chatId, text: "Откройте приложение — там доступны каталог, заказы и поддержка.", reply_markup: { inline_keyboard: [[{ text: "Открыть приложение", web_app: { url: new URL(`/miniapp?bot=${channel.bot_id}`, origin).toString() } }]] } });
     }
