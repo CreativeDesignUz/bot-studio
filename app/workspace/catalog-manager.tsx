@@ -31,7 +31,7 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Ошибка загрузки."); }
     finally { setLoading(false); }
   }, [botId]);
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => { void Promise.resolve().then(refresh); }, [refresh]);
 
   function open(item?: Item) {
     setEditing(item ?? "new"); setName(item?.name ?? ""); setDescription(item?.description ?? "");
