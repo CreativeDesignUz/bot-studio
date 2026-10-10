@@ -1,5 +1,6 @@
 "use client";
 import CatalogManager from "./catalog-manager";
+import ServiceRequestManager from "./service-request-manager";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -80,7 +81,7 @@ export default function WorkspacePage() {
         <div className="border-b border-[#e4e7ec] bg-white px-4 py-2 lg:hidden"><div className="flex gap-1 overflow-x-auto">{template.modules.map(({ id, label }) => <button key={id} onClick={() => setSection(id)} className={`shrink-0 rounded-full px-3 py-2 text-xs font-semibold ${currentSection === id ? "bg-[#101828] text-white" : "bg-[#f2f4f7] text-[#667085]"}`}>{label}</button>)}</div></div>
         <div className="p-4 pb-24 sm:p-7 sm:pb-24 lg:p-9">
           <div className="mb-7 flex flex-wrap items-end justify-between gap-4"><div><p className="mb-2 text-xs font-semibold text-[#6d45f5]">{template.label} · @{bot.username}</p><h1 className="text-2xl font-semibold tracking-[-.035em] sm:text-3xl">{sectionName}</h1><p className="mt-1.5 text-sm text-[#667085]">{currentSection === "overview" ? "Главное за сегодня и следующий шаг для роста." : `Управляйте разделом «${sectionName}» без перехода в другие сервисы.`}</p></div></div>
-          {currentSection === "catalog" ? <CatalogManager key={bot.id} botId={bot.id} type={bot.type} /> : currentSection === "overview" ? <Overview page={page} botType={bot.type} /> : <ModuleView name={sectionName} itemLabel={template.itemLabel} botType={bot.type} />}
+          {currentSection === "catalog" ? <CatalogManager key={bot.id} botId={bot.id} type={bot.type} /> : bot.type === "service" && currentSection === "appointments" ? <ServiceRequestManager key={bot.id} botId={bot.id} /> : currentSection === "overview" ? <Overview page={page} botType={bot.type} /> : <ModuleView name={sectionName} itemLabel={template.itemLabel} botType={bot.type} />}
         </div>
       </section>
     </div>
