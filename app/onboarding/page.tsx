@@ -43,7 +43,7 @@ export default function OnboardingPage(){
  const [progressNotice,setProgressNotice]=useState("");
  const template=useMemo(()=>templates.find(item=>item.id===templateId)??templates[0],[templateId]);
  const SelectedIcon=template.Icon;
- useEffect(()=>{if(!avatar)return;const url=URL.createObjectURL(avatar);setAvatarUrl(url);return()=>URL.revokeObjectURL(url)},[avatar]);
+ useEffect(()=>{return()=>{if(avatarUrl.startsWith("blob:"))URL.revokeObjectURL(avatarUrl)}},[avatarUrl]);
  const resetMessage=()=>{setError("");setProgressNotice("")};
  const goBack=()=>{resetMessage();setStage(s=>Math.max(0,s-1) as Stage)};
  async function ensureBot():Promise<string|null>{
@@ -135,7 +135,7 @@ export default function OnboardingPage(){
      <div className="mt-8 grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_260px]"><div className={card+" space-y-4"}>
       <label className="block text-sm font-medium">Название бота <span className="text-red-500">*</span><input maxLength={64} value={name} onChange={event=>setName(event.target.value)} placeholder="Например, Мой магазин" className="mt-2 h-11 w-full rounded-lg border border-[#d7dce6] px-3 outline-[#6541F5]"/></label>
       <label className="block text-sm font-medium">Описание<textarea maxLength={512} rows={3} value={description} onChange={event=>setDescription(event.target.value)} placeholder="Чем бот поможет вашим клиентам?" className="mt-2 w-full rounded-lg border border-[#d7dce6] p-3 outline-[#6541F5]"/></label>
-      <div className="flex items-center gap-3"><div className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-full bg-[#eee9ff] text-[#6541F5]">{avatarUrl?<img src={avatarUrl} alt="Предпросмотр аватара" className="size-full object-cover"/>:<ImagePlus size={23}/>}</div><label className="block min-w-0 text-sm font-medium">Аватар (необязательно)<input type="file" accept="image/png,image/jpeg,image/webp" onChange={event=>{const f=event.target.files?.[0]??null;if(f&&f.size>2*1024*1024){setError("Максимальный размер изображения — 2 МБ.");return}setAvatar(f)}} className="mt-2 block w-full text-xs"/></label></div>
+      <div className="flex items-center gap-3"><div className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-full bg-[#eee9ff] text-[#6541F5]">{avatarUrl?<img src={avatarUrl} alt="Предпросмотр аватара" className="size-full object-cover"/>:<ImagePlus size={23}/>}</div><label className="block min-w-0 text-sm font-medium">Аватар (необязательно)<input type="file" accept="image/png,image/jpeg,image/webp" onChange={event=>{const f=event.target.files?.[0]??null;if(f&&f.size>2*1024*1024){setError("Максимальный размер изображения — 2 МБ.");return}setAvatar(f);setAvatarUrl(f?URL.createObjectURL(f):"")}} className="mt-2 block w-full text-xs"/></label></div>
       <label className="flex items-center gap-3 text-sm font-medium">Основной цвет <input type="color" value={color} onChange={e=>setColor(e.target.value)} className="size-10 cursor-pointer rounded-lg"/><span className="font-mono text-xs text-[#667085]">{color}</span></label>
       {choice!=="later"&&!connected&&<div className="border-t border-[#e5e7eb] pt-5">
        <p className="text-sm font-semibold">Подключение через BotFather</p>
