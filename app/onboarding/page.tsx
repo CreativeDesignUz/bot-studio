@@ -2,214 +2,173 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { ArrowLeft, ArrowRight, Bot, Check, ChevronDown, CircleDollarSign, Clock3, CreditCard, ImagePlus, MapPin, Package, Palette, Plus, ShoppingBag, Sparkles, Store, Users, UtensilsCrossed } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, ArrowRight, Bot, BookOpen, Check, CheckCircle2, ChevronRight, Clock3, ExternalLink, ImagePlus, KeyRound, Package, Rocket, Send, ShoppingBag, Sparkles, UtensilsCrossed } from "lucide-react";
 
-type TemplateId = "delivery" | "store" | "service";
-type Stage = "details" | "type" | "created" | "item" | "done";
-type SaveState = "idle" | "saving" | "error";
-
-type Template = {
-  id: TemplateId;
-  title: string;
-  description: string;
-  icon: typeof Bot;
-  item: string;
-  firstAction: string;
-  nameLabel: string;
-  namePlaceholder: string;
-  priceLabel: string;
-  capabilities: { icon: typeof Bot; title: string; text: string }[];
-};
-
-const templates: Template[] = [
-  { id:"delivery", title:"Доставка еды", description:"Меню, корзина, адрес и статусы доставки.", icon:UtensilsCrossed, item:"блюдо", firstAction:"Добавить первое блюдо", nameLabel:"Название блюда", namePlaceholder:"Например, Плов праздничный", priceLabel:"Цена", capabilities:[
-    { icon:UtensilsCrossed, title:"Меню", text:"Категории, фото и варианты блюда" },
-    { icon:MapPin, title:"Доставка", text:"Зоны, адрес клиента и стоимость" },
-    { icon:CreditCard, title:"Оплата", text:"Онлайн или наличными курьеру" },
-  ] },
-  { id:"store", title:"Интернет-магазин", description:"Каталог товаров, остатки, заказы и оплата.", icon:ShoppingBag, item:"товар", firstAction:"Добавить первый товар", nameLabel:"Название товара", namePlaceholder:"Например, Кроссовки Mono", priceLabel:"Цена", capabilities:[
-    { icon:Package, title:"Каталог", text:"Товары, категории и остатки" },
-    { icon:Store, title:"Заказы", text:"Корзина и статусы выполнения" },
-    { icon:CircleDollarSign, title:"Оплата", text:"Платёжные сервисы и наличные" },
-  ] },
-  { id:"service", title:"Услуги и запись", description:"Услуги, специалисты, расписание и бронь.", icon:Sparkles, item:"услугу", firstAction:"Добавить первую услугу", nameLabel:"Название услуги", namePlaceholder:"Например, Консультация стилиста", priceLabel:"Стоимость", capabilities:[
-    { icon:Sparkles, title:"Услуги", text:"Описание, длительность и цена" },
-    { icon:Users, title:"Специалисты", text:"Сотрудники и их расписание" },
-    { icon:Clock3, title:"Онлайн-запись", text:"Свободное время и напоминания" },
-  ] },
+type Stage = 0 | 1 | 2 | 3;
+type TemplateId = "delivery" | "store" | "service" | "course";
+type ConnectionChoice = "new" | "existing" | "later";
+type TelegramIdentity = {name:string;username:string};
+const templates = [
+ {id:"store" as const,title:"Интернет-магазин",description:"Товары, каталог, корзина и заказы",Icon:ShoppingBag},
+ {id:"delivery" as const,title:"Доставка еды",description:"Меню, оформление заказов и доставка",Icon:UtensilsCrossed},
+ {id:"service" as const,title:"Услуги и запись",description:"Заявки, услуги и клиенты",Icon:Clock3},
+ {id:"course" as const,title:"Обучение",description:"Курсы, уроки и доступ к материалам",Icon:BookOpen},
 ];
+const stages = ["Telegram","Шаблон","Настройка","Запуск"];
+const card = "rounded-[18px] border border-[#e0e5ed] bg-white p-5";
+const primary = "inline-flex min-h-11 items-center justify-center gap-2 rounded-[10px] bg-[#4420e7] px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40";
+const secondary = "inline-flex min-h-11 items-center justify-center gap-2 rounded-[10px] border border-[#d7dce6] bg-white px-5 text-sm font-medium text-[#101828] disabled:opacity-50";
+function telegramData(){return (window as typeof window & {Telegram?:{WebApp?:{initData?:string}}}).Telegram?.WebApp?.initData??""}
+function getKey(){const key="botStudioOnboardingRequestKeyV2";let value=sessionStorage.getItem(key);if(!value){value=crypto.randomUUID().replaceAll("-","");sessionStorage.setItem(key,value)}return value}
 
-export default function OnboardingPage() {
-  const searchParams = useSearchParams();
-  const createdPreview = searchParams.get("preview") === "created";
-  const [stage, setStage] = useState<Stage>(() => createdPreview ? "created" : "details");
-  const [templateId, setTemplateId] = useState<TemplateId | null>(() => createdPreview ? "store" : null);
-  const [botName, setBotName] = useState(() => createdPreview ? "Mono Store" : "");
-  const [botDescription, setBotDescription] = useState(() => createdPreview ? "Магазин одежды и аксессуаров с доставкой по Ташкенту." : "");
-  const [primaryColor, setPrimaryColor] = useState("#6541F5");
-  const [secondaryColor, setSecondaryColor] = useState("#F0ECFF");
-  const [logoFile, setLogoFile] = useState<File | null>(null);
-  const [logoPreview, setLogoPreview] = useState("");
-  const [logoUrl, setLogoUrl] = useState("");
-  const [itemName, setItemName] = useState("");
-  const [price, setPrice] = useState("");
-  const [description, setDescription] = useState("");
-  const [botId, setBotId] = useState<string | null>(null);
-  const [saveState, setSaveState] = useState<SaveState>("idle");
-  const [saveError, setSaveError] = useState("");
-  const template = useMemo(() => templates.find((item) => item.id === templateId) ?? templates[1], [templateId]);
-  const TemplateIcon = template.icon;
-  const progress = stage === "details" ? 20 : stage === "type" ? 40 : stage === "created" ? 60 : stage === "item" ? 80 : 100;
-
-  useEffect(() => {
-    document.documentElement.dataset.onboardingHydrated = "true";
-    const telegram = (window as typeof window & { Telegram?: { WebApp?: { ready?:()=>void; expand?:()=>void; setHeaderColor?:(color:string)=>void; setBackgroundColor?:(color:string)=>void } } }).Telegram?.WebApp;
-    telegram?.ready?.(); telegram?.expand?.(); telegram?.setHeaderColor?.("#ffffff"); telegram?.setBackgroundColor?.("#f5f6f8");
-    if (telegram) document.documentElement.dataset.telegram = "true";
-    return () => { delete document.documentElement.dataset.onboardingHydrated; delete document.documentElement.dataset.telegram; };
-  }, []);
-
-  useEffect(() => {
-    return () => { if (logoPreview.startsWith("blob:")) URL.revokeObjectURL(logoPreview); };
-  }, [logoPreview]);
-
-  const selectLogo = (file: File | null) => {
-    setLogoFile(file);
-    setLogoPreview(file ? URL.createObjectURL(file) : "");
-  };
-
-  const initData = () => (window as typeof window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData;
-  const requestKey = () => {
-    const storageKey = "botStudioOnboardingRequestKey";
-    const existing = sessionStorage.getItem(storageKey);
-    if (existing) return existing;
-    const created = crypto.randomUUID().replaceAll("-", "");
-    sessionStorage.setItem(storageKey, created);
-    return created;
-  };
-
-  const createBot = async () => {
-    setSaveState("saving"); setSaveError("");
-    const response = await fetch("/api/onboarding", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ initData: initData(), botId, requestKey: requestKey(), botName, description: botDescription, templateType: template.id, primaryColor, secondaryColor }),
-    });
-    const result = await response.json().catch(() => ({ error:"Сервис сохранения временно недоступен" })) as { bot?: { id?: string }; error?: string };
-    if (!response.ok || !result.bot?.id) { setSaveState("error"); setSaveError(result.error ?? "Не удалось создать бота"); return; }
-    const nextBotId = result.bot.id;
-    setBotId(nextBotId); localStorage.setItem("botStudioBotId", nextBotId);
-    if (logoFile) {
-      const form = new FormData(); form.append("botId", nextBotId); form.append("logo", logoFile);
-      if (initData()) form.append("initData", initData()!);
-      const logoResponse = await fetch("/api/bots/logo", { method:"POST", body:form });
-      const logoResult = await logoResponse.json() as { logoUrl?: string; error?: string };
-      if (logoResponse.ok && logoResult.logoUrl) setLogoUrl(logoResult.logoUrl);
-      else setSaveError("Бот создан, но логотип не загрузился. Его можно добавить позже.");
-    }
-    setSaveState("idle"); setStage("created");
-  };
-
-  const saveFirstItem = async () => {
-    setSaveState("saving"); setSaveError("");
-    const response = await fetch("/api/onboarding", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ initData: initData(), botId, requestKey: requestKey(), botName, description: botDescription, templateType: template.id, primaryColor, secondaryColor, item: { name: itemName, description, priceMinor: price ? Number(price) * 100 : undefined } }),
-    });
-    const result = await response.json().catch(() => ({ error:"Сервис сохранения временно недоступен" })) as { bot?: { id?: string }; error?: string };
-    if (!response.ok) { setSaveState("error"); setSaveError(result.error ?? "Не удалось сохранить"); return; }
-    if (result.bot?.id) setBotId(result.bot.id);
-    sessionStorage.removeItem("botStudioOnboardingRequestKey");
-    setSaveState("idle"); setStage("done");
-  };
-
-  return <main className="onboarding-shell"><div className="onboarding-app">
-    <aside className="onboarding-sidebar">
-      <Link href="/" className="brand"><span className="brand-mark"><Bot /></span><span>Bot Studio</span></Link>
-      <div className="onboarding-progress"><div><span>Создание бота</span><strong>{progress}%</strong></div><i><b style={{width:`${progress}%`}} /></i></div>
-      <nav className="onboarding-steps">
-        <Step number="1" label="Название и дизайн" active={stage === "details"} done={stage !== "details"} />
-        <Step number="2" label="Тип и возможности" active={stage === "type"} done={stage === "created" || stage === "item" || stage === "done"} />
-        <Step number="3" label="Бот создан" active={stage === "created"} done={stage === "item" || stage === "done"} />
-        <Step number="4" label="Первый элемент" active={stage === "item"} done={stage === "done"} />
-        <Step number="5" label="Готов к запуску" active={stage === "done"} done={false} />
-      </nav>
-      <div className="onboarding-tip"><Sparkles /><p><strong>Сначала создаём основу.</strong> Название, описание и дизайн сохранятся до начала наполнения.</p></div>
-    </aside>
-    <section className="onboarding-main">
-      <header className="onboarding-header">
-        <Link href="/" className="back-link"><ArrowLeft />Назад в кабинет</Link>
-        <div className="onboarding-bot-chip"><span className="switcher-avatar violet" style={{background:secondaryColor,color:primaryColor}}>{logoPreview || logoUrl ? <img src={logoPreview || logoUrl} alt="" /> : templateId ? <TemplateIcon /> : <Bot />}</span><span><small>{stage === "created" || stage === "item" || stage === "done" ? "Бот создан" : "Новый бот"}</small><strong>{botName || "Без названия"}</strong></span><ChevronDown /></div>
-      </header>
-      <div className="onboarding-content">
-        {stage === "details" && <DetailsStep template={template} botName={botName} setBotName={setBotName} botDescription={botDescription} setBotDescription={setBotDescription} primaryColor={primaryColor} setPrimaryColor={setPrimaryColor} secondaryColor={secondaryColor} setSecondaryColor={setSecondaryColor} logoPreview={logoPreview} setLogoFile={selectLogo} onNext={() => setStage("type")} />}
-        {stage === "type" && <TypeStep selected={templateId} onSelect={setTemplateId} onBack={() => setStage("details")} onSave={createBot} saveState={saveState} saveError={saveError} />}
-        {stage === "created" && <CreatedStep template={template} botName={botName} botDescription={botDescription} primaryColor={primaryColor} secondaryColor={secondaryColor} logoPreview={logoPreview || logoUrl} warning={saveError} botId={botId} onEdit={() => setStage("details")} onStart={() => setStage("item")} />}
-        {stage === "item" && <ItemStep template={template} itemName={itemName} setItemName={setItemName} price={price} setPrice={setPrice} description={description} setDescription={setDescription} onBack={() => setStage("created")} onSave={saveFirstItem} botId={botId} saveState={saveState} saveError={saveError} />}
-        {stage === "done" && <DoneStep template={template} botName={botName} itemName={itemName} price={price} botId={botId} onAdd={() => { setItemName(""); setPrice(""); setDescription(""); setStage("item"); }} />}
+export default function OnboardingPage(){
+ const router=useRouter();
+ const [stage,setStage]=useState<Stage>(0);
+ const [choice,setChoice]=useState<ConnectionChoice>("new");
+ const [templateId,setTemplateId]=useState<TemplateId>("store");
+ const [name,setName]=useState("");
+ const [description,setDescription]=useState("");
+ const [color,setColor]=useState("#6541F5");
+ const [avatar,setAvatar]=useState<File|null>(null);
+ const [avatarUrl,setAvatarUrl]=useState("");
+ const [botId,setBotId]=useState<string|null>(null);
+ const [token,setToken]=useState("");
+ const [credentialId,setCredentialId]=useState("");
+ const [verified,setVerified]=useState<TelegramIdentity|null>(null);
+ const [connected,setConnected]=useState<TelegramIdentity|null>(null);
+ const [published,setPublished]=useState(false);
+ const [busy,setBusy]=useState(false);
+ const [error,setError]=useState("");
+ const [progressNotice,setProgressNotice]=useState("");
+ const template=useMemo(()=>templates.find(item=>item.id===templateId)??templates[0],[templateId]);
+ const SelectedIcon=template.Icon;
+ useEffect(()=>{if(!avatar)return;const url=URL.createObjectURL(avatar);setAvatarUrl(url);return()=>URL.revokeObjectURL(url)},[avatar]);
+ const resetMessage=()=>{setError("");setProgressNotice("")};
+ const goBack=()=>{resetMessage();setStage(s=>Math.max(0,s-1) as Stage)};
+ async function ensureBot():Promise<string|null>{
+  if(botId)return botId;
+  if(!name.trim()){setError("Введите название бота.");return null}
+  setBusy(true);resetMessage();
+  try{
+   const response=await fetch("/api/onboarding",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({initData:telegramData(),requestKey:getKey(),botName:name.trim(),description:description.trim(),templateType:templateId,primaryColor:color,secondaryColor:"#F0ECFF"})});
+   const result=await response.json() as {bot?:{id?:string};error?:string};
+   if(!response.ok||!result.bot?.id)throw new Error(result.error??"Не удалось создать бота.");
+   const id=result.bot.id;setBotId(id);localStorage.setItem("botStudioBotId",id);
+   if(avatar){
+    const form=new FormData();form.append("botId",id);form.append("logo",avatar);if(telegramData())form.append("initData",telegramData());
+    const upload=await fetch("/api/bots/logo",{method:"POST",body:form});
+    if(!upload.ok)setProgressNotice("Бот сохранён. Аватар пока не загрузился — его можно добавить в редакторе.");
+   }
+   return id;
+  }catch(e){setError(e instanceof Error?e.message:"Не удалось создать бота.");return null}
+  finally{setBusy(false)}
+ }
+ async function nextFromSetup(){
+  const id=await ensureBot();
+  if(id){resetMessage();setStage(3)}
+ }
+ async function inspectToken(){
+  const id=await ensureBot();if(!id)return;
+  if(!token.trim()){setError("Вставьте токен, полученный в BotFather.");return}
+  setBusy(true);resetMessage();
+  try{
+   const response=await fetch("/api/channels/telegram/token",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"inspect",botId:id,token:token.trim(),initData:telegramData()})});
+   const result=await response.json() as {bot?:TelegramIdentity;credentialId?:string;error?:string};
+   if(!response.ok||!result.bot||!result.credentialId)throw new Error(result.error??"Telegram не подтвердил токен.");
+   setCredentialId(result.credentialId);setVerified(result.bot);setToken("");
+  }catch(e){setError(e instanceof Error?e.message:"Не удалось проверить токен.")}
+  finally{setBusy(false)}
+ }
+ async function connect(){
+  if(!botId||!credentialId)return;
+  setBusy(true);resetMessage();
+  try{
+   const response=await fetch("/api/channels/telegram/token",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"connect",botId,credentialId,initData:telegramData()})});
+   const result=await response.json() as {connected?:boolean;bot?:TelegramIdentity;error?:string};
+   if(!response.ok||!result.connected)throw new Error(result.error??"Не удалось подключить Telegram.");
+   setConnected(result.bot??verified);setCredentialId("");setVerified(null);
+   setProgressNotice("Telegram-бот подключён. Можно перейти к запуску.");
+  }catch(e){setError(e instanceof Error?e.message:"Ошибка подключения.")}
+  finally{setBusy(false)}
+ }
+ async function publish(){
+  if(!botId||!connected)return;
+  setBusy(true);resetMessage();
+  try{
+   const response=await fetch("/api/publish",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({initData:telegramData(),botId,name,description,color,buttons:[]})});
+   const result=await response.json() as {status?:string;error?:string};
+   if(!response.ok||result.status!=="published")throw new Error(result.error??"Публикация не завершена.");
+   setPublished(true);sessionStorage.removeItem("botStudioOnboardingRequestKeyV2");
+  }catch(e){setError(e instanceof Error?e.message:"Публикация не завершена.")}
+  finally{setBusy(false)}
+ }
+ return <main className="min-h-dvh bg-[#f6f7fa] text-[#101828]">
+  <header className="border-b border-[#e5e7eb] bg-white"><div className="mx-auto flex h-[76px] max-w-[1240px] items-center justify-between px-5">
+    <Link href="/workspace" className="flex items-center gap-3 text-lg font-bold text-[#101828] no-underline"><span className="grid size-10 place-items-center rounded-xl bg-[#4420e7] text-white"><Bot size={22}/></span>Bot Studio</Link>
+    <Link href="/workspace" className="text-sm font-medium text-[#667085] no-underline">В кабинет <ArrowRight size={15} className="inline"/></Link>
+  </div></header>
+  <div className="mx-auto grid max-w-[1240px] gap-10 px-5 py-10 lg:grid-cols-[270px_minmax(0,1fr)]">
+   <aside className="lg:sticky lg:top-8 lg:self-start">
+    <p className="text-xs font-semibold uppercase tracking-widest text-[#98a2b3]">Создание бота</p>
+    <nav aria-label="Этапы создания" className="mt-5 flex flex-wrap gap-2 lg:flex-col">{stages.map((title,i)=><div key={title} aria-current={stage===i?"step":undefined} className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm ${stage===i?"bg-[#eee9ff] font-semibold text-[#4420e7]":i<stage?"text-[#166534]":"text-[#667085]"}`}><span className={`grid size-8 shrink-0 place-items-center rounded-full ${stage===i?"bg-[#4420e7] text-white":i<stage?"bg-[#dcfce7] text-[#166534]":"bg-[#edf0f5]"}`}>{i<stage?<Check size={16}/>:i+1}</span><span>{title}</span></div>)}</nav>
+    <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-[#e6e9f1]"><div className="h-full rounded-full bg-[#6541F5] transition-all" style={{width:`${(stage+1)*25}%`}}/></div>
+    <p className="mt-3 text-xs text-[#98a2b3]">Шаг {stage+1} из 4</p>
+   </aside>
+   <div className="min-w-0">
+    {error&&<div role="alert" className="mb-5 rounded-xl border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#b42318]">{error}</div>}
+    {progressNotice&&<div role="status" className="mb-5 rounded-xl border border-[#bbf7d0] bg-[#f0fdf4] px-4 py-3 text-sm text-[#166534]">{progressNotice}</div>}
+    {stage===0&&<section>
+     <h1 className="text-3xl font-semibold tracking-tight">Подключите Telegram</h1><p className="mt-2 text-sm text-[#667085]">Новый бот или уже существующий? Выберите удобный вариант.</p>
+     <div className="mt-8 grid gap-3 sm:grid-cols-2">
+      {([{value:"new",title:"Создать нового бота",desc:"Покажем, как создать бота через BotFather",Icon:Bot},{value:"existing",title:"Подключить существующего",desc:"Проверим токен и подключим вашего бота",Icon:KeyRound}] as const).map(item=><button type="button" onClick={()=>setChoice(item.value)} key={item.value} className={`${card} flex min-h-[180px] flex-col items-start text-left transition-colors ${choice===item.value?"!border-[#6541F5] !bg-[#f8f6ff]":"hover:border-[#aaa0f0]"}`}><item.Icon className="text-[#6541F5]" size={26}/><strong className="mt-4 text-base">{item.title}</strong><span className="mt-2 text-sm text-[#667085]">{item.desc}</span><span className="mt-auto pt-4 text-xs font-semibold text-[#6541F5]">{choice===item.value?"Выбрано":"Выбрать"}</span></button>)}
+     </div>
+     {choice==="new"&&<div className={card+" mt-4"}><p className="text-sm font-semibold">Что нужно сделать позже</p><p className="mt-2 text-sm text-[#667085]">Откройте <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" className="text-[#4420e7]">@BotFather</a>, отправьте /newbot, задайте название и username, затем скопируйте токен. Вставим его на этапе настройки.</p></div>}
+     <button type="button" onClick={()=>setChoice("later")} className="mt-4 text-sm text-[#667085] underline underline-offset-4">Подключить Telegram позже</button>
+    </section>}
+    {stage===1&&<section>
+     <h1 className="text-3xl font-semibold tracking-tight">Выберите шаблон</h1><p className="mt-2 text-sm text-[#667085]">Кабинет и Mini App подстроятся под тип бизнеса. Шаблон можно доработать позже.</p>
+     <div className="mt-8 grid gap-3 sm:grid-cols-2">{templates.map(item=><button type="button" key={item.id} onClick={()=>setTemplateId(item.id)} className={`${card} flex min-h-[145px] flex-col items-start text-left ${templateId===item.id?"!border-[#6541F5] !bg-[#f8f6ff]":""}`}><item.Icon className="text-[#6541F5]" size={25}/><strong className="mt-3 text-base">{item.title}</strong><span className="mt-1 text-sm text-[#667085]">{item.description}</span></button>)}</div>
+    </section>}
+    {stage===2&&<section>
+     <h1 className="text-3xl font-semibold tracking-tight">Настройте бота</h1><p className="mt-2 text-sm text-[#667085]">Задайте основные данные. Всё остальное можно настроить позже в редакторе.</p>
+     <div className="mt-8 grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_260px]"><div className={card+" space-y-4"}>
+      <label className="block text-sm font-medium">Название бота <span className="text-red-500">*</span><input maxLength={64} value={name} onChange={event=>setName(event.target.value)} placeholder="Например, Мой магазин" className="mt-2 h-11 w-full rounded-lg border border-[#d7dce6] px-3 outline-[#6541F5]"/></label>
+      <label className="block text-sm font-medium">Описание<textarea maxLength={512} rows={3} value={description} onChange={event=>setDescription(event.target.value)} placeholder="Чем бот поможет вашим клиентам?" className="mt-2 w-full rounded-lg border border-[#d7dce6] p-3 outline-[#6541F5]"/></label>
+      <div className="flex items-center gap-3"><div className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-full bg-[#eee9ff] text-[#6541F5]">{avatarUrl?<img src={avatarUrl} alt="Предпросмотр аватара" className="size-full object-cover"/>:<ImagePlus size={23}/>}</div><label className="block min-w-0 text-sm font-medium">Аватар (необязательно)<input type="file" accept="image/png,image/jpeg,image/webp" onChange={event=>{const f=event.target.files?.[0]??null;if(f&&f.size>2*1024*1024){setError("Максимальный размер изображения — 2 МБ.");return}setAvatar(f)}} className="mt-2 block w-full text-xs"/></label></div>
+      <label className="flex items-center gap-3 text-sm font-medium">Основной цвет <input type="color" value={color} onChange={e=>setColor(e.target.value)} className="size-10 cursor-pointer rounded-lg"/><span className="font-mono text-xs text-[#667085]">{color}</span></label>
+      {choice!=="later"&&!connected&&<div className="border-t border-[#e5e7eb] pt-5">
+       <p className="text-sm font-semibold">Подключение через BotFather</p>
+       <p className="mt-1 text-xs text-[#667085]">Сначала сохраните проект, затем проверьте токен. Не отправляйте токен в чат или другим людям.</p>
+       {!verified?<div className="mt-3 flex gap-2"><input type="password" autoComplete="off" value={token} onChange={event=>setToken(event.target.value)} placeholder="Telegram Bot API token" className="h-11 min-w-0 flex-1 rounded-lg border border-[#d7dce6] px-3 text-sm"/><button type="button" onClick={()=>void inspectToken()} disabled={busy||!name.trim()||!token.trim()} className={secondary}>Проверить</button></div>:
+       <div className="mt-3 rounded-xl bg-[#f3f0ff] p-4 text-sm"><strong>{verified.name} · @{verified.username}</strong><div className="mt-3 flex gap-2"><button className={primary} disabled={busy} onClick={()=>void connect()}>Подтвердить подключение</button><button className={secondary} onClick={()=>{setVerified(null);setCredentialId("")}}>Другой токен</button></div></div>}
+      </div>}
+      {connected&&<p className="flex items-center gap-2 rounded-lg bg-[#f0fdf4] p-3 text-sm text-[#166534]"><CheckCircle2 size={18}/>Telegram подключён: @{connected.username}</p>}
+     </div>
+     <aside className={card}><div className="flex items-center gap-2 text-xs font-semibold text-[#667085]"><Sparkles size={16}/>Предпросмотр</div><div className="mt-4 rounded-xl px-4 py-9 text-center text-white" style={{background:color}}><div className="mx-auto grid size-16 place-items-center overflow-hidden rounded-full bg-white/20">{avatarUrl?<img src={avatarUrl} className="size-full object-cover" alt=""/>:<SelectedIcon size={30}/>}</div><h2 className="mt-4 font-semibold">{name||"Название бота"}</h2><p className="mt-2 text-xs opacity-80">{description||template.description}</p></div><p className="mt-3 text-xs text-[#98a2b3]">Полный предпросмотр Telegram и Mini App доступен в редакторе.</p></aside>
+     </div>
+    </section>}
+    {stage===3&&<section>
+      <h1 className="text-3xl font-semibold tracking-tight">{published?"Бот опубликован!":"Проверка и запуск"}</h1><p className="mt-2 text-sm text-[#667085]">{published?"Можно открыть Telegram или продолжить настройку.":"Проверьте готовность бота перед публикацией."}</p>
+      <div className={card+" mt-8 space-y-4"}>
+       <div className="flex items-center gap-3"><CheckCircle2 className="text-[#16a34a]"/><span className="flex-1 text-sm">Проект «{name}» создан</span><span className="text-xs text-[#16a34a]">Готово</span></div>
+       <div className="flex items-center gap-3">{connected?<CheckCircle2 className="text-[#16a34a]"/>:<KeyRound className="text-[#d97706]"/>}<span className="flex-1 text-sm">{connected?`Telegram подключён: @${connected.username}`:"Telegram ещё не подключён"}</span>{!connected&&<button type="button" onClick={()=>setStage(2)} className="text-xs font-semibold text-[#4420e7]">Подключить</button>}</div>
+       <div className="flex items-center gap-3"><CheckCircle2 className="text-[#16a34a]"/><span className="flex-1 text-sm">Выбран шаблон «{template.title}»</span></div>
+       <div className="rounded-xl bg-[#f7f8fb] p-4 text-sm text-[#667085]">Приветствие, кнопки, первый товар или услуга настраиваются в редакторе. Для публикации потребуется публичный HTTPS-адрес приложения.</div>
       </div>
-    </section>
-  </div></main>;
+      {published&&connected&&<a target="_blank" rel="noreferrer" href={`https://t.me/${connected.username}`} className={secondary+" mt-5 no-underline"}>Открыть бота в Telegram <ExternalLink size={17}/></a>}
+    </section>}
+    <div className="mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-[#e5e7eb] pt-6">
+     {stage===0?<Link href="/workspace" className={secondary+" no-underline"}><ArrowLeft size={16}/>Отмена</Link>:<button type="button" onClick={goBack} className={secondary}><ArrowLeft size={16}/>Назад</button>}
+     {stage<2?<button type="button" onClick={()=>{resetMessage();setStage((stage+1) as Stage)}} className={primary}>Продолжить <ArrowRight size={16}/></button>:
+      stage===2?<button type="button" onClick={()=>void nextFromSetup()} disabled={busy||!name.trim()} className={primary}>{busy?"Сохраняем…":"К проверке"} <ArrowRight size={16}/></button>:
+      <div className="flex flex-wrap gap-2">
+       <Link href={botId?`/workspace/builder?bot=${encodeURIComponent(botId)}`:"/workspace"} className={secondary+" no-underline"}>Открыть редактор <ArrowRight size={16}/></Link>
+       {!published&&<button type="button" onClick={()=>void publish()} disabled={busy||!connected} className={primary}>{busy?"Публикуем…":"Опубликовать бота"} <Rocket size={17}/></button>}
+       {published&&<button type="button" onClick={()=>router.push("/workspace")} className={primary}>Перейти в кабинет <ChevronRight size={16}/></button>}
+      </div>}
+    </div>
+   </div>
+  </div>
+ </main>
 }
-
-function DetailsStep({ template, botName, setBotName, botDescription, setBotDescription, primaryColor, setPrimaryColor, secondaryColor, setSecondaryColor, logoPreview, setLogoFile, onNext }: { template:Template; botName:string; setBotName:(value:string)=>void; botDescription:string; setBotDescription:(value:string)=>void; primaryColor:string; setPrimaryColor:(value:string)=>void; secondaryColor:string; setSecondaryColor:(value:string)=>void; logoPreview:string; setLogoFile:(file:File|null)=>void; onNext:()=>void }) {
-  const [attempted, setAttempted] = useState(false);
-  const nameMissing = !botName.trim();
-  const descriptionMissing = !botDescription.trim();
-  const continueToType = () => {
-    setAttempted(true);
-    if (!nameMissing && !descriptionMissing) onNext();
-  };
-  return <div className="flow-step"><div className="flow-heading"><span>Шаг 1 из 5</span><h1>Создайте основу бота</h1><p>Дайте боту название, коротко опишите его и настройте внешний вид.</p></div>
-    <div className="bot-setup-layout"><div className="bot-setup-form">
-      <div className="setup-fields">
-        <label className="setup-logo"><span>Логотип</span><div>{logoPreview ? <img src={logoPreview} alt="Предпросмотр логотипа" /> : <ImagePlus />}<strong>{logoPreview ? "Заменить логотип" : "Загрузить логотип"}</strong><small>PNG или JPG до 2 МБ</small><input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event)=>setLogoFile(event.target.files?.[0]??null)} /></div></label>
-        <label><span>Название бота</span><input aria-invalid={attempted&&nameMissing} aria-describedby={attempted&&nameMissing?"bot-name-error":undefined} value={botName} onChange={(event)=>setBotName(event.target.value)} placeholder="Например, Mono Store" />{attempted&&nameMissing&&<small id="bot-name-error" className="field-error">Введите название бота.</small>}</label>
-        <label className="full"><span>Описание</span><textarea aria-invalid={attempted&&descriptionMissing} aria-describedby={attempted&&descriptionMissing?"bot-description-error":undefined} value={botDescription} onChange={(event)=>setBotDescription(event.target.value)} placeholder="Коротко расскажите клиенту, что умеет бот" />{attempted&&descriptionMissing&&<small id="bot-description-error" className="field-error">Добавьте короткое описание.</small>}</label>
-        <label className="color-field"><span>Основной цвет</span><div><input type="color" value={primaryColor} onChange={(event)=>setPrimaryColor(event.target.value)} /><b>{primaryColor.toUpperCase()}</b></div></label>
-        <label className="color-field"><span>Дополнительный цвет</span><div><input type="color" value={secondaryColor} onChange={(event)=>setSecondaryColor(event.target.value)} /><b>{secondaryColor.toUpperCase()}</b></div></label>
-      </div>
-    </div><BotPreview template={template} name={botName} description={botDescription} primaryColor={primaryColor} secondaryColor={secondaryColor} logo={logoPreview} /></div>
-    <div className="flow-actions"><span /><button className="flow-primary" onClick={continueToType}>Выбрать тип бота <ArrowRight /></button></div>
-  </div>;
-}
-
-function TypeStep({ selected, onSelect, onBack, onSave, saveState, saveError }: { selected:TemplateId|null; onSelect:(id:TemplateId)=>void; onBack:()=>void; onSave:()=>void; saveState:SaveState; saveError:string }) {
-  const selectedTemplate = templates.find((item)=>item.id===selected);
-  return <div className="flow-step"><div className="flow-heading"><span>Шаг 2 из 5</span><h1>Выберите тип бота</h1><p>После выбора сразу появятся разделы и возможности, подготовленные для этого бизнеса.</p></div>
-    <div className="template-grid compact">{templates.map((item) => { const Icon = item.icon; return <button key={item.id} className={selected === item.id ? "selected" : ""} onClick={() => onSelect(item.id)}><span className="template-icon"><Icon /></span><span><strong>{item.title}</strong><small>{item.description}</small></span>{selected === item.id && <Check className="template-check" />}</button>; })}</div>
-    {selectedTemplate ? <section className="type-capabilities"><span className="ready-badge"><Check />Структура готова</span><h2>Возможности «{selectedTemplate.title}»</h2><p>Эти разделы появятся в кабинете сразу после создания бота.</p><div className="capability-list">{selectedTemplate.capabilities.map(({icon:Icon,title,text})=><div key={title}><span><Icon/></span><p><strong>{title}</strong><small>{text}</small></p><Check/></div>)}</div></section> : <section className="type-placeholder"><Bot/><strong>Выберите один из вариантов</strong><p>Мы покажем, какие инструменты будут доступны в вашем боте.</p></section>}
-    {saveError && <p className="save-error">{saveError}</p>}
-    <div className="flow-actions"><button className="flow-secondary" onClick={onBack}><ArrowLeft />Назад</button><button className="flow-primary" disabled={!selected || saveState === "saving"} onClick={onSave}>{saveState === "saving" ? "Создаём бота…" : "Создать бота"} {saveState !== "saving" && <ArrowRight />}</button></div>
-  </div>;
-}
-
-function BotPreview({ template, name, description, primaryColor, secondaryColor, logo }: { template:Template; name:string; description:string; primaryColor:string; secondaryColor:string; logo:string }) {
-  const Icon = template.icon;
-  return <aside className="bot-live-preview"><div className="preview-top"><span>Предпросмотр</span><i>Mini App</i></div><div className="preview-screen" style={{background:secondaryColor}}><div className="preview-logo" style={{background:primaryColor}}>{logo ? <img src={logo} alt="" /> : <Icon />}</div><h2>{name || "Название бота"}</h2><p>{description || "Здесь появится описание вашего бота."}</p><button style={{background:primaryColor}}>Начать</button><div className="preview-cards">{template.capabilities.slice(0,2).map(({title,icon:CardIcon})=><span key={title}><CardIcon/><b>{title}</b></span>)}</div></div></aside>;
-}
-
-function CreatedStep({ template, botName, botDescription, primaryColor, secondaryColor, logoPreview, warning, botId, onEdit, onStart }: { template:Template; botName:string; botDescription:string; primaryColor:string; secondaryColor:string; logoPreview:string; warning:string; botId:string|null; onEdit:()=>void; onStart:()=>void }) {
-  return <div className="flow-step created-step"><div className="success-mark"><Check /></div><div className="flow-heading"><span>Основа готова</span><h1>Бот «{botName}» создан</h1><p>Основа создана. Сначала настройте приветственное сообщение и кнопки в Telegram. Каталог можно заполнить позже.</p></div>
-    <div className="created-summary"><BotPreview template={template} name={botName} description={botDescription} primaryColor={primaryColor} secondaryColor={secondaryColor} logo={logoPreview} /><div className="created-next"><span className="ready-badge"><Check />Бот создан</span><h2>Настройте Telegram-бота</h2><p>Мы подготовили структуру «{template.title}». Первым делом настройте сообщение /start и кнопки. Добавлять товары прямо сейчас не обязательно.</p><div className="capability-list">{template.capabilities.map(({icon:CapabilityIcon,title,text})=><div key={title}><span><CapabilityIcon/></span><p><strong>{title}</strong><small>{text}</small></p><Check/></div>)}</div></div></div>
-    {warning && <p className="save-error">{warning}</p>}
-    <div className="flow-actions"><button className="flow-secondary" onClick={onEdit}><Palette />Изменить настройки</button><div className="flex flex-wrap gap-3"><button className="flow-secondary" onClick={onStart}>Добавить {template.item} позже или сейчас</button><Link className="flow-primary" href={botId?`/workspace/builder?bot=${encodeURIComponent(botId)}`:"/workspace"}>Настроить сообщение и кнопки <ArrowRight /></Link></div></div>
-  </div>;
-}
-
-function ItemStep({ template, itemName, setItemName, price, setPrice, description, setDescription, onBack, onSave, botId, saveState, saveError }: { template:Template; itemName:string; setItemName:(v:string)=>void; price:string; setPrice:(v:string)=>void; description:string; setDescription:(v:string)=>void; onBack:()=>void; onSave:()=>void; botId:string|null; saveState:SaveState; saveError:string }) {
-  return <div className="flow-step"><div className="flow-heading"><span>Шаг 3 из 4</span><h1>{template.firstAction}</h1><p>Бот уже создан. Теперь добавьте первый элемент, чтобы клиент увидел наполненный каталог.</p></div>
-    <div className="item-editor"><label className="item-photo"><ImagePlus /><strong>Добавить фото</strong><small>JPG или PNG до 5 МБ</small><input className="sr-only" type="file" accept="image/*" /></label><div className="item-fields"><label><span>{template.nameLabel}</span><input autoFocus value={itemName} onChange={(event) => setItemName(event.target.value)} placeholder={template.namePlaceholder} /></label><label><span>{template.priceLabel}</span><div className="price-input"><input inputMode="numeric" value={price} onChange={(event) => setPrice(event.target.value.replace(/\D/g,""))} placeholder="0" /><b>сум</b></div></label><label className="full"><span>Короткое описание</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Что важно знать клиенту?" /></label></div></div>
-    {saveError && <p className="save-error">{saveError}</p>}
-    <div className="flow-actions"><button className="flow-secondary" onClick={onBack}><ArrowLeft />Назад</button><div className="flex flex-wrap items-center justify-end gap-3"><Link className="flow-secondary" aria-disabled={saveState === "saving"} href={botId ? `/workspace/builder?bot=${encodeURIComponent(botId)}` : "/workspace"}>Пропустить и настроить позже <ArrowRight /></Link><button className="flow-primary" disabled={!itemName.trim() || saveState === "saving"} onClick={onSave}>{saveState === "saving" ? "Сохраняю…" : `Сохранить ${template.item}`} {saveState !== "saving" && <ArrowRight />}</button></div></div>
-  </div>;
-}
-
-function DoneStep({ template, botName, itemName, price, botId, onAdd }: { template:Template; botName:string; itemName:string; price:string; botId:string|null; onAdd:()=>void }) {
-  return <div className="flow-step done-step"><div className="success-mark"><Check /></div><div className="flow-heading"><span>Готов к работе</span><h1>Первый {template.item} добавлен</h1><p>{itemName} опубликован в «{botName}». Теперь можно открыть превью или продолжить наполнение.</p></div>
-    <div className="first-item-card"><span className="first-item-image"><Package /></span><div><small>{template.item}</small><strong>{itemName}</strong><p>{price ? `${Number(price).toLocaleString("ru-RU")} сум` : "Цена не указана"}</p></div><span className="published-badge">Активен</span></div>
-    <div className="launch-actions"><button className="flow-secondary" onClick={onAdd}><Plus />Добавить ещё</button><Link className="flow-primary" href={botId?`/workspace/builder?bot=${botId}`:"/workspace/builder"}>Настроить и посмотреть превью <ArrowRight /></Link></div>
-  </div>;
-}
-
-function Step({ number, label, active, done }: { number:string; label:string; active:boolean; done:boolean }) { return <div className={`${active ? "active" : ""} ${done ? "done" : ""}`}><span>{done ? <Check /> : number}</span><strong>{label}</strong></div>; }
