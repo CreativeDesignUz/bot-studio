@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Check, Minus, Plus, ShoppingBag, Store, Truck, UserRound, X } from "lucide-react";
+import ServiceMiniApp from "./service-miniapp";
 
 type Item = { id: string; name: string; description: string; image_url: string | null; price_minor: number | null; currency: string };
 type Shop = { bot: { id: string; name: string; description: string; logoUrl: string | null; color: string; template: string }; items: Item[] };
@@ -76,6 +77,8 @@ export default function MiniAppPage() {
 
   if (loading) return <main className="grid min-h-dvh place-items-center text-[#667085]">Загружаем магазин…</main>;
   if (!shop) return <main className="grid min-h-dvh place-items-center p-6 text-center"><div><ShoppingBag className="mx-auto mb-4 size-10 text-[#98a2b3]"/><h1 className="text-xl font-bold">Магазин недоступен</h1><p className="mt-2 text-[#667085]">{error}</p></div></main>;
+
+  if (shop.bot.template === "service") return <ServiceMiniApp shop={shop}/>;
 
   return <main className="min-h-dvh bg-[#f7f8fa] pb-28 text-[#101828]" style={{ fontFamily: "system-ui, sans-serif" }}>
     <div className="mx-auto max-w-[550px]">
