@@ -8,6 +8,8 @@ type DraftPayload = {
   description?: string;
   color?: string;
   buttons?: unknown;
+  bio?: string;
+  welcome?: string;
 };
 
 export async function GET(request: Request) {
@@ -24,9 +26,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const payload = await request.json() as DraftPayload;
-  if (!payload.botId || !payload.name?.trim() || !payload.description?.trim()) {
+  if (!payload.botId || !payload.name?.trim()) {
     return Response.json({ error: "Bot, name and description are required" }, { status: 400 });
   }
+  if ((payload.bio?.length ?? 0) > 120 || (payload.welcome?.length ?? 0) > 4096 || (payload.description?.length ?? 0) > 512) return Response.json({ error: "Превышен лимит текста профиля." }, { status: 400 });
   let buttons;
   try { buttons = payload.buttons == null ? null : normalizeBotButtons(payload.buttons); }
   catch { return Response.json({ error: "Проверьте названия и адреса кнопок." }, { status: 400 }); }
@@ -42,5 +45,8 @@ export async function POST(request: Request) {
     p_home_buttons: buttons,
   });
   if (error || !bot) return Response.json({ error: "Бот не найден или у вас нет доступа." }, { status: 404 });
+  const settings = (bot.settings ?? {}) as Record<string, unknown>;
+  const updated = await supabase.from("bots").update({ settings: { ...settings, telegram_bio: payload.bio ?? "", welcome_message: payload.welcome ?? payload.description ?? "" } }).eq("id",payload.botId).eq("owner_id",appUser.id).select("id").maybeSingle();
+  if (updated.error || !updated.data) return Response.json({ error: "Не удалось сохранить параметры Telegram." }, { status: 500 });
   return withSessionCookie({ bot }, 200, setCookie);
 }
