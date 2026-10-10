@@ -89,9 +89,9 @@ export default function BotBuilder(){
  }
  if(loadState==="loading")return <main className="grid min-h-screen place-items-center bg-[#f4f6f8] text-sm text-[#667085]"><span className="flex items-center gap-3"><LoaderCircle className="size-5 animate-spin"/>Загружаем данные бота…</span></main>;
  if(loadState==="error")return <main className="grid min-h-screen place-items-center bg-[#f4f6f8] p-5 text-[#101828]"><section className="w-full max-w-lg rounded-[24px] border border-[#e4e7ec] bg-white p-8 text-center"><span className="mx-auto grid size-14 place-items-center rounded-2xl bg-[#fff1f3] text-[#c01048]"><Bot/></span><h1 className="mt-5 text-2xl font-semibold">Не удалось открыть редактор</h1><p className="mt-2 text-sm leading-6 text-[#667085]">{loadError}</p><div className="mt-6 flex justify-center gap-3"><Link href="/workspace" className="inline-flex h-11 items-center rounded-xl border border-[#d0d5dd] px-4 text-sm font-semibold no-underline">В кабинет</Link><button onClick={()=>location.reload()} className="h-11 rounded-xl bg-[#101828] px-5 text-sm font-semibold text-white">Повторить</button></div></section></main>;
- return <main className="min-h-screen bg-[#f9fafb] text-[#080b2b]">
-  <div className="mx-auto grid min-h-screen max-w-[1600px] xl:grid-cols-[270px_minmax(0,1fr)]">
-   <aside className="flex flex-col border-r border-[#cbd5e0] bg-[#f1f2f4] px-4 py-5">
+ return <main className="min-h-dvh bg-[#f9fafb] text-[#080b2b] xl:h-dvh xl:overflow-hidden">
+  <div className="mx-auto grid min-h-dvh max-w-[1600px] xl:h-full xl:min-h-0 xl:grid-cols-[270px_minmax(0,1fr)]">
+   <aside className="flex min-h-0 flex-col border-r border-[#cbd5e0] bg-[#f1f2f4] px-4 py-5 xl:h-full xl:overflow-y-auto">
     <Link href="/workspace" className="flex items-center gap-2 rounded-lg px-1 no-underline"><span className="grid size-9 place-items-center rounded-[9px] bg-[#4420e7] text-white"><Bot className="size-5"/></span><strong className="text-[18px] tracking-[-.02em] text-[#080b2b]">BotStudio</strong></Link>
     <div className="mt-5 flex h-10 items-center gap-2 rounded-lg border border-[#cbd5e0] bg-[#f8f9fb] px-3 text-[#718096]"><Eye className="size-4"/><span className="text-xs">Поиск смысла</span><span className="ml-auto rounded border px-1 text-[10px]">⌘1</span></div>
     <nav className="mt-7 space-y-1 text-sm">
@@ -111,13 +111,13 @@ export default function BotBuilder(){
     </nav>
     <div className="mt-auto space-y-3 border-t border-[#dfe4ea] pt-5 text-sm text-[#718096]"><Link href="/workspace" className="block no-underline">⚙ Настройки</Link><span className="block">☾ Тёмная сторона</span><span className="block border-t border-[#dfe4ea] pt-3 text-xs">Bot Studio · Редактор</span></div>
    </aside>
-   <div className="min-w-0 px-5 py-5 sm:px-8 xl:px-12">
+   <div className="flex min-h-0 min-w-0 flex-col px-5 py-5 sm:px-8 xl:h-full xl:overflow-hidden xl:px-12">
     <div className="flex flex-wrap items-center justify-between gap-3">
      <Link href="/workspace" className="flex items-center gap-3 text-sm font-semibold text-[#080b2b] no-underline"><ArrowLeft className="size-5 text-[#4420e7]"/>Изменить данные</Link>
      <div className="flex gap-2"><button onClick={save} disabled={!dirty} className="h-10 rounded-[8px] border border-[#cbd5e0] px-4 text-sm font-medium disabled:opacity-50">Сохранить</button><button onClick={publish} className="h-10 rounded-[8px] bg-[#4420e7] px-4 text-sm font-semibold !text-white">Опубликовать</button></div>
     </div>
-    <div className={`mx-auto mt-12 ${activeSection==="message"?"grid max-w-[850px] items-start gap-6 lg:grid-cols-[minmax(0,460px)_minmax(0,370px)]":"grid max-w-[1150px] items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,370px)]"}`}>
-    <section className="min-w-0 space-y-5">
+    <div className={`mt-7 min-h-0 flex-1 ${activeSection==="message"?"grid max-w-[850px] items-start gap-6 lg:grid-cols-[minmax(0,460px)_minmax(0,370px)]":"grid max-w-[1150px] items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,370px)]"} xl:ml-[clamp(0px,7vw,120px)] xl:overflow-hidden`}>
+    <section className="min-h-0 min-w-0 space-y-5 xl:h-full xl:overflow-y-auto xl:pr-1">
     {activeSection==="message" && <div className="rounded-[10px] border border-[#dadadd] bg-white px-4 py-5">
       <div className="space-y-4 text-[14px]">
        <Field label="Название бота *"><input value={name} maxLength={64} onChange={e=>change(()=>setName(e.target.value))} placeholder="Название бота"/></Field>
@@ -172,7 +172,7 @@ export default function BotBuilder(){
       <p className="mt-4 text-xs text-[#98a2b3]">Предпросмотр справа не отправляет сообщения в Telegram, пока бот не подключён и не опубликован.</p>
     </div>}
     </section>
-    <aside className="min-w-0">
+    <aside className="min-h-0 min-w-0 xl:h-full xl:overflow-hidden">
      <div className="mb-3 flex items-center justify-between gap-2">
       <span className="text-xs font-semibold text-[#080b2b]">Предпросмотр</span>
       <div className="flex gap-1 rounded-lg bg-[#eef0f4] p-1">
@@ -193,5 +193,5 @@ export default function BotBuilder(){
   {publishState==="connection"&&connectUrl&&<div className="fixed bottom-5 left-1/2 z-50 flex w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 items-center gap-3 rounded-2xl bg-[#101828] px-5 py-4 text-sm text-white shadow-xl"><span className="flex-1"><strong className="block">Проект сохранён</strong><small className="text-white/70">Подтвердите создание бота в Telegram — после этого публикация завершится автоматически.</small></span><a href={connectUrl} className="shrink-0 rounded-xl bg-white px-4 py-2 font-semibold text-[#101828]">Открыть Telegram</a></div>}
  </main>
 }
-function Field({label,children}:{label:string;children:React.ReactNode}){return <label><span className="mb-2 block text-sm font-medium">{label}</span><span className="[&>input]:h-11 [&>input]:w-full [&>input]:rounded-xl [&>input]:border [&>input]:border-[#d0d5dd] [&>input]:px-3 [&>textarea]:min-h-24 [&>textarea]:w-full [&>textarea]:rounded-xl [&>textarea]:border [&>textarea]:border-[#d0d5dd] [&>textarea]:p-3">{children}</span></label>}
+function Field({label,children}:{label:string;children:React.ReactNode}){return <label><span className="mb-2 block text-sm font-medium">{label}</span><span className="[&>input]:h-10 [&>input]:w-full [&>input]:rounded-[8px] [&>input]:border [&>input]:border-[#cbd5e0] [&>input]:px-3 [&>textarea]:min-h-[70px] [&>textarea]:w-full [&>textarea]:rounded-[8px] [&>textarea]:border [&>textarea]:border-[#cbd5e0] [&>textarea]:p-3">{children}</span></label>}
 function PublishOverlay({state}:{state:PublishState}){const title=state==="saving"?"Сохраняем изменения":state==="validating"?"Проверяем данные":"Публикуем в Telegram";const text=state==="publishing"?"Собираем новую версию Mini App и обновляем меню бота. Обычно это занимает до минуты.":"Проверяем обязательные поля, изображения и настройки кнопок.";return <div className="fixed inset-0 z-50 grid place-items-center bg-[#101828]/45 p-4"><div className="w-full max-w-md rounded-[24px] bg-white p-7 text-center shadow-2xl"><span className="mx-auto grid size-14 place-items-center rounded-2xl bg-[#f0ecff] text-[#6d45f5]"><LoaderCircle className="size-7 animate-spin"/></span><h2 className="mt-5 text-xl font-semibold">{title}</h2><p className="mt-2 text-sm leading-6 text-[#667085]">{text}</p><div className="mt-6 h-2 overflow-hidden rounded-full bg-[#eaecf0]"><div className={`h-full rounded-full bg-[#6d45f5] transition-all ${state==="publishing"?"w-[82%]":"w-[45%]"}`}/></div><p className="mt-3 text-xs text-[#98a2b3]">Не закрывайте окно до завершения публикации</p></div></div>}
