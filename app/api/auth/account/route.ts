@@ -5,7 +5,7 @@ import { issueAuthCookie,clearAuthCookie,readAuthUserId } from "@/lib/auth/accou
 type LoginInput={provider?:string;accessToken?:string;telegram?:Record<string,unknown>};
 function fail(error:string,status:number){return Response.json({error},{status})}
 async function telegramIdentity(raw:Record<string,unknown>){
- const token=env.TELEGRAM_MANAGER_TOKEN;
+ const token=env.TELEGRAM_LOGIN_BOT_TOKEN??env.TELEGRAM_MANAGER_TOKEN;
  if(!token)return null;
  const hash=raw.hash;
  const authDate=raw.auth_date;
