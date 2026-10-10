@@ -1,9 +1,9 @@
-import CatalogManager from "./catalog-manager";
 "use client";
+import CatalogManager from "./catalog-manager";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Bell, Bot, ChevronDown, CircleCheck, Clock3, MoreHorizontal, Plus, Search, Settings, TrendingUp } from "lucide-react";
+import { Bell, Bot, ChevronDown, CircleCheck, Clock3, Plus, Search, Settings, TrendingUp } from "lucide-react";
 import { BotTemplateId, productTemplates } from "@/lib/product/templates";
 
 const demoBots: { id: string; name: string; type: BotTemplateId; username: string }[] = [
