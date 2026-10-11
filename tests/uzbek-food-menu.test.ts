@@ -2,12 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 
-test("demo Uzbek menu is explicitly seeded only into owner's empty delivery bot",async()=>{
+test("demo Uzbek menu is safely seeded only into owned delivery bot",async()=>{
  const route=await readFile(new URL("../app/api/catalog/seed-uzbek/route.ts",import.meta.url),"utf8");
  assert.match(route,/resolveAppUser/);
  assert.match(route,/eq\("owner_id",user\.id\)/);
  assert.match(route,/bot\.template_type!=="delivery"/);
- assert.match(route,/\.length\)return Response\.json/);
+ assert.match(route,/missing=menu\.filter/);
+ assert.match(route,/if\(!missing\.length\)/);
  assert.match(route,/Ташкентский плов/);
  assert.match(route,/Манты с говядиной/);
  assert.match(route,/Лагман/);
