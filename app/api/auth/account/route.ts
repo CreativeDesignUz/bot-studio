@@ -3,6 +3,7 @@ import { getSupabaseServer } from "@/lib/supabase/server";
 import { issueAuthCookie,clearAuthCookie,readAuthUserId } from "@/lib/auth/account-session";
 
 type LoginInput={provider?:string;accessToken?:string;telegram?:Record<string,unknown>};
+export type VerifiedTelegramIdentity={id:string;first_name:string;last_name:string;username:string|null};
 function fail(error:string,status:number){return Response.json({error},{status})}
 async function telegramIdentity(raw:Record<string,unknown>){
  const token=env.TELEGRAM_LOGIN_BOT_TOKEN??env.TELEGRAM_MANAGER_TOKEN;
@@ -39,27 +40,11 @@ export async function GET(request:Request){
  return Response.json(data?{authenticated:true,user:{name:data.first_name,telegram:data.telegram_username,googleLinked:!!data.auth_user_id}}:{authenticated:false});
 }
 
-export async function POST(request:Request){
- let payload:LoginInput;
- try{payload=await request.json() as LoginInput}catch{return fail("Неверные данные.",400)}
+export async function verifiedTelegramSession(request:Request,tg:VerifiedTelegramIdentity){
+ return createAccountSession(request,{telegram_id:tg.id,telegram_username:tg.username,first_name:tg.first_name,last_name:tg.last_name},"telegram_id",tg.id);
+}
+async function createAccountSession(request:Request,account:Record<string,unknown>,identityKey:"auth_user_id"|"telegram_id",identityValue:string){
  const supabase=getSupabaseServer({privileged:true});
- let account:Record<string,unknown>;
- let identityKey:"auth_user_id"|"telegram_id";
- let identityValue:string;
- if(payload.provider==="google"){
-  if(!payload.accessToken||payload.accessToken.length>5000)return fail("Google-токен отсутствует.",400);
-  const {data:{user},error}=await supabase.auth.getUser(payload.accessToken);
-  if(error||!user||user.app_metadata?.provider!=="google")return fail("Не удалось проверить Google.",401);
-  identityKey="auth_user_id";identityValue=user.id;
-  account={auth_user_id:user.id,first_name:String(user.user_metadata?.full_name??user.user_metadata?.name??user.email?.split("@")[0]??"Google").slice(0,100)};
- }else if(payload.provider==="telegram"){
-  if(!payload.telegram||typeof payload.telegram!=="object")return fail("Нет данных Telegram.",400);
-  const tg=await telegramIdentity(payload.telegram);
-  if(!tg)return fail("Telegram не подтвердил вход.",401);
-  identityKey="telegram_id";identityValue=tg.id;
-  account={telegram_id:tg.id,telegram_username:tg.username,first_name:tg.first_name,last_name:tg.last_name};
- }else return fail("Неизвестный способ входа.",400);
-
  const {data:existing,error:lookupError}=await supabase.from("app_users").select("id").eq(identityKey,identityValue).maybeSingle();
  if(lookupError)return fail("Не удалось проверить аккаунт.",503);
  let id:string;
@@ -85,6 +70,17 @@ export async function POST(request:Request){
  try{cookie=await issueAuthCookie(id)}catch{return fail("Вход ещё не настроен на сервере. Требуется BOT_STUDIO_AUTH_SECRET.",503)}
  return new Response(JSON.stringify({ok:true,redirectTo:"/workspace"}),{status:200,headers:{"content-type":"application/json","set-cookie":cookie,"cache-control":"no-store"}});
 }
+export async function POST(request:Request){
+ let payload:LoginInput;
+ try{payload=await request.json() as LoginInput}catch{return fail("Неверные данные.",400)}
+ if(payload.provider!=="google")return fail("Используйте защищённый Telegram OIDC вход.",400);
+ if(!payload.accessToken||payload.accessToken.length>5000)return fail("Google-токен отсутствует.",400);
+ const supabase=getSupabaseServer({privileged:true});
+ const {data:{user},error}=await supabase.auth.getUser(payload.accessToken);
+ if(error||!user||user.app_metadata?.provider!=="google")return fail("Не удалось проверить Google.",401);
+ return createAccountSession(request,{auth_user_id:user.id,first_name:String(user.user_metadata?.full_name??user.user_metadata?.name??user.email?.split("@")[0]??"Google").slice(0,100)},"auth_user_id",user.id);
+}
+
 export async function DELETE(){
  return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json","set-cookie":clearAuthCookie()}});
 }
