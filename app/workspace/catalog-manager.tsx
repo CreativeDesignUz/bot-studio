@@ -61,7 +61,6 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
   useEffect(()=>{
     if(type!=="delivery"&&type!=="store")return;
     const c=new AbortController();
-    setDemoState("loading");
     void fetch("/api/demo-content?bot="+encodeURIComponent(botId),{
       headers:{"x-telegram-init-data":telegramData()},signal:c.signal,cache:"no-store"
     }).then(async response=>{
