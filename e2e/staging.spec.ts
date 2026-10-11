@@ -295,3 +295,67 @@ test("unsigned admin workspace redirects to login",async({page})=>{
   await page.goto("/workspace");
   await expect(page).toHaveURL(/\/auth$/);
 });
+
+
+// Verification UX: test real browser states without contacting or modifying a Telegram bot.
+test("BotFather verification button animates until Telegram responds",async({page})=>{
+  const botId="c86fd579-1498-462f-8980-83a52aa42e1f";
+  let inspectionCalls=0;
+  let releaseInspection!:()=>void;
+  const pendingInspection=new Promise<void>(resolve=>{releaseInspection=resolve});
+  await page.route("**/api/auth/account",route=>route.fulfill({
+    status:200,contentType:"application/json",body:JSON.stringify({authenticated:true})
+  }));
+  await page.route("**/api/onboarding",route=>route.fulfill({
+    status:200,contentType:"application/json",body:JSON.stringify({bot:{id:botId}})
+  }));
+  await page.route("**/api/channels/telegram/token",async route=>{
+    inspectionCalls++;
+    await pendingInspection;
+    await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({
+      credentialId:"c3d21650-e18c-4f9a-83a9-9a2663df04ee",
+      bot:{id:123456789,name:"QA bot",username:"BotStudioQaTestBot"}
+    })});
+  });
+  await page.goto("/onboarding");
+  await page.getByRole("button",{name:/Продолжить/}).click();
+  await page.getByRole("button",{name:/Продолжить/}).click();
+  await page.getByRole("textbox",{name:/Название бота/}).fill("QA E2E demo");
+  await page.getByPlaceholder("Telegram Bot API token").fill("123456789:"+"A".repeat(46));
+  await page.getByRole("button",{name:"Проверить",exact:true}).click();
+  const checking=page.getByRole("button",{name:"Проверяем…"});
+  await expect(checking).toBeVisible();
+  await expect(checking).toBeDisabled();
+  await expect(page.getByLabel("Telegram Bot API token")).toBeDisabled();
+  await expect(page.getByText("Токен успешно проверен")).toHaveCount(0);
+  expect(inspectionCalls).toBe(1);
+  releaseInspection();
+  await expect(page.getByRole("button",{name:"Успешно"})).toBeVisible();
+  await expect(page.getByText("Токен успешно проверен")).toBeVisible();
+  await expect(page.getByRole("button",{name:"Подтвердить подключение"})).toBeVisible();
+  await page.getByRole("button",{name:"Другой токен"}).click();
+  await expect(page.getByRole("button",{name:"Проверить",exact:true})).toBeVisible();
+  await expect(page.getByLabel("Telegram Bot API token")).toBeEnabled();
+});
+
+test("BotFather token rejection never reports success and permits retry",async({page})=>{
+  await page.route("**/api/auth/account",route=>route.fulfill({
+    status:200,contentType:"application/json",body:JSON.stringify({authenticated:true})
+  }));
+  await page.route("**/api/onboarding",route=>route.fulfill({
+    status:200,contentType:"application/json",body:JSON.stringify({bot:{id:"c86fd579-1498-462f-8980-83a52aa42e1f"}})
+  }));
+  await page.route("**/api/channels/telegram/token",route=>route.fulfill({
+    status:401,contentType:"application/json",body:JSON.stringify({error:"Telegram отклонил токен"})
+  }));
+  await page.goto("/onboarding");
+  await page.getByRole("button",{name:/Продолжить/}).click();
+  await page.getByRole("button",{name:/Продолжить/}).click();
+  await page.getByRole("textbox",{name:/Название бота/}).fill("QA E2E demo");
+  await page.getByPlaceholder("Telegram Bot API token").fill("123456789:"+"A".repeat(46));
+  await page.getByRole("button",{name:"Проверить",exact:true}).click();
+  await expect(page.getByRole("alert")).toContainText("Telegram отклонил токен");
+  await expect(page.getByRole("button",{name:"Проверить",exact:true})).toBeEnabled();
+  await expect(page.getByRole("button",{name:"Успешно"})).toHaveCount(0);
+  await expect(page.getByText("Токен успешно проверен")).toHaveCount(0);
+});
