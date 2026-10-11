@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ImagePlus, LoaderCircle, Pencil, Plus, Search, Trash2, Upload, X } from "lucide-react";
+import { LoaderCircle, Pencil, Plus, Search, Trash2, Upload, X } from "lucide-react";
 import { formatCatalogPrice, formatStoredPrice, priceToMinor, type CatalogCurrency } from "@/lib/catalog/price";
 
 type Item = { id: string; name: string; description: string; price_minor: number | null; is_active: boolean; currency: string; image_url?:string|null;category_id?:string|null; ingredients?:string[];allergens?:string[];preparation_minutes?:number|null;stock_quantity?:number|null };
@@ -171,7 +171,8 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
     {editing!==null&&<div className="fixed inset-0 z-50 flex items-center justify-center bg-[#101828]/60 p-3 sm:p-5">
       <div role="dialog" aria-modal="true" aria-label={editing==="new"?"Добавить "+noun:"Редактировать "+noun} className="flex max-h-[min(85dvh,740px)] min-h-0 w-full max-w-lg flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
         <div className="flex shrink-0 items-center justify-between border-b border-[#eaecf0] px-5 py-4 sm:px-6"><h2 className="text-lg font-semibold">{editing==="new"?"Добавить":"Редактировать"} {noun}</h2><button type="button" onClick={()=>setEditing(null)} aria-label="Закрыть" className="grid size-9 place-items-center rounded-lg hover:bg-[#f2f4f7]"><X size={19}/></button></div>
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6"><label className="block text-sm font-medium">Название<input maxLength={120} value={name} onChange={e=>setName(e.target.value)} className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/></label>
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6">
+          {error&&<p role="alert" className="rounded-lg bg-[#fff1f2] p-3 text-sm text-[#be123c]">{error}</p>}<label className="block text-sm font-medium">Название<input maxLength={120} value={name} onChange={e=>setName(e.target.value)} className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/></label>
           <label className="block text-sm font-medium">Описание<textarea maxLength={2000} value={description} onChange={e=>setDescription(e.target.value)} rows={3} className="mt-2 w-full rounded-xl border border-[#d0d5dd] p-3"/></label>
           {(type==="delivery"||type==="store")&&<label className="block text-sm font-medium">Категория<select value={categoryId} onChange={e=>setCategoryId(e.target.value)} className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"><option value="">Без категории</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
           <div className="space-y-3 text-sm font-medium"><p>{type==="delivery"?"Фото блюда":"Фото товара"}</p>
