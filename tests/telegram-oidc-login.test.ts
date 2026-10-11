@@ -23,3 +23,12 @@ test("legacy Telegram hash payload cannot create accounts",async()=>{
  const api=await readFile(new URL("../app/api/auth/account/route.ts",import.meta.url),"utf8");
  assert.match(api,/Используйте защищённый Telegram OIDC вход/);
 });
+
+test("OIDC opaque subject does not overflow legacy Telegram bigint",async()=>{
+ const service=await readFile(new URL("../lib/auth/account-service.ts",import.meta.url),"utf8");
+ const migration=await readFile(new URL("../supabase/migrations/202610110013_telegram_oidc_subject.sql",import.meta.url),"utf8");
+ assert.match(service,/telegram_oidc_sub:tg\.id/);
+ assert.match(service,/"telegram_oidc_sub",tg\.id/);
+ assert.match(migration,/telegram_oidc_sub text/);
+ assert.match(migration,/unique index/);
+});
