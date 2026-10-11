@@ -7,6 +7,10 @@ import { formatCatalogPrice, formatStoredPrice, priceToMinor, type CatalogCurren
 type Item = { id: string; name: string; description: string; price_minor: number | null; is_active: boolean; currency: string; image_url?:string|null;category_id?:string|null; ingredients?:string[];allergens?:string[];preparation_minutes?:number|null;stock_quantity?:number|null };
 type Category={id:string;name:string;position:number;is_active:boolean};
 type ApiResult = { items?: Item[]; categories?:Category[]; item?: Item; created?:number; error?: string };
+type PublicationStatus = {
+  isPublished:boolean; canUpdate:boolean; hasDemo:boolean; changed:boolean; revision:number;
+  draftItems:number; draftCategories:number; publishedItems:number; publishedCategories:number;
+};
 const formatMoney = (minor: number, currency: string) => `${formatStoredPrice(minor, currency === "USD" ? "USD" : "UZS")} ${currency === "USD" ? "$" : "сум"}`;
 const telegramData = () => (window as typeof window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData ?? "";
 
@@ -40,6 +44,19 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
   const [demoAcknowledged,setDemoAcknowledged]=useState(false);
   const [demoImporting,setDemoImporting]=useState(false);
   const [demoState,setDemoState]=useState<"loading"|"available"|"imported"|"blocked">("loading");
+  const [publication,setPublication]=useState<PublicationStatus|null>(null);
+  const [publicationDialog,setPublicationDialog]=useState(false);
+  const [publishingCatalog,setPublishingCatalog]=useState(false);
+  const readPublicationStatus=useCallback(async()=>{
+    if(type==="service")return;
+    try{
+      const response=await fetch("/api/catalog/publish?bot="+encodeURIComponent(botId),{
+        headers:{"x-telegram-init-data":telegramData()},cache:"no-store"
+      });
+      if(!response.ok)throw Error("Проверка публикации недоступна");
+      setPublication(await response.json() as PublicationStatus);
+    }catch{setPublication(null)}
+  },[botId,type]);
 
   const refresh = useCallback(async () => {
     setLoading(true); setError("");
@@ -54,9 +71,10 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
         if(!categoriesResponse.ok)throw new Error(categoriesBody.error??"Не удалось загрузить категории.");
         setCategories(categoriesBody.categories??[]);
       } else setCategories([]);
+      await readPublicationStatus();
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Ошибка загрузки."); }
     finally { setLoading(false); }
-  }, [botId,type]);
+  }, [botId,type,readPublicationStatus]);
   useEffect(() => { void Promise.resolve().then(refresh); }, [refresh]);
   useEffect(()=>{
     if(type!=="delivery"&&type!=="store")return;
@@ -70,6 +88,25 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
     }).catch(()=>{if(!c.signal.aborted)setDemoState("blocked")});
     return()=>c.abort();
   },[botId,type]);
+
+  async function updateMiniApp(){
+    if(!publication||!publication.canUpdate||!publication.changed||publishingCatalog)return;
+    setPublishingCatalog(true);setError("");setNotice("");
+    try{
+      const response=await fetch("/api/catalog/publish",{
+        method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({botId,initData:telegramData(),
+          expectedRevision:publication.revision,confirm:"PUBLISH_CATALOG"})
+      });
+      const result=await response.json() as {error?:string;items?:number;categories?:number};
+      if(!response.ok)throw Error(result.error??"Не удалось обновить Mini App");
+      setPublicationDialog(false);
+      await readPublicationStatus();
+      setNotice("Каталог опубликован: "+(result.items??0)+" блюд / товаров, "+
+        (result.categories??0)+" категорий. Закройте и откройте Mini App в Telegram, чтобы увидеть обновление.");
+    }catch(cause){setError(cause instanceof Error?cause.message:"Не удалось обновить каталог");setPublicationDialog(false);await readPublicationStatus();}
+    finally{setPublishingCatalog(false)}
+  }
 
   async function runDemoAction(){
     if(!demoModal||!demoAcknowledged||demoImporting)return;
@@ -167,6 +204,14 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
       {(type==="delivery"||type==="store")&&<button type="button" onClick={()=>{setMenuView("categories");setEditingCategory("new");setCategoryName("")}} className="inline-flex h-11 items-center gap-2 rounded-xl border border-[#d0d5dd] px-4 text-sm font-semibold">+ Категория</button>}
       <button type="button" onClick={()=>{setMenuView("items");open()}} className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#101828] px-4 text-sm font-semibold !text-white"><Plus className="size-4"/>Добавить {noun}</button>
     </div>
+    {publication?.changed&&publication.isPublished&&<div role="status" className="mx-5 my-4 flex flex-wrap items-center gap-3 rounded-2xl border border-[#fcd99b] bg-[#fffbeb] p-4 text-sm text-[#92400e]">
+      <div className="min-w-0 flex-1"><strong className="block font-semibold">Изменения меню ещё не опубликованы</strong><p className="mt-1 leading-5">В кабинете: {publication.draftItems} позиций и {publication.draftCategories} категорий. В Telegram Mini App: {publication.publishedItems} позиций и {publication.publishedCategories} категорий.</p>
+      {publication.hasDemo&&<p className="mt-2 font-medium">Перед обновлением удалите демо-данные.</p>}</div>
+      <button type="button" disabled={!publication.canUpdate||publishingCatalog} onClick={()=>setPublicationDialog(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#6541f5] px-4 font-semibold text-white disabled:opacity-40">
+       {publishingCatalog&&<LoaderCircle className="size-4 animate-spin"/>}Обновить Mini App
+      </button>
+    </div>}
+    {publication&&!publication.isPublished&&<p className="mx-5 my-4 rounded-xl bg-[#f2f4f7] p-3 text-sm text-[#667085]">Меню сохранено как черновик. Чтобы покупатели увидели его в Telegram, сначала опубликуйте бота через мастер запуска.</p>}
     {(type==="delivery"||type==="store")&&<div className="flex gap-2 border-b border-[#eaecf0] px-5 py-3" role="tablist" aria-label="Управление меню">
       <button type="button" role="tab" aria-selected={menuView==="items"} onClick={()=>setMenuView("items")} className={`rounded-xl px-4 py-2 text-sm font-semibold ${menuView==="items"?"bg-[#101828] text-white":"bg-[#f2f4f7] text-[#475467]"}`}>{type==="delivery"?"Блюда":"Товары"} ({items.length})</button>
       <button type="button" role="tab" aria-selected={menuView==="categories"} onClick={()=>setMenuView("categories")} className={`rounded-xl px-4 py-2 text-sm font-semibold ${menuView==="categories"?"bg-[#101828] text-white":"bg-[#f2f4f7] text-[#475467]"}`}>Категории ({categories.length})</button>
@@ -200,6 +245,17 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
           <button type="button" onClick={()=>open(item)} aria-label={"Изменить "+item.name} className="grid size-10 place-items-center rounded-xl border border-[#d0d5dd]"><Pencil className="size-4"/></button>
           {item.is_active&&<button type="button" disabled={saving} onClick={()=>void archive(item)} aria-label={"Скрыть "+item.name} className="grid size-10 place-items-center rounded-xl border border-[#d0d5dd] text-[#b42318]"><Trash2 className="size-4"/></button>}
         </div>)}</div>)}
+    {publicationDialog&&publication&&<div className="fixed inset-0 z-[70] grid place-items-center bg-[#101828]/60 p-4" role="presentation">
+      <div role="dialog" aria-modal="true" aria-label="Подтвердить обновление Mini App" className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-[#eaecf0] px-6 py-4"><h2 className="text-lg font-semibold">Обновить меню в Telegram?</h2><button type="button" aria-label="Закрыть обновление" disabled={publishingCatalog} onClick={()=>setPublicationDialog(false)}><X className="size-5"/></button></div>
+        <div className="space-y-3 px-6 py-5 text-sm leading-6 text-[#475467]">
+          <p>Покупатели увидят <strong>{publication.draftItems} блюд / товаров</strong> и <strong>{publication.draftCategories} категорий</strong> после обновления Mini App.</p>
+          <p>Цены и фотографии из сохранённого каталога станут доступны покупателям. Подключать бота через BotFather повторно не требуется.</p>
+          <p className="rounded-xl bg-[#fff7ed] p-3 text-xs text-[#9a3412]">Проверьте названия, цены и изображения перед публикацией. Демо-данные публиковать нельзя.</p>
+        </div>
+        <div className="flex justify-end gap-3 border-t border-[#eaecf0] px-6 py-4"><button type="button" disabled={publishingCatalog} onClick={()=>setPublicationDialog(false)} className="h-11 rounded-xl border border-[#d0d5dd] px-4 text-sm font-semibold">Отмена</button><button type="button" onClick={()=>void updateMiniApp()} disabled={publishingCatalog||!publication.canUpdate} className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#6541f5] px-4 text-sm font-semibold text-white disabled:opacity-40">{publishingCatalog&&<LoaderCircle className="size-4 animate-spin"/>}{publishingCatalog?"Обновляем…":"Да, обновить Mini App"}</button></div>
+      </div>
+    </div>}
     {demoModal&&<div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#101828]/60 p-4" role="presentation">
       <div role="dialog" aria-modal="true" aria-label={demoModal==="import"?"Подтверждение загрузки демо-данных":"Подтверждение удаления демо-данных"} className="w-full max-w-[460px] overflow-hidden rounded-3xl bg-white shadow-2xl">
        <div className="flex items-center justify-between border-b border-[#eaecf0] px-6 py-4"><h2 className="text-lg font-semibold">{demoModal==="import"?"Загрузить демо-данные?":"Удалить демо-данные?"}</h2><button type="button" aria-label="Закрыть предупреждение" disabled={demoImporting} onClick={()=>{setDemoModal(null);setDemoAcknowledged(false)}}><X className="size-5"/></button></div>
