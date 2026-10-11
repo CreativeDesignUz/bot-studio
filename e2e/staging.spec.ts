@@ -60,3 +60,11 @@ test("Telegram callback fails closed without valid CSRF cookie", async ({ reques
   expect(response.status()).toBe(302);
   expect(response.headers()["location"]).toContain("/auth?error=telegram_session_expired");
 });
+
+// This blocks releases if the exact Cloudflare Worker encryption configuration is broken.
+test("Telegram token encryption round-trip works on deployed Worker", async ({ request }) => {
+  const response = await request.get("/api/health/telegram-encryption");
+  expect(response.status(), "BotFather token encryption must be ready before onboarding").toBe(200);
+  const payload = await response.json();
+  expect(payload).toEqual({ ready: true, component: "telegram-token-encryption" });
+});
