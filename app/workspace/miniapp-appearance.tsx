@@ -28,7 +28,7 @@ export default function MiniAppAppearance({botId}:{botId:string}){
      fetch("/api/catalog/categories?bot="+encodeURIComponent(botId),{headers,signal:abort.signal,cache:"no-store"}),
      fetch("/api/catalog?bot="+encodeURIComponent(botId),{headers,signal:abort.signal,cache:"no-store"})
     ]);
-    const [db,cb,ib]=await Promise.all([dr.json(),cr.json(),ir.json()]);
+    const [db,cb,ib]=await Promise.all([dr.json(),cr.json(),ir.json()]) as [{error?:string;design?:Partial<Design>},{error?:string;categories?:Category[]},{error?:string;items?:Item[]}];
     if(!dr.ok||!cr.ok||!ir.ok)throw new Error(db.error??cb.error??ib.error??"Не удалось загрузить настройки");
     if(!abort.signal.aborted){
      setDesign({...initial,...db.design,banner:{...initial.banner,...db.design?.banner}});
@@ -43,7 +43,7 @@ export default function MiniAppAppearance({botId}:{botId:string}){
   setSaving(true);setMessage("");setError("");
   try{
    const res=await fetch("/api/miniapp/design",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({botId,initData:telegramData(),...design})});
-   const body=await res.json();
+   const body=await res.json() as {error?:string};
    if(!res.ok)throw new Error(body.error??"Не удалось сохранить");
    setMessage("Черновик оформления сохранён. Опубликуйте изменения, чтобы их увидели покупатели.");
   }catch(e){setError(e instanceof Error?e.message:"Ошибка сохранения");}
