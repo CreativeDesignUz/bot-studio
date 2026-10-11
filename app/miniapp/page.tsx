@@ -15,6 +15,7 @@ const money = (value: number, currency = "UZS") => new Intl.NumberFormat("ru-RU"
 export default function MiniAppPage() {
   const [shop, setShop] = useState<Shop | null>(null);
   const [loading, setLoading] = useState(true);
+  const [retryCount, setRetryCount] = useState(0);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<Tab>("catalog");
   const [category,setCategory]=useState("all");
@@ -34,11 +35,18 @@ export default function MiniAppPage() {
     telegram?.ready?.(); telegram?.expand?.();
     const botId = new URLSearchParams(window.location.search).get("bot");
     if (!botId) { Promise.resolve().then(() => { setError("Не указан магазин"); setLoading(false); }); return; }
-    fetch("/api/miniapp?bot=" + encodeURIComponent(botId), { cache: "no-store" })
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+    fetch("/api/miniapp?bot=" + encodeURIComponent(botId), { cache: "no-store", signal: controller.signal })
       .then(async response => { const body = await response.json() as Shop & { error?: string }; if (!response.ok) throw new Error(body.error ?? "Не удалось загрузить магазин"); return body as Shop; })
-      .then(setShop).catch(e => setError(e instanceof Error ? e.message : "Ошибка загрузки"))
-      .finally(() => setLoading(false));
-  }, []);
+      .then(data => { if (!controller.signal.aborted) { setShop(data); setError(""); } })
+      .catch(e => {
+        if (controller.signal.aborted && !controller.signal.reason) return;
+        setError(controller.signal.aborted ? "Сервер не ответил за 12 секунд. Проверьте интернет и попробуйте снова." : e instanceof Error ? e.message : "Ошибка загрузки");
+      })
+      .finally(() => { clearTimeout(timeout); setLoading(false); });
+    return () => { controller.abort(); clearTimeout(timeout); };
+  }, [retryCount]);
 
   const count = Object.values(cart).reduce((total, value) => total + value, 0);
   const selected = useMemo(() => (shop?.items ?? []).filter(item => cart[item.id] > 0), [shop, cart]);
@@ -84,7 +92,7 @@ export default function MiniAppPage() {
   }
 
   if (loading) return <main className="grid min-h-dvh place-items-center text-[#667085]">Загружаем магазин…</main>;
-  if (!shop) return <main className="grid min-h-dvh place-items-center p-6 text-center"><div><ShoppingBag className="mx-auto mb-4 size-10 text-[#98a2b3]"/><h1 className="text-xl font-bold">Магазин недоступен</h1><p className="mt-2 text-[#667085]">{error}</p></div></main>;
+  if (!shop) return <main className="grid min-h-dvh place-items-center p-6 text-center"><div><ShoppingBag className="mx-auto mb-4 size-10 text-[#98a2b3]"/><h1 className="text-xl font-bold">Магазин недоступен</h1><p role="alert" className="mt-2 text-[#667085]">{error}</p><button type="button" className="mt-5 rounded-xl bg-[#6541F5] px-5 py-3 font-semibold text-white" onClick={()=>{setError("");setLoading(true);setRetryCount(x=>x+1)}}>Попробовать снова</button></div></main>;
 
   if (shop.bot.template === "service") return <ServiceMiniApp shop={shop}/>;
 
