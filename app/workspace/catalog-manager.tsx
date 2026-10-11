@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { LoaderCircle, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { formatCatalogPrice, formatStoredPrice, priceToMinor, type CatalogCurrency } from "@/lib/catalog/price";
 
-type Item = { id: string; name: string; description: string; price_minor: number | null; is_active: boolean; currency: string; image_url?:string|null;category_id?:string|null; ingredients?:string[];allergens?:string[];preparation_minutes?:number|null };
+type Item = { id: string; name: string; description: string; price_minor: number | null; is_active: boolean; currency: string; image_url?:string|null;category_id?:string|null; ingredients?:string[];allergens?:string[];preparation_minutes?:number|null;stock_quantity?:number|null };
 type Category={id:string;name:string;position:number;is_active:boolean};
 type ApiResult = { items?: Item[]; categories?:Category[]; item?: Item; created?:number; error?: string };
 const formatMoney = (minor: number, currency: string) => `${formatStoredPrice(minor, currency === "USD" ? "USD" : "UZS")} ${currency === "USD" ? "$" : "сум"}`;
@@ -31,6 +31,7 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
+  const [stock,setStock]=useState("");
   const [currency, setCurrency] = useState<CatalogCurrency>("UZS");
   const [active, setActive] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -67,6 +68,7 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
     setEditing(item ?? "new"); setName(item?.name ?? ""); setDescription(item?.description ?? "");setCategoryId(item?.category_id ?? (chosenCategory === "all" ? "" : chosenCategory));setImageUrl(item?.image_url??"");setIngredients((item?.ingredients??[]).join(", "));setAllergens((item?.allergens??[]).join(", "));setPreparationMinutes(item?.preparation_minutes==null?"":String(item.preparation_minutes));
     const nextCurrency: CatalogCurrency = item?.currency === "USD" ? "USD" : "UZS";
     setCurrency(nextCurrency);
+    setStock(item?.stock_quantity == null ? "" : String(item.stock_quantity));
     setPrice(item?.price_minor == null ? "" : formatStoredPrice(item.price_minor, nextCurrency)); setActive(item?.is_active ?? true); setError("");
   }
 
@@ -75,12 +77,13 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
     try { priceMinor = priceToMinor(price, currency); }
     catch { setError("Введите корректную сумму. Для UZS — целое число, для USD — максимум 2 знака после точки."); return; }
     if (!name.trim()) { setError("Введите название."); return; }
+    if (stock!=="" && (!/^\d+$/.test(stock)||!Number.isSafeInteger(Number(stock))||Number(stock)>100000000)){setError("Остаток должен быть целым числом от 0 до 100 000 000.");return;}
     if(type==="delivery" && preparationMinutes!=="" && (!/^\d{1,3}$/.test(preparationMinutes)||Number(preparationMinutes)>360)) {setError("Время приготовления: от 0 до 360 минут.");return;}
     setSaving(true); setError("");
     try {
       const response = await fetch("/api/catalog", { method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ botId, initData: telegramData(), ...(editing !== "new" && editing ? { id: editing.id } : {}),
-          name: name.trim(), description: description.trim(), priceMinor, currency, isActive: active, categoryId:categoryId||null,imageUrl:imageUrl||null,
+          name: name.trim(), description: description.trim(), priceMinor, currency, stockQuantity:stock===""?null:Number(stock), isActive: active, categoryId:categoryId||null,imageUrl:imageUrl||null,
           ...(type==="delivery"?{ingredients:ingredients.split(",").map(x=>x.trim()).filter(Boolean),allergens:allergens.split(",").map(x=>x.trim()).filter(Boolean),preparationMinutes:preparationMinutes===""?null:Number(preparationMinutes)}:{}) }) });
       const body = await response.json() as ApiResult;
       if (!response.ok) throw new Error(body.error ?? "Не удалось сохранить.");
@@ -138,6 +141,7 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
           {item.image_url&&<img src={item.image_url} alt="" className="size-16 shrink-0 rounded-xl object-cover"/>}
           <div className="min-w-0 flex-1"><strong className="block truncate text-sm">{item.name}</strong><p className="mt-1 text-xs text-[#6541f5]">{categories.find(c=>c.id===item.category_id)?.name??""}</p><p className="mt-1 line-clamp-2 text-xs text-[#667085]">{item.description || "Без описания"}</p>{type==="delivery"&&item.preparation_minutes!=null&&<p className="mt-1 text-xs text-[#667085]">{item.preparation_minutes} мин · приготовление</p>}</div>
           <span className="text-sm font-semibold">{item.price_minor === null ? "Цена по запросу" : formatMoney(item.price_minor,item.currency)}</span>
+          {(type==="delivery"||type==="store")&&<span className="text-xs text-[#667085]">Остаток: {item.stock_quantity===null||item.stock_quantity===undefined?"Без учёта":item.stock_quantity}</span>}
           <span className={item.is_active?"rounded-full bg-[#ecfdf3] px-2 py-1 text-xs text-[#027a48]":"rounded-full bg-[#f2f4f7] px-2 py-1 text-xs text-[#667085]"}>{item.is_active?"Активен":"Скрыт"}</span>
           <button type="button" onClick={()=>open(item)} aria-label={"Изменить "+item.name} className="grid size-10 place-items-center rounded-xl border border-[#d0d5dd]"><Pencil className="size-4"/></button>
           {item.is_active&&<button type="button" disabled={saving} onClick={()=>void archive(item)} aria-label={"Скрыть "+item.name} className="grid size-10 place-items-center rounded-xl border border-[#d0d5dd] text-[#b42318]"><Trash2 className="size-4"/></button>}
@@ -166,6 +170,7 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
             <select aria-label="Валюта" value={currency} onChange={e=>{const next=e.target.value as CatalogCurrency;setPrice(formatCatalogPrice(price.replace(/\s/g,"").split(".")[0],next));setCurrency(next);}} className="min-w-28 border-l border-[#d0d5dd] bg-[#f9fafb] px-3 text-sm font-semibold outline-none">
               <option value="UZS">UZS · сум</option><option value="USD">USD · $</option>
             </select></div><p className="mt-1 text-xs font-normal text-[#667085]">Валюта сохраняется вместе с ценой, конвертация не выполняется.</p></div>
+          {(type==="delivery"||type==="store")&&<label className="block text-sm font-medium">Количество в наличии<input type="number" min={0} max={100000000} step={1} value={stock} onChange={e=>setStock(e.target.value)} placeholder="Не ограничено" className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/><span className="mt-1 block text-xs font-normal text-[#667085]">0 — скрыть у покупателя, пусто — не учитывать остаток. После заказа количество уменьшится.</span></label>}
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={active} onChange={e=>setActive(e.target.checked)}/>Показывать в Mini App</label></div>
         <div className="mt-6 flex justify-end gap-3"><button type="button" onClick={()=>setEditing(null)} className="h-11 rounded-xl border px-4 text-sm">Отмена</button>
           <button type="button" disabled={saving} onClick={()=>void save()} className="h-11 rounded-xl bg-[#6541f5] px-5 text-sm font-semibold !text-white disabled:opacity-60">{saving?"Сохраняем…":"Сохранить"}</button></div>
