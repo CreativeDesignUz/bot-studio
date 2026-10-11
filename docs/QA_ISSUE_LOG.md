@@ -94,3 +94,21 @@ GitHub Actions run [38133282051](https://github.com/CreativeDesignUz/bot-studio/
 - **Not executed:** end-to-end create bot → publish → address pin → charge delivery → order visible in admin; real Telegram iOS/Android; zone edge cases and concurrent checkout on real Supabase; Playwright visual QA; ZAP/PageSpeed.
 - **Release BLOCKED:** migrations 0009–0012 have not been applied or verified on isolated staging, and dependent API must not be deployed separately from its database schema/RPC.
 - **Follow-on QA:** test two tenants, both templates, same/reused requestKey, currency restrictions, fee total, radius boundary, sold-out items, history and seller changes after publish.
+
+
+## 2026-10-11 — Auth, admin mobile and deployment verification
+
+Environment: isolated Cloudflare Worker \`bot-studio-staging\`, Supabase testbase \`eslbcwopolrxoptcxqhp\`. Production Worker \`bot-studio\` and primary Supabase were not changed by these commits. **No secrets or personal data in this journal.**
+
+| Incident | Reproduction/behavior | Fix in branch | Verification |
+|---|---|---|---|
+| QA-017 / [Issue #9](https://github.com/CreativeDesignUz/bot-studio/issues/9) | Mobile workspace with an existing bot hides "Создать ещё бота" in desktop-only sidebar | Added visible mobile header CTA to \`/onboarding\` in \`app/workspace/page.tsx\` — \`eada053\` | TypeScript/lint/unit/build passed; browser QA required on updated Worker |
+| QA-018 / [Issue #10](https://github.com/CreativeDesignUz/bot-studio/issues/10) | \`GET /api/workspace\` returned HTTP 200 without signed owner session, because \`resolveAppUser\` created a guest by default | Default changed to \`allowGuest=false\` in \`lib/auth/app-user.ts\` — \`465c878\`; browser workspace redirects to \`/auth\` instead of showing a broken cabinet — \`eada053\`; onboarding browser auth check — \`b89c90a\`; signed account cookie and verified Telegram Mini App initData remain supported | Cloudflare browser observed \`{"error":"Войдите в аккаунт."}\` on staging after 2026-10-11 16:49 UTC upload. HTTP status/E2E must be checked by Playwright |
+| QA-019 / [Issue #11](https://github.com/CreativeDesignUz/bot-studio/issues/11) | Google login disabled when testbase provider reports Google not configured | PKCE client code present; **no provider activation was performed** | BLOCKED until Google OAuth Web Client ID/Secret are configured in Supabase testbase and tested with a real account |
+| QA-020 | Previous browser QA used selectors not matching real label/viewport and ran before code deploy | Fixed Playwright selectors; added authenticated onboarding mock plus unsigned API, login redirection and theme checks in \`e2e/staging.spec.ts\` — latest test commit \`ad5cd65\` | CI [38156909925](https://github.com/CreativeDesignUz/bot-studio/actions/runs/38156909925) passed; QA [38156909929](https://github.com/CreativeDesignUz/bot-studio/actions/runs/38156909929) initial attempt failed against pre-update Worker; **re-run attempt 2 triggered after latest staging upload** |
+
+### Staging deployment observation
+- 2026-10-11 16:49:52 UTC: Cloudflare Worker \`bot-studio-staging\` deployment \`da5cc430-0532-4be7-b0d4-f11086a8e4e5\`, Worker version \`08b570df-6c1a-48ce-8009-c94952a45e1f\`, 100% traffic, deployed through Wrangler.
+- Cloudflare does **not** expose a Git SHA for this uploaded version in the Worker metadata. The deployed source commit therefore **cannot be certified by time alone**. Treat successful post-deploy HTTP + browser QA as functional evidence, not SHA provenance.
+- Avoid running staging E2E immediately on GitHub push **before** deploying that commit: it creates misleading regression reports. Preferred sequence: CI → isolated staging deploy → verify deployed revision → Playwright + Telegram acceptance → journal status update.
+- Sign-in via actual Telegram approval, Google approval, mobile browser and real order processing remain separate acceptance gates. Mocked E2E does not verify provider callbacks or actual database writes.
