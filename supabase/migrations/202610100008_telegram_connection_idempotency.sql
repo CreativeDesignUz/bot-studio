@@ -50,7 +50,7 @@ security definer
 set search_path = ''
 as $$
 declare
-  channel public.bot_channels;
+  channel_row public.bot_channels;
   credential public.telegram_bot_credentials;
 begin
   if not exists(select 1 from public.bots where id = p_bot_id and owner_id = p_owner_id) then
@@ -72,7 +72,7 @@ begin
   on conflict (bot_id, channel) do update set
     status = case when public.bot_channels.status = 'connected' then public.bot_channels.status else 'pending' end,
     external_username = excluded.external_username
-  returning * into channel;
+  returning * into channel_row;
 
   update public.telegram_bot_credentials
   set status = case when status = 'pending' then 'expired' else status end
@@ -87,19 +87,19 @@ begin
       bot_id, channel_id, owner_id, token_ciphertext, token_iv, token_fingerprint,
       external_account_id, external_username, status, expires_at
     ) values (
-      p_bot_id, channel.id, p_owner_id, p_token_ciphertext, p_token_iv, p_token_fingerprint,
+      p_bot_id, channel_row.id, p_owner_id, p_token_ciphertext, p_token_iv, p_token_fingerprint,
       p_external_account_id, p_external_username, 'pending', p_expires_at
     ) returning * into credential;
   else
     update public.telegram_bot_credentials set
-      channel_id = channel.id, owner_id = p_owner_id,
+      channel_id = channel_row.id, owner_id = p_owner_id,
       token_ciphertext = p_token_ciphertext, token_iv = p_token_iv,
       external_account_id = p_external_account_id, external_username = p_external_username,
       status = 'pending', expires_at = p_expires_at, last_error = null
     where id = credential.id returning * into credential;
   end if;
 
-  return jsonb_build_object('credential_id', credential.id, 'channel_id', channel.id);
+  return jsonb_build_object('credential_id', credential.id, 'channel_id', channel_row.id);
 end;
 $$;
 
@@ -152,20 +152,20 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
-declare channel public.bot_channels;
+declare channel_row public.bot_channels;
 begin
   if not exists(select 1 from public.bots where id = p_bot_id and owner_id = p_owner_id) then
     raise exception 'BOT_NOT_FOUND' using errcode = 'P0002';
   end if;
-  select * into channel from public.bot_channels where bot_id = p_bot_id and channel = 'telegram' for update;
-  if channel.id is null then return; end if;
+  select * into channel_row from public.bot_channels where bot_id = p_bot_id and channel = 'telegram' for update;
+  if channel_row.id is null then return; end if;
   update public.telegram_bot_credentials set status = 'revoked'
-  where id::text = channel.secret_reference and bot_id = p_bot_id;
+  where id::text = channel_row.secret_reference and bot_id = p_bot_id;
   update public.bot_channels set
     status = 'not_connected', external_account_id = null, external_username = null,
     secret_reference = null,
     configuration = coalesce(configuration, '{}'::jsonb) - 'runtime_secret' - 'mini_app_url' - 'auth_mode'
-  where id = channel.id;
+  where id = channel_row.id;
   update public.bots set status = case when status = 'active' then 'paused' else status end,
     publish_status = 'failed', publish_error = 'Telegram channel disconnected'
   where id = p_bot_id and owner_id = p_owner_id;
@@ -178,7 +178,7 @@ create or replace function public.issue_telegram_binding(
   p_expected_username text, p_expires_at timestamptz
 )
 returns jsonb language plpgsql security definer set search_path = '' as $$
-declare channel public.bot_channels; binding public.telegram_binding_tokens;
+declare channel_row public.bot_channels; binding_row public.telegram_binding_tokens;
 begin
   if not exists(select 1 from public.bots where id = p_bot_id and owner_id = p_owner_id) then
     raise exception 'BOT_NOT_FOUND' using errcode = 'P0002';
@@ -188,16 +188,16 @@ begin
   on conflict (bot_id, channel) do update set
     status = case when public.bot_channels.status = 'connected' and public.bot_channels.external_account_id is not null then 'connected' else 'pending' end,
     external_username = excluded.external_username
-  returning * into channel;
-  if channel.status = 'connected' and channel.external_account_id is not null then
+  returning * into channel_row;
+  if channel_row.status = 'connected' and channel_row.external_account_id is not null then
     raise exception 'CHANNEL_ALREADY_CONNECTED' using errcode = '23505';
   end if;
   update public.telegram_binding_tokens set status = 'expired'
   where bot_id = p_bot_id and status in ('pending','verified','connecting');
   insert into public.telegram_binding_tokens(bot_id,channel_id,owner_id,token_hash,expected_username,expires_at)
-  values(p_bot_id,channel.id,p_owner_id,p_token_hash,p_expected_username,p_expires_at)
-  returning * into binding;
-  return jsonb_build_object('binding_id',binding.id,'channel_id',channel.id);
+  values(p_bot_id,channel_row.id,p_owner_id,p_token_hash,p_expected_username,p_expires_at)
+  returning * into binding_row;
+  return jsonb_build_object('binding_id',binding_row.id,'channel_id',channel_row.id);
 end;
 $$;
 
@@ -245,7 +245,7 @@ create or replace function public.create_miniapp_order(
 )
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
-  item jsonb; entry record; order_row public.orders; expected_count integer;
+  item jsonb; item_row record; order_row public.orders; expected_count integer;
   total_amount bigint := 0; order_currency text; item_ids uuid[]; requested_ids uuid[]; item_quantity integer;
 begin
   if p_request_key !~ '^[A-Za-z0-9_-]{16,128}$' then raise exception 'INVALID_REQUEST_KEY' using errcode='22023'; end if;
@@ -261,19 +261,20 @@ begin
     or (p_fulfillment='delivery' and nullif(trim(p_delivery_address),'') is null)
     or jsonb_typeof(p_items) is distinct from 'array' or jsonb_array_length(p_items) not between 1 and 50
     then raise exception 'INVALID_ORDER' using errcode='22023'; end if;
-  select count(*),array_agg(distinct (entry->>'id')::uuid) into expected_count,requested_ids from jsonb_array_elements(p_items) entry;
+  select count(*),array_agg(distinct (element.value->>'id')::uuid) into expected_count,requested_ids
+  from jsonb_array_elements(p_items) as element(value);
   if expected_count<>cardinality(requested_ids) then raise exception 'DUPLICATE_ITEMS' using errcode='22023'; end if;
   select array_agg(ci.id),count(distinct ci.currency) into item_ids,expected_count from public.catalog_items ci
     where ci.bot_id=p_bot_id and ci.id=any(requested_ids) and ci.is_active and ci.price_minor is not null and ci.price_minor>=0;
   if cardinality(item_ids) is distinct from cardinality(requested_ids) or expected_count<>1
     then raise exception 'ITEM_UNAVAILABLE' using errcode='22023'; end if;
   for item in select value from jsonb_array_elements(p_items) as t(value) loop
-    if jsonb_typeof(item->'quantity')<>'number' or (item->>'quantity')!~'^[0-9]{1,2}$'
+    if jsonb_typeof(item->'quantity') is distinct from 'number' or (item->>'quantity')!~'^[0-9]{1,2}$'
       or (item->>'quantity')::integer not between 1 and 99 then raise exception 'INVALID_QUANTITY' using errcode='22023'; end if;
-    select ci.* into entry from public.catalog_items ci where ci.id=(item->>'id')::uuid and ci.bot_id=p_bot_id and ci.is_active;
-    item_quantity:=(item->>'quantity')::integer; total_amount:=total_amount+entry.price_minor*item_quantity;
+    select ci.* into item_row from public.catalog_items ci where ci.id=(item->>'id')::uuid and ci.bot_id=p_bot_id and ci.is_active;
+    item_quantity:=(item->>'quantity')::integer; total_amount:=total_amount+item_row.price_minor*item_quantity;
     if total_amount<0 or total_amount>9000000000000000 then raise exception 'INVALID_TOTAL' using errcode='22023'; end if;
-    order_currency:=entry.currency;
+    order_currency:=item_row.currency;
   end loop;
   begin
     insert into public.orders(bot_id,customer_external_id,customer_name,status,subtotal_minor,total_minor,delivery_minor,currency,fulfillment_type,delivery_address,payload,request_key)
@@ -303,6 +304,7 @@ revoke all on function public.complete_telegram_update(uuid,bigint) from public,
 revoke all on function public.release_telegram_update(uuid,bigint) from public,anon,authenticated;
 revoke all on function public.create_miniapp_order(uuid,text,text,text,text,jsonb) from service_role;
 revoke all on function public.create_miniapp_order(uuid,text,text,text,text,jsonb,text) from public,anon,authenticated;
+drop function public.create_miniapp_order(uuid,text,text,text,text,jsonb);
 grant execute on function public.stage_direct_telegram_credential(uuid,uuid,text,text,text,text,text,timestamptz) to service_role;
 grant execute on function public.complete_direct_telegram_connection(uuid,uuid,uuid,text,text) to service_role;
 grant execute on function public.disconnect_telegram_channel(uuid,uuid) to service_role;

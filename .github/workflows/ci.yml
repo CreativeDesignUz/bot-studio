@@ -2,9 +2,9 @@ name: Bot Studio CI
 
 on:
   pull_request:
-    branches: [main, fix/task-02a-security-stability]
+    branches: [main, fix/task-02a-security-stability, fix/p0-telegram-webhook-validation-20261011]
   push:
-    branches: [main, fix/p0-telegram-webhook-validation-20261011]
+    branches: [main, fix/p0-telegram-webhook-validation-20261011, chore/cloudflare-staging-20261011]
   workflow_dispatch:
 
 permissions:
@@ -43,3 +43,28 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+  staging-e2e:
+    name: Cloudflare staging E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.13.1'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run staging smoke tests
+        env:
+          E2E_BASE_URL: https://bot-studio-staging.slavnauz.workers.dev
+        run: npm run test:e2e
