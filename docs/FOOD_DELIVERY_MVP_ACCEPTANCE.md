@@ -86,3 +86,20 @@ This is a source-level audit, NOT a claim that production or running Telegram is
 - Cash-on-delivery/pickup can exist as an explicit allowed method with proper order/payment state, but must not be represented as successful online payment.
 
 Acceptance: real location outside delivery area cannot checkout as delivery; operator can disable provider; duplicate provider callback never double-credits; cancellation and refund are audited; restaurant sees its own order/payment status but not platform credentials nor another restaurant transactions.
+
+## MVP payment product decision (2026-10-11; overrides earlier proposed platform payout ledger)
+
+The restaurant decides whether to accept online payment. The owner-facing setup asks **«Включить онлайн-оплату?»** (no by default), then shows available payment methods e.g. Payme, Click, Uzum **only where an integration is actually supported and configured**. A selected provider must not appear as active merely because its checkbox is ticked.
+
+The Bot Studio operator/admin manages which gateways are supported, provider integrations/credentials and enabling/disabling them for restaurant accounts. Settlement to the individual restaurant bank account and legal onboarding/KYC are handled by the operator/provider and restaurant under their own agreements. Bot Studio must NOT promise or build automatic custody, splitting or payout of customer funds as part of MVP. The system stores only the references/statuses required for order processing, refunds and audit, not a platform wallet.
+
+Restaurant flow: Payments settings > toggle online payments > choose available providers > configure/verify merchant account (with operator assistance as required) > show connected / pending / unavailable statuses > Save draft > Publish. Customer sees only enabled AND successfully connected payment options in the published storefront, plus cash-on-delivery if explicitly enabled. If no online provider connected, online payment is unavailable, not simulated as successful.
+
+Provider API: adapter interface per integration (Click/Payme first as actual implementations permit, Uzum when verified); create attempt, verify callback server-side, idempotent update, reconcile failed/pending state. Avoid assuming Uzum payment API/merchant setup without verification. Refunds must respect supported provider and authority, not imply platform can withdraw or redistribute merchant funds.
+
+MVP acceptance:
+- Seller may keep online payments OFF and receive pay-on-delivery orders if configured.
+- Seller cannot enable a provider which the operator has not configured/approved.
+- An enabled provider in draft is invisible until publish; live storefront displays only actually available methods.
+- Callback signature and idempotency validated; double callback cannot double-apply payment; no secret leaked.
+- Operator cannot automatically redirect funds from one restaurant to another via Bot Studio.
