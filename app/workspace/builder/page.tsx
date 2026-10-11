@@ -6,7 +6,7 @@ import FigmaTelegramPreview from "./figma-telegram-preview";
 import MiniAppLivePreview from "../miniapp-live-preview";
 import WorkspaceSidebar from "../workspace-sidebar";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, Bot, Check, ChevronRight, Eye, GripVertical, LoaderCircle, Plus, Save, Send, Trash2, MessageCircle, Smartphone, ExternalLink, KeyRound, ShieldCheck, Unplug, Settings } from "lucide-react";
+import { ArrowLeft, Bot, Check, ChevronRight, Eye, GripVertical, LoaderCircle, Plus, Save, Send, Trash2, MessageCircle, Smartphone, ExternalLink, KeyRound, ShieldCheck, Unplug, Settings, Menu, X } from "lucide-react";
 
 type ActionButton={id:string;label:string;action:"home"|"url"|"reply";url?:string;replyText?:string;nextButtons?:ActionButton[]};
 type PublishState="idle"|"validating"|"saving"|"publishing"|"published"|"connection"|"error";
@@ -24,6 +24,7 @@ export default function BotBuilder(){
  const [bio,setBio]=useState(""),[welcome,setWelcome]=useState(""),[avatar,setAvatar]=useState<string|null>(null),[avatarBusy,setAvatarBusy]=useState(false);
  const [activeSection,setActiveSection]=useState<"profile"|"message"|"buttons"|"miniapp"|"publish">("profile");
  const [botType,setBotType]=useState<"delivery"|"store"|"service">("delivery");
+ const [mobileNav,setMobileNav]=useState(false);
  const previewMode=activeSection==="miniapp"?"miniapp":"telegram";
  const figmaPreview=activeSection==="profile"?"profile":"chat";
  const [foodTemplate,setFoodTemplate]=useState<"food01"|"food02">("food01");
@@ -137,9 +138,13 @@ export default function BotBuilder(){
  if(loadState==="error")return <main className="grid min-h-screen place-items-center bg-[#f4f6f8] p-5 text-[#101828]"><section className="w-full max-w-lg rounded-[24px] border border-[#e4e7ec] bg-white p-8 text-center"><span className="mx-auto grid size-14 place-items-center rounded-2xl bg-[#fff1f3] text-[#c01048]"><Bot/></span><h1 className="mt-5 text-2xl font-semibold">Не удалось открыть редактор</h1><p className="mt-2 text-sm leading-6 text-[#667085]">{loadError}</p><div className="mt-6 flex justify-center gap-3"><Link href="/workspace" className="inline-flex h-11 items-center rounded-xl border border-[#d0d5dd] px-4 text-sm font-semibold no-underline">В кабинет</Link><button onClick={()=>location.reload()} className="h-11 rounded-xl bg-[#101828] px-5 text-sm font-semibold text-white">Повторить</button></div></section></main>;
  return <main className="min-h-dvh bg-[#f4f6f8] text-[#101828] xl:h-dvh xl:overflow-hidden">
   <div className="mx-auto grid min-h-dvh max-w-[1600px] xl:h-full xl:min-h-0 xl:grid-cols-[248px_minmax(0,1fr)]">
-   <WorkspaceSidebar botId={botId??""} botType={botType} bots={[{id:botId??"",name:name||"Текущий бот",type:botType}]} editorSection={activeSection} onEditorSectionChange={setActiveSection}/>
+   <div className="hidden min-h-0 xl:block xl:h-full"><WorkspaceSidebar botId={botId??""} botType={botType} bots={[{id:botId??"",name:name||"Текущий бот",type:botType}]} editorSection={activeSection} onEditorSectionChange={id=>{setActiveSection(id);setMobileNav(false)}}/></div>
+   {mobileNav&&<div className="fixed inset-0 z-[65] bg-[#101828]/45 xl:hidden" onClick={()=>setMobileNav(false)}>
+    <div className="relative h-dvh w-[min(86vw,310px)] bg-white" onClick={e=>e.stopPropagation()}><WorkspaceSidebar botId={botId??""} botType={botType} bots={[{id:botId??"",name:name||"Текущий бот",type:botType}]} editorSection={activeSection} onEditorSectionChange={id=>{setActiveSection(id);setMobileNav(false)}}/><button type="button" aria-label="Закрыть меню" onClick={()=>setMobileNav(false)} className="absolute right-2 top-5 grid size-9 place-items-center rounded-lg bg-[#f2f4f7]"><X size={17}/></button></div>
+   </div>}
    <div className="flex min-h-0 min-w-0 flex-col px-5 py-5 sm:px-8 xl:h-full xl:overflow-hidden xl:px-9">
     <div className="flex flex-wrap items-center justify-between gap-3">
+     <button type="button" aria-label="Открыть разделы" onClick={()=>setMobileNav(true)} className="grid size-10 place-items-center rounded-xl border border-[#d0d5dd] xl:hidden"><Menu size={19}/></button>
      <Link href={`/workspace?bot=${encodeURIComponent(botId??"")}`} className="flex items-center gap-3 text-sm font-semibold text-[#101828] no-underline"><ArrowLeft className="size-5 text-[#6541F5]"/>Назад в кабинет</Link>
      <div className="flex gap-2"><button onClick={save} disabled={!dirty} className="h-10 rounded-[8px] border border-[#cbd5e0] px-4 text-sm font-medium disabled:opacity-50">Сохранить</button><button onClick={publish} className="h-10 rounded-[8px] bg-[#4420e7] px-4 text-sm font-semibold !text-white">Опубликовать</button></div>
     </div>
