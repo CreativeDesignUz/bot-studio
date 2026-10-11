@@ -19,18 +19,12 @@ export async function GET(request: Request) {
       .eq("id", botId).single();
     if (error || !bot || bot.status !== "active" || bot.publish_status !== "published")
       return jsonError("Магазин ещё не опубликован", 404);
-    const [itemResult, categoryResult] = await Promise.all([
-      supabase.from("catalog_items")
-        .select("id,name,description,image_url,price_minor,currency,item_type,category_id,ingredients,allergens,preparation_minutes")
-        .eq("bot_id", botId).eq("is_active", true).order("position", { ascending: true }).limit(200),
-      supabase.from("catalog_categories")
-        .select("id,name,position").eq("bot_id", botId).eq("is_active", true).order("position"),
-    ]);
-    if (itemResult.error) throw itemResult.error;
-    if (categoryResult.error) throw categoryResult.error;
-    const items = itemResult.data;
-    const categories = categoryResult.data;
     const published = (bot.published_snapshot ?? {}) as Record<string, unknown>;
+    const catalog = (published.catalog ?? {}) as Record<string, unknown>;
+    if (!Array.isArray(catalog.items) || !Array.isArray(catalog.categories))
+      return jsonError("Каталог ожидает публикации или обновления базы данных", 503);
+    const items = catalog.items;
+    const categories = catalog.categories;
     // Buyer-visible theme comes exclusively from the last successful publication,
     // not the seller's still-editable draft settings.
     const publishedSettings = (published.settings ?? {}) as Record<string, unknown>;
