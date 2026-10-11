@@ -113,7 +113,25 @@ export default function OnboardingPage(){
    if(!response.ok||!result.connected)throw new Error(result.error??"Не удалось подключить Telegram.");
    setConnected(result.bot??verified);setCredentialId("");setVerified(null);setTokenCheckState("idle");
    setProgressNotice("Telegram-бот подключён. Можно перейти к запуску.");
-  }catch(e){setError(e instanceof Error?e.message:"Ошибка подключения.")}
+  }catch(e){
+   // The connection may finish server-side even when the browser loses the
+   // response. Read back the actual channel status before offering a retry.
+   try{
+    const check=await fetch(`/api/channels/telegram/token?bot=${encodeURIComponent(botId)}`,{
+     headers:{"x-telegram-init-data":telegramData()},cache:"no-store"
+    });
+    if(check.ok){
+     const state=await check.json() as {connection?:{status?:string;username?:string|null}|null};
+     if(state.connection?.status==="connected"){
+      setConnected({name:verified?.name??"Telegram-бот",username:state.connection.username??verified?.username??""});
+      setCredentialId("");setVerified(null);setTokenCheckState("idle");
+      setProgressNotice("Telegram-бот подключён. Можно перейти к запуску.");
+      return;
+     }
+    }
+   }catch{/* Original error remains available below. */}
+   setError(e instanceof Error?e.message:"Ошибка подключения.");
+  }
   finally{setBusy(false)}
  }
  async function publish(){
