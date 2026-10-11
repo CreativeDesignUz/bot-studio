@@ -4,9 +4,14 @@ type ItemPayload = {
   botId?: string; id?: string; initData?: string;
   name?: string; description?: string; priceMinor?: number | null;
   isActive?: boolean; currency?: string; categoryId?: string | null; imageUrl?: string | null;
+  ingredients?: string[]; allergens?: string[]; preparationMinutes?: number | null;
 };
 const bad = (error: string, status: number) => Response.json({ error }, { status });
-const validId = (value: unknown) => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+const validId = (value: unknown) => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+function validatedLabels(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length > 20 || value.some(x=>typeof x!=="string"||!x.trim()||x.trim().length>80))return null;
+  return [...new Set(value.map(x=>(x as string).trim()))];
+}
 
 async function authorize(request: Request, botId: string, initData: string) {
   const identity = await resolveAppUser(request, initData);
@@ -29,7 +34,7 @@ export async function GET(request: Request) {
   const auth = await authorize(request, botId, request.headers.get("x-telegram-init-data") ?? "");
   if ("error" in auth) return auth.error;
   const { data, error } = await auth.supabase.from("catalog_items")
-    .select("id,name,description,price_minor,currency,is_active,item_type,image_url,category_id,position")
+    .select("id,name,description,price_minor,currency,is_active,item_type,image_url,category_id,position,ingredients,allergens,preparation_minutes")
     .eq("bot_id", botId).eq("item_type", auth.itemType)
     .order("position", { ascending: true }).order("created_at", { ascending: false }).limit(200);
   if (error) return bad("Не удалось загрузить каталог.", 500);
@@ -57,11 +62,20 @@ export async function POST(request: Request) {
     const {data:category}=await auth.supabase.from("catalog_categories").select("id").eq("bot_id",input.botId!).eq("id",input.categoryId).maybeSingle();
     if(!category)return bad("Категория не принадлежит этому боту.",400);
   }
-  const values = { name, description, price_minor: input.priceMinor ?? null, ...(input.categoryId!==undefined?{category_id:input.categoryId}:{}), ...(input.imageUrl!==undefined?{image_url:input.imageUrl}:{}), ...(input.currency ? { currency: input.currency } : {}), ...(typeof input.isActive === "boolean" ? { is_active: input.isActive } : {}) };
+  const ingredients = input.ingredients === undefined ? undefined : validatedLabels(input.ingredients);
+  const allergens = input.allergens === undefined ? undefined : validatedLabels(input.allergens);
+  if ((input.ingredients !== undefined && !ingredients) || (input.allergens !== undefined && !allergens))
+    return bad("Укажите не более 20 ингредиентов или аллергенов, до 80 символов каждый.", 400);
+  if (input.preparationMinutes !== undefined && input.preparationMinutes !== null &&
+    (!Number.isInteger(input.preparationMinutes) || input.preparationMinutes < 0 || input.preparationMinutes > 360))
+    return bad("Время приготовления должно быть от 0 до 360 минут.", 400);
+  const values = { ...(ingredients !== undefined ? { ingredients } : {}), ...(allergens !== undefined ? { allergens } : {}),
+    ...(input.preparationMinutes !== undefined ? { preparation_minutes: input.preparationMinutes } : {}),
+    name, description, price_minor: input.priceMinor ?? null, ...(input.categoryId!==undefined?{category_id:input.categoryId}:{}), ...(input.imageUrl!==undefined?{image_url:input.imageUrl}:{}), ...(input.currency ? { currency: input.currency } : {}), ...(typeof input.isActive === "boolean" ? { is_active: input.isActive } : {}) };
   const query = input.id
     ? auth.supabase.from("catalog_items").update(values).eq("id", input.id).eq("bot_id", input.botId!).eq("item_type", auth.itemType)
     : auth.supabase.from("catalog_items").insert({ ...values, bot_id: input.botId, item_type: auth.itemType, currency: "UZS" });
-  const { data, error } = await query.select("id,name,description,price_minor,currency,is_active,item_type,image_url,position").maybeSingle();
+  const { data, error } = await query.select("id,name,description,price_minor,currency,is_active,item_type,image_url,position,category_id,ingredients,allergens,preparation_minutes").maybeSingle();
   if (error) return bad("Не удалось сохранить элемент каталога.", 500);
   if (!data) return bad("Элемент не найден.", 404);
   return withSessionCookie({ item: data }, 200, auth.setCookie);
