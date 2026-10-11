@@ -23,7 +23,7 @@ export default function LoginPage({callback=false}:{callback?:boolean}){
    telegram_login_failed:"Ошибка проверки ответа Telegram. Повторите попытку или сообщите код ошибки.",
    telegram_not_configured:"Telegram OIDC не настроен на сервере."
   };
-  setError(messages[code]??"Не удалось завершить вход. Код: "+code);
+  void Promise.resolve().then(()=>setError(messages[code]??"Не удалось завершить вход. Код: "+code));
  },[]);
  const [working,setWorking]=useState(false);
  const clientRef=useRef<SupabaseClient|null>(null);
