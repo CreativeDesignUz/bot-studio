@@ -49,15 +49,32 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  // Checkout must be a bounded JSON object. Reject malformed input before any
+  // privileged database or Telegram token lookup is performed.
+  const MAX_CHECKOUT_BYTES = 32 * 1024;
+  const declaredLength = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_CHECKOUT_BYTES)
+    return jsonError("Слишком большой запрос", 413);
   let input: Checkout;
-  try { input = await request.json() as Checkout; } catch { return jsonError("Некорректный запрос", 400); }
-  if (!input.botId || !isUuid(input.botId) || !input.initData || !Array.isArray(input.items) ||
+  try {
+    const raw = await request.text();
+    if (new TextEncoder().encode(raw).byteLength > MAX_CHECKOUT_BYTES)
+      return jsonError("Слишком большой запрос", 413);
+    const body: unknown = JSON.parse(raw);
+    if (!body || typeof body !== "object" || Array.isArray(body))
+      return jsonError("Некорректный запрос", 400);
+    input = body as Checkout;
+  } catch { return jsonError("Некорректный запрос", 400); }
+  if (typeof input.botId !== "string" || !isUuid(input.botId) || typeof input.initData !== "string" || !input.initData ||
+      typeof input.requestKey !== "string" || typeof input.name !== "string" ||
+      !Array.isArray(input.items) ||
       !/^[A-Za-z0-9_-]{16,128}$/.test(input.requestKey ?? "") ||
       !input.items.length || input.items.length > 50 ||
-      !input.items.every(item => isUuid(item.id) && Number.isInteger(item.quantity) && item.quantity > 0 && item.quantity <= 99) ||
+      !input.items.every(item => item && typeof item === "object" && typeof item.id === "string" && isUuid(item.id) && Number.isInteger(item.quantity) && item.quantity > 0 && item.quantity <= 99) ||
       !["pickup", "delivery"].includes(input.fulfillment ?? "")) return jsonError("Проверьте данные заказа", 400);
   const name = (input.name ?? "").trim().slice(0, 100);
   if (!name) return jsonError("Укажите имя получателя", 400);
+  if (input.address != null && typeof input.address !== "string") return jsonError("Некорректный адрес", 400);
   const address = (input.address ?? "").trim().slice(0, 500);
   if (input.fulfillment === "delivery" && !address) return jsonError("Укажите адрес доставки", 400);
 
