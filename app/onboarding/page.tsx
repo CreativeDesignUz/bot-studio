@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Bot, BookOpen, Check, CheckCircle2, ChevronRight, Clock3, ExternalLink, ImagePlus, KeyRound, LoaderCircle, Package, Rocket, Send, ShoppingBag, Sparkles, UtensilsCrossed } from "lucide-react";
+import { ArrowLeft, ArrowRight, Bot, BookOpen, Check, CheckCircle2, Clock3, ExternalLink, ImagePlus, KeyRound, LayoutDashboard, LoaderCircle, Package, Rocket, Send, ShoppingBag, Sparkles, UtensilsCrossed } from "lucide-react";
 
 type Stage = 0 | 1 | 2 | 3;
 type TemplateId = "delivery" | "store" | "service" | "course";
@@ -130,6 +130,7 @@ export default function OnboardingPage(){
  return <main className="min-h-dvh bg-[#f6f7fa] text-[#101828]">
   <header className="border-b border-[#e5e7eb] bg-white"><div className="mx-auto flex h-[76px] max-w-[1240px] items-center justify-between px-5">
     <Link href="/workspace" className="flex items-center gap-3 text-lg font-bold text-[#101828] no-underline"><span className="grid size-10 place-items-center rounded-xl bg-[#4420e7] text-white"><Bot size={22}/></span>Bot Studio</Link>
+    <Link href="/workspace" className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-[#d7dce6] bg-white px-3 text-sm font-semibold text-[#344054] no-underline transition-colors hover:border-[#b9b6d3] hover:bg-[#f7f7fc] sm:px-4"><LayoutDashboard size={17} aria-hidden="true"/>В кабинет</Link>
 
   </div></header>
   <div className="mx-auto grid max-w-[1240px] gap-10 px-5 py-10 lg:grid-cols-[270px_minmax(0,1fr)]">
@@ -140,10 +141,7 @@ export default function OnboardingPage(){
     <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-[#e6e9f1]"><div className="h-full rounded-full bg-[#6541F5] transition-all" style={{width:`${(stage+1)*25}%`}}/></div>
     <p className="mt-3 text-xs text-[#98a2b3]">Шаг {stage+1} из 4</p>
     </div>
-    <div className="mt-4 flex flex-col gap-1 px-2">
-     {stage>0&&<button type="button" onClick={goBack} className="flex min-h-10 items-center gap-2 rounded-[10px] px-3 text-left text-sm font-medium text-[#475467] hover:bg-white"><ArrowLeft size={17}/>Назад к предыдущему шагу</button>}
-     <Link href="/workspace" className="flex min-h-10 items-center gap-2 rounded-[10px] px-3 text-sm font-medium text-[#475467] no-underline hover:bg-white"><ArrowLeft size={17}/>В кабинет</Link>
-    </div>
+
    </aside>
    <div className="min-w-0">
     {error&&<div role="alert" className="mb-5 rounded-xl border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#b42318]">{error}</div>}
@@ -230,13 +228,13 @@ export default function OnboardingPage(){
       {published&&connected&&<a target="_blank" rel="noreferrer" href={`https://t.me/${connected.username}`} className={secondary+" mt-5 no-underline"}>Открыть бота в Telegram <ExternalLink size={17}/></a>}
     </section>}
     <div className="mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-[#e5e7eb] pt-6">
-     {stage===0?<Link href="/workspace" className={secondary+" no-underline"}><ArrowLeft size={16}/>Отмена</Link>:<button type="button" onClick={goBack} className={secondary}><ArrowLeft size={16}/>Назад</button>}
+     {stage>0?<button type="button" onClick={goBack} className={secondary}><ArrowLeft size={16}/>Назад</button>:<span aria-hidden="true"/>}
      {stage<2?<button type="button" onClick={()=>{resetMessage();setStage((stage+1) as Stage)}} className={primary}>Продолжить <ArrowRight size={16}/></button>:
       stage===2?<button type="button" onClick={()=>void nextFromSetup()} disabled={busy||!name.trim()} className={primary}>{busy?"Сохраняем…":"К проверке"} <ArrowRight size={16}/></button>:
       <div className="flex flex-wrap gap-2">
        <Link href={botId?`/workspace/builder?bot=${encodeURIComponent(botId)}`:"/workspace"} className={secondary+" no-underline"}>Открыть редактор <ArrowRight size={16}/></Link>
        {!published&&<button type="button" onClick={()=>void publish()} disabled={busy||!connected} className={primary}>{busy?"Публикуем…":"Опубликовать бота"} <Rocket size={17}/></button>}
-       {published&&<button type="button" onClick={()=>router.push("/workspace")} className={primary}>Перейти в кабинет <ChevronRight size={16}/></button>}
+       
       </div>}
     </div>
    </div>
