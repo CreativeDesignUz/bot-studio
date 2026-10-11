@@ -12,6 +12,7 @@ returns jsonb language sql stable security definer set search_path = '' as $$
         'item_type',ci.item_type,'category_id',ci.category_id,'ingredients',ci.ingredients,
         'allergens',ci.allergens,'preparation_minutes',ci.preparation_minutes) order by ci.position,ci.id)
       from public.catalog_items ci where ci.bot_id=p_bot_id and ci.is_active
+        and (ci.category_id is null or exists(select 1 from public.catalog_categories cc where cc.id=ci.category_id and cc.bot_id=p_bot_id and cc.is_active))
     ),'[]'::jsonb),
     'categories', coalesce((
       select jsonb_agg(jsonb_build_object('id',cc.id,'name',cc.name,'position',cc.position) order by cc.position,cc.id)
