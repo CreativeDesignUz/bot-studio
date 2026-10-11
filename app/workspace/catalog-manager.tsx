@@ -74,7 +74,7 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
   }
 
   async function uploadImage(file:File){
-    if(!["image/png","image/jpeg","image/webp"].includes(file.type)||file.size===0||file.size>5*1024*1024){setError("Загрузите JPG, PNG или WebP до 5 МБ.");return}
+    if(!["image/png","image/jpeg","image/webp"].includes(file.type)||file.size===0||file.size>2*1024*1024){setError("Загрузите JPG, PNG или WebP до 2 МБ.");return}
     setUploadingImage(true);setError("");
     try{
       const form=new FormData();
@@ -179,7 +179,7 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
             <label className="flex min-h-24 cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[#d0d5dd] bg-[#f9fafb] p-4 text-center transition-colors hover:border-[#6541f5]">
              {uploadingImage?<LoaderCircle className="size-6 animate-spin text-[#6541f5]"/>:<Upload className="size-6 text-[#6541f5]"/>}
              <span className="text-sm font-semibold text-[#4420e7]">{uploadingImage?"Загружаем фото…":"Загрузить фото с устройства"}</span>
-             <span className="text-xs font-normal text-[#667085]">JPG, PNG или WebP до 5 МБ</span>
+             <span className="text-xs font-normal text-[#667085]">JPG, PNG или WebP до 2 МБ</span>
              <input type="file" accept="image/jpeg,image/png,image/webp" aria-label="Загрузить фото" disabled={uploadingImage||saving} className="sr-only" onChange={event=>{const file=event.target.files?.[0];if(file)void uploadImage(file);event.currentTarget.value="";}}/>
             </label>
             {imageUrl&&/^https:\/\//i.test(imageUrl)&&<div className="relative"><img src={imageUrl} loading="lazy" alt="Предпросмотр фотографии" className="h-32 w-full rounded-xl bg-[#f2f4f7] object-cover"/><button type="button" onClick={()=>setImageUrl("")} className="absolute right-2 top-2 rounded-lg bg-white/95 px-3 py-1.5 text-xs font-semibold">Убрать фото</button></div>}
