@@ -23,8 +23,10 @@ export async function POST(request:Request){
  const identity=await resolveAppUser(request,data.initData??"");
  if("error" in identity)return Response.json({error:identity.error},{status:identity.status});
  const {supabase,user,setCookie}=identity;
- const {data:bot}=await supabase.from("bots").select("id,template_type").eq("id",id).eq("owner_id",user.id).maybeSingle();
+ const {data:bot}=await supabase.from("bots").select("id,template_type,status,publish_status").eq("id",id).eq("owner_id",user.id).maybeSingle();
  if(!bot||bot.template_type!=="delivery")return Response.json({error:"Демо-меню можно добавить только своему боту доставки еды"},{status:403});
+ // Never add example dishes to a live/published storefront.
+ if(bot.publish_status==="published" || bot.status==="active")return Response.json({error:"Демонстрационное меню недоступно для опубликованного ресторана."},{status:409});
  const {data:existing,error:existingError}=await supabase.from("catalog_items").select("name").eq("bot_id",id).eq("item_type","dish");
  if(existingError)return Response.json({error:"Не удалось проверить меню"},{status:500});
  // Import only dishes absent from this bot, keeping every existing price and edit untouched.
