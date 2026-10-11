@@ -66,13 +66,13 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
   }
 
   async function fillUzbekMenu(){
-    if(!window.confirm("Добавить 12 демонстрационных узбекских блюд с категориями и примерными ценами? Только в пустой каталог выбранного бота."))return;
+    if(!window.confirm("Добавить недостающие демонстрационные узбекские блюда? Существующие блюда, цены и категории не изменятся."))return;
     setSaving(true);setError("");setNotice("");
     try{
       const response=await fetch("/api/catalog/seed-uzbek",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({botId,initData:telegramData()})});
       const body=await response.json() as ApiResult;
       if(!response.ok)throw new Error(body.error??"Не удалось заполнить каталог");
-      setNotice(`Добавлено ${body.created??0} демонстрационных блюд. Цены и фотографии можно изменить.`);
+      setNotice((body.created??0)>0?`Добавлено ${body.created} блюд. Существующее меню сохранено.`:"Все 12 демонстрационных блюд уже есть в каталоге.");
       await refresh();
     }catch(e){setError(e instanceof Error?e.message:"Не удалось добавить меню")}
     finally{setSaving(false)}
@@ -95,7 +95,7 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
     <div className="flex flex-wrap items-center gap-3 border-b border-[#eaecf0] p-5">
       <label className="relative min-w-[180px] flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#98a2b3]"/>
         <input value={query} onChange={e=>setQuery(e.target.value)} className="h-11 w-full rounded-xl border border-[#e4e7ec] pl-10 pr-3 text-sm" placeholder="Поиск по каталогу"/></label>
-      {type==="delivery"&&items.length===0&&!loading&&<button type="button" disabled={saving} onClick={()=>void fillUzbekMenu()} className="inline-flex h-11 items-center gap-2 rounded-xl border border-[#6541f5] px-4 text-sm font-semibold text-[#5934dc] disabled:opacity-50">Добавить узбекское меню</button>}
+      {type==="delivery"&&!loading&&<button type="button" disabled={saving} onClick={()=>void fillUzbekMenu()} className="inline-flex h-11 items-center gap-2 rounded-xl border border-[#6541f5] px-4 text-sm font-semibold text-[#5934dc] disabled:opacity-50">Добавить узбекские блюда</button>}
       <button type="button" onClick={()=>open()} className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#101828] px-4 text-sm font-semibold !text-white"><Plus className="size-4"/>Добавить {noun}</button>
     </div>
     {notice&&<p role="status" className="mx-5 mt-4 rounded-lg bg-[#ecfdf3] p-3 text-sm text-[#027a48]">{notice}</p>}
