@@ -3,7 +3,7 @@ import { getSupabaseServer } from "@/lib/supabase/server";
 import { issueAuthCookie,clearAuthCookie,readAuthUserId } from "@/lib/auth/account-session";
 
 type LoginInput={provider?:string;accessToken?:string;telegram?:Record<string,unknown>};
-export type VerifiedTelegramIdentity={id:string;first_name:string;last_name:string;username:string|null};
+import {createAccountSession} from "@/lib/auth/account-service";
 function fail(error:string,status:number){return Response.json({error},{status})}
 async function telegramIdentity(raw:Record<string,unknown>){
  const token=env.TELEGRAM_LOGIN_BOT_TOKEN??env.TELEGRAM_MANAGER_TOKEN;
@@ -40,36 +40,6 @@ export async function GET(request:Request){
  return Response.json(data?{authenticated:true,user:{name:data.first_name,telegram:data.telegram_username,googleLinked:!!data.auth_user_id}}:{authenticated:false});
 }
 
-export async function verifiedTelegramSession(request:Request,tg:VerifiedTelegramIdentity){
- return createAccountSession(request,{telegram_id:tg.id,telegram_username:tg.username,first_name:tg.first_name,last_name:tg.last_name},"telegram_id",tg.id);
-}
-async function createAccountSession(request:Request,account:Record<string,unknown>,identityKey:"auth_user_id"|"telegram_id",identityValue:string){
- const supabase=getSupabaseServer({privileged:true});
- const {data:existing,error:lookupError}=await supabase.from("app_users").select("id").eq(identityKey,identityValue).maybeSingle();
- if(lookupError)return fail("Не удалось проверить аккаунт.",503);
- let id:string;
- if(existing)id=existing.id;
- else{
-  // Attach a previously created anonymous bot workspace to the verified account.
-  // Never overwrite an already claimed Google/Telegram identity.
-  const guest=readGuestHash(request),hash=guest?await hexSha(guest):null;
-  const {data:unclaimed}=hash?await supabase.from("app_users").select("id,auth_user_id,telegram_id").eq("web_session_hash",hash).maybeSingle():{data:null};
-  if(unclaimed&&!unclaimed.auth_user_id&&!unclaimed.telegram_id){
-   const {data:linked,error:linkError}=await supabase.from("app_users").update({...account,web_session_hash:null}).eq("id",unclaimed.id).is("auth_user_id",null).is("telegram_id",null).select("id").maybeSingle();
-   if(linkError||!linked)return fail("Не удалось привязать существующий кабинет.",409);
-   id=linked.id;
-  }else{
-   const {data:created,error:createError}=await supabase.from("app_users").insert({...account,language_code:"ru"}).select("id").single();
-   if(createError||!created)return fail("Не удалось создать аккаунт.",503);
-   id=created.id;
-  }
- }
- // Revoke legacy guest access after successful verified login.
- await supabase.from("app_users").update({web_session_hash:null}).eq("id",id);
- let cookie:string;
- try{cookie=await issueAuthCookie(id)}catch{return fail("Вход ещё не настроен на сервере. Требуется BOT_STUDIO_AUTH_SECRET.",503)}
- return new Response(JSON.stringify({ok:true,redirectTo:"/workspace"}),{status:200,headers:{"content-type":"application/json","set-cookie":cookie,"cache-control":"no-store"}});
-}
 export async function POST(request:Request){
  let payload:LoginInput;
  try{payload=await request.json() as LoginInput}catch{return fail("Неверные данные.",400)}
