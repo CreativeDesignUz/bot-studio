@@ -34,6 +34,13 @@ export async function POST(request: Request) {
   const identity = await resolveAppUser(request, payload.initData ?? "");
   if ("error" in identity) return Response.json({ error: identity.error }, { status: identity.status });
   const { supabase, user: appUser, setCookie } = identity;
+  // A demo is for draft preview only: never publish fake catalog or sample orders.
+  const {data:demoBot,error:demoError}=await supabase.from("bots")
+   .select("id,settings").eq("id",botId).eq("owner_id",appUser.id).maybeSingle();
+  if(demoError)return withSessionCookie({error:"Не удалось проверить данные бота."},503,setCookie);
+  if(!demoBot)return withSessionCookie({error:"Нет доступа к боту."},403,setCookie);
+  if(demoBot.settings&&typeof demoBot.settings==="object"&&(demoBot.settings as Record<string,unknown>).demo_content)
+   return withSessionCookie({error:"Перед публикацией удалите демо-данные в разделе «Меню / Товары»."},409,setCookie);
   let origin: string;
   try { origin = resolvePublicAppOrigin(request.url, env.PUBLIC_APP_URL); }
   catch { return withSessionCookie({ error: "Публичный адрес приложения не настроен.", status: "failed" }, 503, setCookie); }
