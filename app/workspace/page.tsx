@@ -4,10 +4,11 @@ import OrderManager from "./order-manager";
 import DeliverySettings from "./delivery-settings";
 import MiniAppAppearance from "./miniapp-appearance";
 import ServiceRequestManager from "./service-request-manager";
+import WorkspaceSidebar from "./workspace-sidebar";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Bell, Bot, ChevronDown, CircleCheck, Clock3, Plus, Search, Settings, TrendingUp, ArrowRight } from "lucide-react";
+import { Bell, Bot, ChevronDown, CircleCheck, Clock3, Plus, Search, Settings, TrendingUp, ArrowRight, Menu, X } from "lucide-react";
 import { BotTemplateId, productTemplates } from "@/lib/product/templates";
 
 const demoBots: { id: string; name: string; type: BotTemplateId; username: string }[] = [
@@ -31,6 +32,7 @@ export default function WorkspacePage() {
   const [loadError, setLoadError] = useState(false);
   const [botId, setBotId] = useState("");
   const [section, setSection] = useState("overview");
+  const [mobileMenu,setMobileMenu]=useState(false);
   const bot = bots.find((item) => item.id === botId) ?? bots[0] ?? demoBots[0];
   const template = productTemplates[bot.type];
   const basePage = content[bot.type];
@@ -55,7 +57,7 @@ export default function WorkspacePage() {
         if(!response.ok)throw new Error("Workspace request failed");
         const result=await response.json() as WorkspaceResponse;
         const loaded=result.bots.map(item=>({id:item.id,name:item.name,type:item.template_type,username:item.username??`studio_${item.id.slice(0,8)}_bot`,metrics:item.metrics}));
-        setBots(loaded);const requested=new URLSearchParams(location.search).get("bot");setBotId(loaded.some(item=>item.id===requested)?requested!:loaded[0]?.id??"");setLoadError(false);
+        setBots(loaded);const requested=new URLSearchParams(location.search).get("bot");setBotId(loaded.some(item=>item.id===requested)?requested!:loaded[0]?.id??"");setSection(new URLSearchParams(location.search).get("section")??"overview");setLoadError(false);
       }catch{setLoadError(true)}finally{setLoading(false)}
     }
     void loadWorkspace();
@@ -73,15 +75,18 @@ export default function WorkspacePage() {
   if(!bots.length)return <main className="grid min-h-screen place-items-center bg-[#f4f6f8] p-5 text-[#101828]"><section className="w-full max-w-lg rounded-[24px] border border-[#e4e7ec] bg-white p-8 text-center"><span className="mx-auto grid size-14 place-items-center rounded-2xl bg-[#f0ecff] text-[#6d45f5]"><Bot/></span><h1 className="mt-5 text-2xl font-semibold">Создайте первого бота</h1><p className="mt-2 text-sm leading-6 text-[#667085]">Выберите готовый тип бизнеса, добавьте первый товар или услугу — и сразу увидите Mini App.</p><Link href="/onboarding" className="mt-6 inline-flex h-11 items-center rounded-xl bg-[#101828] px-5 text-sm font-semibold text-white no-underline">Начать создание</Link></section></main>;
   return <main className="min-h-screen bg-[#f4f6f8] text-[#101828]">
     <div className="mx-auto flex min-h-screen max-w-[1600px]">
-      <aside className="hidden w-[248px] shrink-0 border-r border-[#e4e7ec] bg-white p-4 lg:flex lg:flex-col">
-        <Link href="/" className="mb-7 flex items-center gap-2.5 px-2 py-2 font-semibold text-[#101828] no-underline"><span className="grid size-9 place-items-center rounded-xl bg-[#6d45f5] text-white"><Bot className="size-5" /></span>Bot Studio</Link>
-        <label className="mb-6 block"><span className="mb-2 block px-2 text-[11px] font-semibold uppercase tracking-[.14em] text-[#98a2b3]">Рабочий бот</span><span className="relative block"><select value={botId} onChange={(event) => switchBot(event.target.value)} className="h-14 w-full appearance-none rounded-2xl border border-[#e4e7ec] bg-[#f9fafb] px-3 pr-9 text-sm font-semibold outline-none focus:border-[#6d45f5]">{bots.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2" /></span></label>
-        <nav className="space-y-1">{template.modules.map(({ id, label, icon: Icon }) => <button key={id} onClick={() => setSection(id)} className={`flex h-11 w-full items-center gap-3 rounded-xl px-3 text-sm font-medium transition ${currentSection === id ? "bg-[#f0ecff] text-[#5934dc]" : "text-[#667085] hover:bg-[#f9fafb]"}`}><Icon className="size-[18px]" />{label}</button>)}{bot.type === "delivery" && <div className="mt-4 border-t border-[#e4e7ec] pt-3"><p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-[#98a2b3]">Настройки</p><button type="button" onClick={()=>setSection("miniapp_appearance")} className={`flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm font-medium ${currentSection==="miniapp_appearance"?"bg-[#f0ecff] text-[#5934dc]":"text-[#475467]"}`}>Оформление Mini App</button></div>}{(bot.type==="delivery"||bot.type==="store")&&<button type="button" onClick={()=>setSection("delivery_settings")} className={`mt-2 flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-sm font-medium ${currentSection==="delivery_settings"?"bg-[#f0ecff] text-[#5934dc]":"text-[#475467]"}`}><Settings size={18}/>Настройки доставки</button>}</nav>
-        <div className="mt-auto space-y-1 border-t border-[#eaecf0] pt-4"><Link href={`/workspace/builder?bot=${bot.id}`} className="flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium text-[#667085] no-underline hover:bg-[#f9fafb]"><Settings className="size-[18px]" />Настройки бота</Link><Link href="/workspace/account" className="flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium text-[#667085] no-underline hover:bg-[#f9fafb]"><Settings className="size-[18px]" />Мой аккаунт и вход</Link><Link href="/onboarding" className="flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold text-[#5934dc] no-underline hover:bg-[#f0ecff]"><Plus className="size-[18px]" />Создать ещё бота</Link></div>
-      </aside>
+      <div className="hidden w-[260px] shrink-0 lg:sticky lg:top-0 lg:block lg:h-screen"><WorkspaceSidebar botId={bot.id} botType={bot.type} bots={bots} activeSection={currentSection} onBotChange={switchBot} onSectionChange={setSection}/></div>
 
+      {mobileMenu&&<div className="fixed inset-0 z-50 flex bg-[#101828]/40 lg:hidden" role="presentation" onClick={()=>setMobileMenu(false)}>
+       <div className="h-dvh w-[min(86vw,310px)] bg-white" onClick={e=>e.stopPropagation()}>
+        <div className="relative h-full"><WorkspaceSidebar botId={bot.id} botType={bot.type} bots={bots} activeSection={currentSection} onBotChange={id=>{switchBot(id);setMobileMenu(false)}} onSectionChange={id=>{setSection(id);setMobileMenu(false)}}/>
+         <button type="button" aria-label="Закрыть меню" onClick={()=>setMobileMenu(false)} className="absolute right-2 top-5 grid size-9 place-items-center rounded-lg bg-[#f2f4f7]"><X size={18}/></button>
+        </div>
+       </div>
+      </div>}
       <section className="min-w-0 flex-1">
         <header className="sticky top-0 z-20 flex h-[72px] items-center gap-3 border-b border-[#e4e7ec] bg-white/90 px-4 backdrop-blur-xl sm:px-7">
+          <button type="button" aria-label="Открыть все разделы" onClick={()=>setMobileMenu(true)} className="grid size-11 shrink-0 place-items-center rounded-xl border border-[#e4e7ec] lg:hidden"><Menu size={20}/></button>
           <label className="relative min-w-0 flex-1 lg:hidden"><select value={botId} onChange={(event) => switchBot(event.target.value)} className="h-11 w-full appearance-none rounded-xl border border-[#e4e7ec] bg-white px-3 pr-9 text-sm font-semibold">{bots.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2" /></label>
           <label className="relative hidden max-w-md flex-1 lg:block"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#98a2b3]" /><input className="h-11 w-full rounded-xl border border-[#e4e7ec] bg-[#f9fafb] pl-10 pr-4 text-sm outline-none focus:border-[#6d45f5]" placeholder="Поиск по кабинету" /></label>
           <Link href="/onboarding" aria-label="Создать ещё бота" title="Создать бота" className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#6541f5] text-white no-underline lg:hidden"><Plus className="size-[20px]" /></Link>
