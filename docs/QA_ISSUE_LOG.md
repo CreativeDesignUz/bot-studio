@@ -107,6 +107,13 @@ Environment: isolated Cloudflare Worker \`bot-studio-staging\`, Supabase testbas
 | QA-019 / [Issue #11](https://github.com/CreativeDesignUz/bot-studio/issues/11) | Google login disabled when testbase provider reports Google not configured | PKCE client code present; **no provider activation was performed** | BLOCKED until Google OAuth Web Client ID/Secret are configured in Supabase testbase and tested with a real account |
 | QA-020 | Previous browser QA used selectors not matching real label/viewport and ran before code deploy | Fixed Playwright selectors; added authenticated onboarding mock plus unsigned API, login redirection and theme checks in \`e2e/staging.spec.ts\` — latest test commit \`ad5cd65\` | CI [38156909925](https://github.com/CreativeDesignUz/bot-studio/actions/runs/38156909925) passed; QA [38156909929](https://github.com/CreativeDesignUz/bot-studio/actions/runs/38156909929) initial attempt failed against pre-update Worker; **re-run attempt 2 triggered after latest staging upload** |
 
+### Post-deployment E2E result (11 October 2026)
+- **PASS:** GitHub Actions [staging QA run 38156909929, attempt 2](https://github.com/CreativeDesignUz/bot-studio/actions/runs/38156909929) completed successfully after Cloudflare staging was updated: **41 passed, 0 failed, 1 intentionally skipped** (desktop/mobile Playwright).
+- **PASS on staging:** mobile create action, blocked anonymous admin APIs, unauthenticated browser redirect, bot template onboarding with mocked writes, theme selection/save with mocked writes, Mini App preview/cart, Telegram OIDC start and safe invalid callback handling.
+- **PASS code quality:** [run 38156909925](https://github.com/CreativeDesignUz/bot-studio/actions/runs/38156909925) — TypeScript, ESLint, unit tests, production build.
+- **Still unverified:** complete real Telegram login and owner session, real Google OAuth (provider is currently disabled), actual persisted creation/publishing/checkout and ownership across two real user sessions. Do not claim the entire business E2E is complete.
+- **Revision provenance:** Cloudflare metadata identifies the deployed Worker version and time but not its exact Git commit; functional staging tests passed against the live Worker.
+
 ### Staging deployment observation
 - 2026-10-11 16:49:52 UTC: Cloudflare Worker \`bot-studio-staging\` deployment \`da5cc430-0532-4be7-b0d4-f11086a8e4e5\`, Worker version \`08b570df-6c1a-48ce-8009-c94952a45e1f\`, 100% traffic, deployed through Wrangler.
 - Cloudflare does **not** expose a Git SHA for this uploaded version in the Worker metadata. The deployed source commit therefore **cannot be certified by time alone**. Treat successful post-deploy HTTP + browser QA as functional evidence, not SHA provenance.
