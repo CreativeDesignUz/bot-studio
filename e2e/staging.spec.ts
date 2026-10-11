@@ -36,3 +36,27 @@ test("authentication layout fits a mobile viewport", async ({ page }, testInfo) 
   expect(dimensions.content).toBeLessThanOrEqual(dimensions.viewport);
   await expect(page.getByRole("button", { name: /Продолжить через Google/i })).toBeVisible();
 });
+
+test("Telegram OIDC is enabled and starts an authorization-code flow", async ({ request, page }) => {
+  const providers = await request.get("/api/auth/providers");
+  expect(providers.ok()).toBeTruthy();
+  const config = await providers.json();
+  expect(config.telegram, "Staging must advertise configured Telegram OIDC").not.toBeNull();
+  await page.goto("/auth");
+  await expect(page.getByRole("link", { name: /Войти через Telegram/ })).toBeVisible();
+  const start = await request.get("/api/auth/telegram/start", { maxRedirects: 0 });
+  expect(start.status()).toBe(302);
+  const destination = new URL(start.headers()["location"]);
+  expect(destination.hostname).toBe("oauth.telegram.org");
+  expect(destination.searchParams.get("response_type")).toBe("code");
+  expect(destination.searchParams.get("code_challenge_method")).toBe("S256");
+  expect(destination.searchParams.get("redirect_uri")).toBe("https://bot-studio-staging.slavnauz.workers.dev/api/auth/telegram/callback");
+  expect(destination.searchParams.get("client_id")).toMatch(/^\\d+$/);
+  expect(destination.searchParams.has("bot_id")).toBe(false);
+});
+
+test("Telegram callback fails closed without valid CSRF cookie", async ({ request }) => {
+  const response = await request.get("/api/auth/telegram/callback?code=fake&state=fake", { maxRedirects: 0 });
+  expect(response.status()).toBe(302);
+  expect(response.headers()["location"]).toContain("/auth?error=telegram_session_expired");
+});
