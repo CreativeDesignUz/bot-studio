@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { LoaderCircle, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { ImagePlus, LoaderCircle, Pencil, Plus, Search, Trash2, Upload, X } from "lucide-react";
 import { formatCatalogPrice, formatStoredPrice, priceToMinor, type CatalogCurrency } from "@/lib/catalog/price";
 
 type Item = { id: string; name: string; description: string; price_minor: number | null; is_active: boolean; currency: string; image_url?:string|null;category_id?:string|null; ingredients?:string[];allergens?:string[];preparation_minutes?:number|null;stock_quantity?:number|null };
@@ -18,6 +18,7 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
   const [categoryName,setCategoryName]=useState("");
   const [editingCategory,setEditingCategory]=useState<Category|"new"|null>(null);
   const [imageUrl,setImageUrl]=useState("");
+  const [uploadingImage,setUploadingImage]=useState(false);
   const [ingredients,setIngredients]=useState("");
   const [allergens,setAllergens]=useState("");
   const [preparationMinutes,setPreparationMinutes]=useState("");
@@ -72,6 +73,20 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
     setPrice(item?.price_minor == null ? "" : formatStoredPrice(item.price_minor, nextCurrency)); setActive(item?.is_active ?? true); setError("");
   }
 
+  async function uploadImage(file:File){
+    if(!["image/png","image/jpeg","image/webp"].includes(file.type)||file.size===0||file.size>5*1024*1024){setError("Загрузите JPG, PNG или WebP до 5 МБ.");return}
+    setUploadingImage(true);setError("");
+    try{
+      const form=new FormData();
+      form.append("botId",botId);form.append("initData",telegramData());form.append("image",file);
+      const response=await fetch("/api/catalog/image",{method:"POST",body:form});
+      const result=await response.json() as {imageUrl?:string;error?:string};
+      if(!response.ok||!result.imageUrl)throw new Error(result.error??"Не удалось загрузить фото.");
+      setImageUrl(result.imageUrl);
+    }catch(cause){setError(cause instanceof Error?cause.message:"Не удалось загрузить фото.");}
+    finally{setUploadingImage(false);}
+  }
+
   async function save() {
     let priceMinor: number | null;
     try { priceMinor = priceToMinor(price, currency); }
@@ -79,6 +94,7 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
     if (!name.trim()) { setError("Введите название."); return; }
     if (stock!=="" && (!/^\d+$/.test(stock)||!Number.isSafeInteger(Number(stock))||Number(stock)>100000000)){setError("Остаток должен быть целым числом от 0 до 100 000 000.");return;}
     if(type==="delivery" && preparationMinutes!=="" && (!/^\d{1,3}$/.test(preparationMinutes)||Number(preparationMinutes)>360)) {setError("Время приготовления: от 0 до 360 минут.");return;}
+    if(uploadingImage){setError("Дождитесь завершения загрузки фото.");return;}
     setSaving(true); setError("");
     try {
       const response = await fetch("/api/catalog", { method: "POST", headers: { "content-type": "application/json" },
@@ -152,15 +168,23 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
       <div className="mt-6 flex justify-end gap-3"><button type="button" onClick={()=>setEditingCategory(null)} className="h-11 rounded-xl border px-4">Отмена</button>
       <button type="button" disabled={saving||!categoryName.trim()} onClick={()=>void categoryRequest("POST",{...(editingCategory==="new"?{position:categories.length}:{id:editingCategory.id}),name:categoryName.trim()})} className="h-11 rounded-xl bg-[#6541f5] px-5 text-sm font-semibold !text-white disabled:opacity-60">Сохранить</button></div>
     </div></div>}
-    {editing!==null&&<div className="fixed inset-0 z-50 grid place-items-center bg-[#101828]/60 p-4">
-      <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
-        <div className="flex items-center justify-between"><h2 className="text-xl font-semibold">{editing==="new"?"Добавить":"Редактировать"} {noun}</h2><button type="button" onClick={()=>setEditing(null)} aria-label="Закрыть"><X/></button></div>
-        <div className="mt-5 space-y-4"><label className="block text-sm font-medium">Название<input maxLength={120} value={name} onChange={e=>setName(e.target.value)} className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/></label>
+    {editing!==null&&<div className="fixed inset-0 z-50 flex items-center justify-center bg-[#101828]/60 p-3 sm:p-5">
+      <div role="dialog" aria-modal="true" aria-label={editing==="new"?"Добавить "+noun:"Редактировать "+noun} className="flex max-h-[min(85dvh,740px)] min-h-0 w-full max-w-lg flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+        <div className="flex shrink-0 items-center justify-between border-b border-[#eaecf0] px-5 py-4 sm:px-6"><h2 className="text-lg font-semibold">{editing==="new"?"Добавить":"Редактировать"} {noun}</h2><button type="button" onClick={()=>setEditing(null)} aria-label="Закрыть" className="grid size-9 place-items-center rounded-lg hover:bg-[#f2f4f7]"><X size={19}/></button></div>
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6"><label className="block text-sm font-medium">Название<input maxLength={120} value={name} onChange={e=>setName(e.target.value)} className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/></label>
           <label className="block text-sm font-medium">Описание<textarea maxLength={2000} value={description} onChange={e=>setDescription(e.target.value)} rows={3} className="mt-2 w-full rounded-xl border border-[#d0d5dd] p-3"/></label>
           {(type==="delivery"||type==="store")&&<label className="block text-sm font-medium">Категория<select value={categoryId} onChange={e=>setCategoryId(e.target.value)} className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"><option value="">Без категории</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
-          <label className="block text-sm font-medium">{type==="delivery"?"Фото блюда":"Фото товара"} (HTTPS-ссылка)<input type="url" value={imageUrl} onChange={e=>setImageUrl(e.target.value)} placeholder="https://..." className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/></label>
-          {imageUrl&&/^https:\/\//i.test(imageUrl)&&<img src={imageUrl} loading="lazy" alt="Предпросмотр фотографии" className="h-28 w-full rounded-xl bg-[#f2f4f7] object-cover"/>}
-          {type==="delivery"&&<>
+          <div className="space-y-3 text-sm font-medium"><p>{type==="delivery"?"Фото блюда":"Фото товара"}</p>
+            <label className="flex min-h-24 cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[#d0d5dd] bg-[#f9fafb] p-4 text-center transition-colors hover:border-[#6541f5]">
+             {uploadingImage?<LoaderCircle className="size-6 animate-spin text-[#6541f5]"/>:<Upload className="size-6 text-[#6541f5]"/>}
+             <span className="text-sm font-semibold text-[#4420e7]">{uploadingImage?"Загружаем фото…":"Загрузить фото с устройства"}</span>
+             <span className="text-xs font-normal text-[#667085]">JPG, PNG или WebP до 5 МБ</span>
+             <input type="file" accept="image/jpeg,image/png,image/webp" aria-label="Загрузить фото" disabled={uploadingImage||saving} className="sr-only" onChange={event=>{const file=event.target.files?.[0];if(file)void uploadImage(file);event.currentTarget.value="";}}/>
+            </label>
+            {imageUrl&&/^https:\/\//i.test(imageUrl)&&<div className="relative"><img src={imageUrl} loading="lazy" alt="Предпросмотр фотографии" className="h-32 w-full rounded-xl bg-[#f2f4f7] object-cover"/><button type="button" onClick={()=>setImageUrl("")} className="absolute right-2 top-2 rounded-lg bg-white/95 px-3 py-1.5 text-xs font-semibold">Убрать фото</button></div>}
+            <details className="text-xs font-normal text-[#667085]"><summary className="cursor-pointer">Или вставить ссылку на изображение</summary><input type="url" aria-label="HTTPS-ссылка на фото" value={imageUrl} onChange={e=>setImageUrl(e.target.value)} placeholder="https://..." className="mt-2 h-10 w-full rounded-xl border border-[#d0d5dd] px-3"/></details>
+           </div>
+                    {type==="delivery"&&<>
             <label className="block text-sm font-medium">Состав блюда<input value={ingredients} onChange={e=>setIngredients(e.target.value)} placeholder="Говядина, рис, морковь" className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/><span className="mt-1 block text-xs font-normal text-[#667085]">Разделяйте ингредиенты запятыми</span></label>
             <label className="block text-sm font-medium">Аллергены<input value={allergens} onChange={e=>setAllergens(e.target.value)} placeholder="Орехи, глютен" className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/></label>
             <label className="block text-sm font-medium">Время приготовления, мин<input type="number" min={0} max={360} value={preparationMinutes} onChange={e=>setPreparationMinutes(e.target.value)} placeholder="25" className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/></label>
@@ -172,8 +196,8 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
             </select></div><p className="mt-1 text-xs font-normal text-[#667085]">Валюта сохраняется вместе с ценой, конвертация не выполняется.</p></div>
           {(type==="delivery"||type==="store")&&<label className="block text-sm font-medium">Количество в наличии<input type="number" min={0} max={100000000} step={1} value={stock} onChange={e=>setStock(e.target.value)} placeholder="Не ограничено" className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/><span className="mt-1 block text-xs font-normal text-[#667085]">0 — скрыть у покупателя, пусто — не учитывать остаток. После заказа количество уменьшится.</span></label>}
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={active} onChange={e=>setActive(e.target.checked)}/>Показывать в Mini App</label></div>
-        <div className="mt-6 flex justify-end gap-3"><button type="button" onClick={()=>setEditing(null)} className="h-11 rounded-xl border px-4 text-sm">Отмена</button>
-          <button type="button" disabled={saving} onClick={()=>void save()} className="h-11 rounded-xl bg-[#6541f5] px-5 text-sm font-semibold !text-white disabled:opacity-60">{saving?"Сохраняем…":"Сохранить"}</button></div>
+        <div className="flex shrink-0 justify-end gap-3 border-t border-[#eaecf0] bg-white px-5 py-3 sm:px-6"><button type="button" onClick={()=>setEditing(null)} className="h-10 rounded-xl border px-4 text-sm">Отмена</button>
+          <button type="button" disabled={saving||uploadingImage} onClick={()=>void save()} className="h-10 rounded-xl bg-[#6541f5] px-5 text-sm font-semibold !text-white disabled:opacity-60">{saving?"Сохраняем…":"Сохранить"}</button></div>
       </div></div>}
   </section>;
 }
