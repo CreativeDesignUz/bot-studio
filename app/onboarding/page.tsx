@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import MiniAppDesignStep from "./miniapp-design-step";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Bot, BookOpen, Check, CheckCircle2, Clock3, ExternalLink, ImagePlus, KeyRound, LayoutDashboard, LoaderCircle, Package, Rocket, Send, ShoppingBag, Sparkles, UtensilsCrossed } from "lucide-react";
 
-type Stage = 0 | 1 | 2 | 3;
+type Stage = 0 | 1 | 2 | 3 | 4;
 type TemplateId = "delivery" | "store" | "service" | "course";
 type ConnectionChoice = "new" | "existing" | "later";
 type TelegramIdentity = {name:string;username:string};
@@ -15,7 +16,7 @@ const templates = [
  {id:"service" as const,title:"Услуги и запись",description:"Заявки, услуги и клиенты",Icon:Clock3},
  {id:"course" as const,title:"Обучение",description:"Курсы, уроки и доступ к материалам",Icon:BookOpen},
 ];
-const stages = ["Telegram","Шаблон","Настройка","Запуск"];
+const stages = ["Telegram","Шаблон","Настройка","Дизайн Mini App","Запуск"];
 const card = "rounded-[18px] border border-[#e0e5ed] bg-white p-5";
 const primary = "inline-flex min-h-11 items-center justify-center gap-2 rounded-[10px] bg-[#4420e7] px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40";
 const secondary = "inline-flex min-h-11 items-center justify-center gap-2 rounded-[10px] border border-[#d7dce6] bg-white px-5 text-sm font-medium text-[#101828] disabled:opacity-50";
@@ -30,6 +31,7 @@ export default function OnboardingPage(){
  const [name,setName]=useState("");
  const [description,setDescription]=useState("");
  const [color,setColor]=useState("#6541F5");
+ const [miniappDesignSaved,setMiniappDesignSaved]=useState(false);
  const [avatar,setAvatar]=useState<File|null>(null);
  const [avatarUrl,setAvatarUrl]=useState("");
  const [botId,setBotId]=useState<string|null>(null);
@@ -156,8 +158,8 @@ export default function OnboardingPage(){
     <div className="rounded-[16px] border border-[#e0e5ed] bg-white p-5 shadow-[0_6px_24px_rgba(16,24,40,0.03)]">
     <p className="text-xs font-semibold uppercase tracking-widest text-[#98a2b3]">Создание бота</p>
     <nav aria-label="Этапы создания" className="mt-5 flex flex-wrap gap-2 lg:flex-col">{stages.map((title,i)=><div key={title} aria-current={stage===i?"step":undefined} className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm ${stage===i?"bg-[#eee9ff] font-semibold text-[#4420e7]":i<stage?"text-[#166534]":"text-[#667085]"}`}><span className={`grid size-8 shrink-0 place-items-center rounded-full ${stage===i?"bg-[#4420e7] text-white":i<stage?"bg-[#dcfce7] text-[#166534]":"bg-[#edf0f5]"}`}>{i<stage?<Check size={16}/>:i+1}</span><span>{title}</span></div>)}</nav>
-    <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-[#e6e9f1]"><div className="h-full rounded-full bg-[#6541F5] transition-all" style={{width:`${(stage+1)*25}%`}}/></div>
-    <p className="mt-3 text-xs text-[#98a2b3]">Шаг {stage+1} из 4</p>
+    <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-[#e6e9f1]"><div className="h-full rounded-full bg-[#6541F5] transition-all" style={{width:`${(stage+1)/stages.length*100}%`}}/></div>
+    <p className="mt-3 text-xs text-[#98a2b3]">Шаг {stage+1} из {stages.length}</p>
     </div>
 
    </aside>
@@ -235,12 +237,14 @@ export default function OnboardingPage(){
      <aside className={card}><div className="flex items-center gap-2 text-xs font-semibold text-[#667085]"><Sparkles size={16}/>Предпросмотр</div><div className="mt-4 rounded-xl px-4 py-9 text-center text-white" style={{background:color}}><div className="mx-auto grid size-16 place-items-center overflow-hidden rounded-full bg-white/20">{avatarUrl?<img src={avatarUrl} className="size-full object-cover" alt=""/>:<SelectedIcon size={30}/>}</div><h2 className="mt-4 font-semibold">{name||"Название бота"}</h2><p className="mt-2 text-xs opacity-80">{description||template.description}</p></div><p className="mt-3 text-xs text-[#98a2b3]">Полный предпросмотр Telegram и Mini App доступен в редакторе.</p></aside>
      </div>
     </section>}
-    {stage===3&&<section>
+    {stage===3&&botId&&<MiniAppDesignStep botId={botId} template={templateId} initialColor={color} previouslySaved={miniappDesignSaved} onColorChange={setColor} onContinue={()=>{setMiniappDesignSaved(true);resetMessage();setStage(4)}}/>}
+    {stage===4&&<section>
       <h1 className="text-3xl font-semibold tracking-tight">{published?"Бот опубликован!":"Проверка и запуск"}</h1><p className="mt-2 text-sm text-[#667085]">{published?"Можно открыть Telegram или продолжить настройку.":"Проверьте готовность бота перед публикацией."}</p>
       <div className={card+" mt-8 space-y-4"}>
        <div className="flex items-center gap-3"><CheckCircle2 className="text-[#16a34a]"/><span className="flex-1 text-sm">Проект «{name}» создан</span><span className="text-xs text-[#16a34a]">Готово</span></div>
        <div className="flex items-center gap-3">{connected?<CheckCircle2 className="text-[#16a34a]"/>:<KeyRound className="text-[#d97706]"/>}<span className="flex-1 text-sm">{connected?`Telegram подключён: @${connected.username}`:"Telegram ещё не подключён"}</span>{!connected&&<button type="button" onClick={()=>setStage(2)} className="text-xs font-semibold text-[#4420e7]">Подключить</button>}</div>
        <div className="flex items-center gap-3"><CheckCircle2 className="text-[#16a34a]"/><span className="flex-1 text-sm">Выбран шаблон «{template.title}»</span></div>
+       {miniappDesignSaved&&(templateId==="store"||templateId==="delivery")&&<div className="flex items-center gap-3"><CheckCircle2 className="text-[#16a34a]"/><span className="flex-1 text-sm">Дизайн Mini App сохранён</span><button type="button" onClick={()=>setStage(3)} className="text-xs font-semibold text-[#4420e7]">Изменить</button></div>}
        <div className="rounded-xl bg-[#f7f8fb] p-4 text-sm text-[#667085]">Приветствие, кнопки, первый товар или услуга настраиваются в редакторе. Для публикации потребуется публичный HTTPS-адрес приложения.</div>
       </div>
       {published&&connected&&<a target="_blank" rel="noreferrer" href={`https://t.me/${connected.username}`} className={secondary+" mt-5 no-underline"}>Открыть бота в Telegram <ExternalLink size={17}/></a>}
@@ -248,7 +252,8 @@ export default function OnboardingPage(){
     <div className="mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-[#e5e7eb] pt-6">
      {stage>0?<button type="button" onClick={goBack} className={secondary}><ArrowLeft size={16}/>Назад</button>:<span aria-hidden="true"/>}
      {stage<2?<button type="button" onClick={()=>{resetMessage();setStage((stage+1) as Stage)}} className={primary}>Продолжить <ArrowRight size={16}/></button>:
-      stage===2?<button type="button" onClick={()=>void nextFromSetup()} disabled={busy||!name.trim()} className={primary}>{busy?"Сохраняем…":"К проверке"} <ArrowRight size={16}/></button>:
+      stage===2?<button type="button" onClick={()=>void nextFromSetup()} disabled={busy||!name.trim()} className={primary}>{busy?"Сохраняем…":"К дизайну Mini App"} <ArrowRight size={16}/></button>:
+      stage===3?<span aria-hidden="true"/>:
       <div className="flex flex-wrap gap-2">
        <Link href={botId?`/workspace/builder?bot=${encodeURIComponent(botId)}`:"/workspace"} className={secondary+" no-underline"}>Открыть редактор <ArrowRight size={16}/></Link>
        {!published&&<button type="button" onClick={()=>void publish()} disabled={busy||!connected} className={primary}>{busy?"Публикуем…":"Опубликовать бота"} <Rocket size={17}/></button>}
