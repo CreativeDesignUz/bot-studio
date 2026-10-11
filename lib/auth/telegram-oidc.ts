@@ -20,7 +20,7 @@ export async function verifyIdToken(jwt:string,clientId:string){
  const res=await fetch(base+"/.well-known/jwks.json",{signal:AbortSignal.timeout(6000)});
  if(!res.ok)throw Error("Telegram keys unavailable");
  const keys=await res.json() as {keys?:Array<JsonWebKey&{kid?:string}>};
- const jwk=keys.keys?.find(k=>k.kid===header.kid&&k.kty==="RSA"&&k.alg==="RS256");
+ const jwk=keys.keys?.find(k=>k.kid===header.kid&&k.kty==="RSA"&&(!k.alg||k.alg==="RS256"));
  if(!jwk)throw Error("Unknown signing key");
  const key=await crypto.subtle.importKey("jwk",jwk,{name:"RSASSA-PKCS1-v1_5",hash:"SHA-256"},false,["verify"]);
  if(!await crypto.subtle.verify("RSASSA-PKCS1-v1_5",key,decode(parts[2]),encoder.encode(parts[0]+"."+parts[1])))throw Error("Invalid signature");
