@@ -1,0 +1,33 @@
+name: Bot Studio Staging QA
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '15 */6 * * *'
+permissions:
+  contents: read
+jobs:
+  staging-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      E2E_BASE_URL: https://bot-studio-staging.slavnauz.workers.dev
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/telegram-oidc-login-20261011
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.13.1'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test e2e/staging.spec.ts
+      - name: Upload traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-qa-traces
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
