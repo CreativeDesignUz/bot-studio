@@ -13,6 +13,8 @@ declare
 begin
   if p_request_key !~ '^[A-Za-z0-9_-]{16,128}$' then raise exception 'INVALID_REQUEST_KEY' using errcode='22023'; end if;
   request_fingerprint := md5(jsonb_build_object('fulfillment',p_fulfillment,'address',p_delivery_address,'items',p_items,'name',p_customer_name)::text);
+  -- Lock first, then check idempotency, to avoid a duplicate concurrent stock deduction.
+  perform 1 from public.bots where id=p_bot_id for update;
   select * into order_row from public.orders where bot_id=p_bot_id
     and customer_external_id=p_customer_external_id and request_key=p_request_key;
   if order_row.id is not null then
@@ -34,8 +36,6 @@ begin
     where (p.value->>'id')::uuid=any(requested_ids) and (p.value->>'price_minor')::bigint>=0;
   if cardinality(item_ids) is distinct from cardinality(requested_ids) or expected_count<>1
     then raise exception 'ITEM_UNAVAILABLE' using errcode='22023'; end if;
-  -- Serialize stock checks and deductions per store; deadlock-safe across item sets.
-  perform 1 from public.bots where id=p_bot_id for update;
   for item in select value from jsonb_array_elements(p_items) as t(value) loop
     if jsonb_typeof(item->'quantity')<>'number' or (item->>'quantity')!~'^[0-9]{1,2}$'
       or (item->>'quantity')::integer not between 1 and 99 then raise exception 'INVALID_QUANTITY' using errcode='22023'; end if;
