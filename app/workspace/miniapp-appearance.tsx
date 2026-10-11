@@ -43,7 +43,7 @@ export default function MiniAppAppearance({botId}:{botId:string}){
   void load();return()=>abort.abort();
  },[botId]);
  async function uploadBanner(file:File){
-  if(!["image/png","image/jpeg","image/webp"].includes(file.type)||file.size===0||file.size>5*1024*1024){setError("Загрузите JPG, PNG или WebP до 5 МБ.");return}
+  if(!["image/png","image/jpeg","image/webp"].includes(file.type)||file.size===0||file.size>2*1024*1024){setError("Загрузите JPG, PNG или WebP до 2 МБ.");return}
   setUploadingBanner(true);setError("");
   try{
    const form=new FormData();form.append("botId",botId);form.append("initData",telegramData());form.append("image",file);
@@ -88,7 +88,7 @@ export default function MiniAppAppearance({botId}:{botId:string}){
      <label className="flex min-h-24 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#d0d5dd] bg-[#f9fafb] p-4 text-sm hover:border-[#6541f5]">
       {uploadingBanner?<LoaderCircle size={22} className="animate-spin text-[#6541f5]"/>:<Upload size={22} className="text-[#6541f5]"/>}
       <span className="font-semibold text-[#4420e7]">{uploadingBanner?"Загружаем изображение…":"Загрузить фото с устройства"}</span>
-      <span className="text-xs text-[#667085]">JPG, PNG или WebP до 5 МБ</span>
+      <span className="text-xs text-[#667085]">JPG, PNG или WebP до 2 МБ</span>
       <input aria-label="Загрузить фото баннера" type="file" accept="image/jpeg,image/png,image/webp" disabled={uploadingBanner||saving} onChange={e=>{const file=e.target.files?.[0];if(file)void uploadBanner(file);e.currentTarget.value="";}} className="sr-only"/>
      </label>
      {design.banner.imageUrl.startsWith("https://")&&<div className="relative"><img src={design.banner.imageUrl} alt="Предпросмотр баннера" className="h-32 w-full rounded-xl object-cover"/><button type="button" onClick={()=>banner({imageUrl:""})} className="absolute right-2 top-2 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold">Убрать фото</button></div>}
