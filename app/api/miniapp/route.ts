@@ -23,7 +23,17 @@ export async function GET(request: Request) {
     const catalog = (published.catalog ?? {}) as Record<string, unknown>;
     if (!Array.isArray(catalog.items) || !Array.isArray(catalog.categories))
       return jsonError("Каталог ожидает публикации или обновления базы данных", 503);
-    const items = catalog.items;
+    // Publication freezes content and price, while inventory availability is live.
+    const publishedItems = catalog.items as Array<{id:string;[key:string]:unknown}>;
+    const ids = publishedItems.map(item=>item.id);
+    let items = publishedItems;
+    if(ids.length){
+      const {data:inventory,error:inventoryError}=await supabase.from("catalog_items")
+        .select("id,stock_quantity").eq("bot_id",botId).in("id",ids);
+      if(inventoryError)return jsonError("Временно недоступна проверка остатков",503);
+      const stocks=new Map((inventory??[]).map(row=>[row.id,row.stock_quantity]));
+      items=publishedItems.filter(item=>stocks.has(item.id)&&((stocks.get(item.id)??1)>0));
+    }
     const categories = catalog.categories;
     // Buyer-visible theme comes exclusively from the last successful publication,
     // not the seller's still-editable draft settings.
