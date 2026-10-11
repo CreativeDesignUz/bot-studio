@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import {useEffect,useState} from "react";
 import {Bot,ChevronDown,ChevronRight,KeyRound,LayoutGrid,Palette,Plus,Settings2,ShieldCheck,UserRound,MessageSquareText,Workflow,Send,Truck} from "lucide-react";
 import {productTemplates,type BotTemplateId} from "@/lib/product/templates";
 
@@ -24,6 +25,19 @@ const editorOptions=[
 ];
 export default function WorkspaceSidebar({botId,botType,bots,activeSection,onSectionChange,onBotChange,editorSection,onEditorSectionChange}:Props){
  const isEditor=!!onEditorSectionChange;
+ const [availableBots,setAvailableBots]=useState<BotChoice[]>(bots);
+ useEffect(()=>{
+  if(!isEditor)return;
+  const controller=new AbortController();
+  const telegram=(window as typeof window&{Telegram?:{WebApp?:{initData?:string}}}).Telegram?.WebApp;
+  void fetch("/api/workspace",{headers:{"x-telegram-init-data":telegram?.initData??""},signal:controller.signal,cache:"no-store"})
+   .then(async response=>response.ok?response.json():null)
+   .then((data:{bots?:Array<{id:string;name:string;template_type:BotTemplateId}>}|null)=>{
+    if(controller.signal.aborted||!data?.bots)return;
+    setAvailableBots(data.bots.filter(bot=>bot.template_type in productTemplates).map(bot=>({id:bot.id,name:bot.name,type:bot.template_type})));
+   }).catch(()=>{});
+  return()=>controller.abort();
+ },[isEditor]);
  const options=productTemplates[botType].modules;
  const linkFor=(section:string)=>"/workspace?bot="+encodeURIComponent(botId)+"&section="+encodeURIComponent(section);
  const nav=(id:string,label:string,Icon:typeof Bot)=>{
@@ -41,8 +55,8 @@ export default function WorkspaceSidebar({botId,botType,bots,activeSection,onSec
    <Link href="/onboarding" className="flex min-h-11 items-center gap-2.5 rounded-xl bg-[#6541f5] px-3.5 text-sm font-semibold text-white no-underline transition-colors hover:bg-[#5333d8]"><Plus size={19}/>Создать бота</Link>
    <label className="block"><span className="mb-1.5 block px-2 text-[10px] font-semibold uppercase tracking-[.13em] text-[#98a2b3]">Выбор бота</span>
     <span className="relative block">
-     <select aria-label="Выбрать рабочего бота" value={botId} disabled={!onBotChange||bots.length<2} onChange={e=>onBotChange?.(e.target.value)} className="h-12 w-full appearance-none rounded-xl border border-[#e2e6ee] bg-[#f8f9fb] px-3 pr-8 text-sm font-semibold text-[#101828] outline-none focus:border-[#6541f5] disabled:cursor-default disabled:opacity-100">
-      {bots.length?bots.map(bot=><option value={bot.id} key={bot.id}>{bot.name}</option>):<option value={botId}>Текущий бот</option>}
+     <select aria-label="Выбрать рабочего бота" value={botId} disabled={(!onBotChange&&!isEditor)||(isEditor?availableBots:bots).length<2} onChange={e=>{if(onBotChange)onBotChange(e.target.value);else if(isEditor)window.location.assign("/workspace/builder?bot="+encodeURIComponent(e.target.value));}} className="h-12 w-full appearance-none rounded-xl border border-[#e2e6ee] bg-[#f8f9fb] px-3 pr-8 text-sm font-semibold text-[#101828] outline-none focus:border-[#6541f5] disabled:cursor-default disabled:opacity-100">
+      {(isEditor?availableBots:bots).length?(isEditor?availableBots:bots).map(bot=><option value={bot.id} key={bot.id}>{bot.name}</option>):<option value={botId}>Текущий бот</option>}
      </select><ChevronDown size={15} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#667085]"/>
     </span>
    </label>
