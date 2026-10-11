@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { LoaderCircle, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { formatCatalogPrice, formatStoredPrice, priceToMinor, type CatalogCurrency } from "@/lib/catalog/price";
 
-type Item = { id: string; name: string; description: string; price_minor: number | null; is_active: boolean; currency: string; image_url?:string|null;category_id?:string|null };
+type Item = { id: string; name: string; description: string; price_minor: number | null; is_active: boolean; currency: string; image_url?:string|null;category_id?:string|null; ingredients?:string[];allergens?:string[];preparation_minutes?:number|null };
 type Category={id:string;name:string;position:number;is_active:boolean};
 type ApiResult = { items?: Item[]; categories?:Category[]; item?: Item; created?:number; error?: string };
 const formatMoney = (minor: number, currency: string) => `${formatStoredPrice(minor, currency === "USD" ? "USD" : "UZS")} ${currency === "USD" ? "$" : "сум"}`;
@@ -18,6 +18,9 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
   const [categoryName,setCategoryName]=useState("");
   const [editingCategory,setEditingCategory]=useState<Category|"new"|null>(null);
   const [imageUrl,setImageUrl]=useState("");
+  const [ingredients,setIngredients]=useState("");
+  const [allergens,setAllergens]=useState("");
+  const [preparationMinutes,setPreparationMinutes]=useState("");
   const [chosenCategory,setChosenCategory]=useState("all");
   const [notice,setNotice]=useState("");
   const [loading, setLoading] = useState(true);
@@ -60,7 +63,7 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
     finally{setSaving(false)}
   }
   function open(item?: Item) {
-    setEditing(item ?? "new"); setName(item?.name ?? ""); setDescription(item?.description ?? "");setCategoryId(item?.category_id??"");setImageUrl(item?.image_url??"");
+    setEditing(item ?? "new"); setName(item?.name ?? ""); setDescription(item?.description ?? "");setCategoryId(item?.category_id??"");setImageUrl(item?.image_url??"");setIngredients((item?.ingredients??[]).join(", "));setAllergens((item?.allergens??[]).join(", "));setPreparationMinutes(item?.preparation_minutes==null?"":String(item.preparation_minutes));
     const nextCurrency: CatalogCurrency = item?.currency === "USD" ? "USD" : "UZS";
     setCurrency(nextCurrency);
     setPrice(item?.price_minor == null ? "" : formatStoredPrice(item.price_minor, nextCurrency)); setActive(item?.is_active ?? true); setError("");
@@ -71,11 +74,13 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
     try { priceMinor = priceToMinor(price, currency); }
     catch { setError("Введите корректную сумму. Для UZS — целое число, для USD — максимум 2 знака после точки."); return; }
     if (!name.trim()) { setError("Введите название."); return; }
+    if(type==="delivery" && preparationMinutes!=="" && (!/^\d{1,3}$/.test(preparationMinutes)||Number(preparationMinutes)>360)) {setError("Время приготовления: от 0 до 360 минут.");return;}
     setSaving(true); setError("");
     try {
       const response = await fetch("/api/catalog", { method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ botId, initData: telegramData(), ...(editing !== "new" && editing ? { id: editing.id } : {}),
-          name: name.trim(), description: description.trim(), priceMinor, currency, isActive: active, categoryId:categoryId||null,imageUrl:imageUrl||null }) });
+          name: name.trim(), description: description.trim(), priceMinor, currency, isActive: active, categoryId:categoryId||null,imageUrl:imageUrl||null,
+          ...(type==="delivery"?{ingredients:ingredients.split(",").map(x=>x.trim()).filter(Boolean),allergens:allergens.split(",").map(x=>x.trim()).filter(Boolean),preparationMinutes:preparationMinutes===""?null:Number(preparationMinutes)}:{}) }) });
       const body = await response.json() as ApiResult;
       if (!response.ok) throw new Error(body.error ?? "Не удалось сохранить.");
       setEditing(null); await refresh();
@@ -138,7 +143,7 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
           <button type="button" onClick={()=>open()} className="mt-5 rounded-xl bg-[#6541f5] px-5 py-3 text-sm font-semibold !text-white">Добавить {noun}</button></div>
       : <div className="divide-y divide-[#eaecf0]">{items.filter(item=>(chosenCategory==="all"||item.category_id===chosenCategory)&&[item.name,item.description].join(" ").toLowerCase().includes(query.toLowerCase())).map(item=><div key={item.id} className="flex flex-wrap items-center gap-4 p-5">
           {item.image_url&&<img src={item.image_url} alt="" className="size-16 shrink-0 rounded-xl object-cover"/>}
-          <div className="min-w-0 flex-1"><strong className="block truncate text-sm">{item.name}</strong><p className="mt-1 text-xs text-[#6541f5]">{categories.find(c=>c.id===item.category_id)?.name??""}</p><p className="mt-1 line-clamp-2 text-xs text-[#667085]">{item.description || "Без описания"}</p></div>
+          <div className="min-w-0 flex-1"><strong className="block truncate text-sm">{item.name}</strong><p className="mt-1 text-xs text-[#6541f5]">{categories.find(c=>c.id===item.category_id)?.name??""}</p><p className="mt-1 line-clamp-2 text-xs text-[#667085]">{item.description || "Без описания"}</p>{type==="delivery"&&item.preparation_minutes!=null&&<p className="mt-1 text-xs text-[#667085]">{item.preparation_minutes} мин · приготовление</p>}</div>
           <span className="text-sm font-semibold">{item.price_minor === null ? "Цена по запросу" : formatMoney(item.price_minor,item.currency)}</span>
           <span className={item.is_active?"rounded-full bg-[#ecfdf3] px-2 py-1 text-xs text-[#027a48]":"rounded-full bg-[#f2f4f7] px-2 py-1 text-xs text-[#667085]"}>{item.is_active?"Активен":"Скрыт"}</span>
           <button type="button" onClick={()=>open(item)} aria-label={"Изменить "+item.name} className="grid size-10 place-items-center rounded-xl border border-[#d0d5dd]"><Pencil className="size-4"/></button>
@@ -156,7 +161,13 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
         <div className="mt-5 space-y-4"><label className="block text-sm font-medium">Название<input maxLength={120} value={name} onChange={e=>setName(e.target.value)} className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/></label>
           <label className="block text-sm font-medium">Описание<textarea maxLength={2000} value={description} onChange={e=>setDescription(e.target.value)} rows={3} className="mt-2 w-full rounded-xl border border-[#d0d5dd] p-3"/></label>
           {(type==="delivery"||type==="store")&&<label className="block text-sm font-medium">Категория<select value={categoryId} onChange={e=>setCategoryId(e.target.value)} className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"><option value="">Без категории</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
-          <label className="block text-sm font-medium">Фото блюда (HTTPS-ссылка)<input type="url" value={imageUrl} onChange={e=>setImageUrl(e.target.value)} placeholder="https://..." className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/></label>
+          <label className="block text-sm font-medium">{type==="delivery"?"Фото блюда":"Фото товара"} (HTTPS-ссылка)<input type="url" value={imageUrl} onChange={e=>setImageUrl(e.target.value)} placeholder="https://..." className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/></label>
+          {imageUrl&&/^https:\/\//i.test(imageUrl)&&<img src={imageUrl} loading="lazy" alt="Предпросмотр фотографии" className="h-28 w-full rounded-xl bg-[#f2f4f7] object-cover"/>}
+          {type==="delivery"&&<>
+            <label className="block text-sm font-medium">Состав блюда<input value={ingredients} onChange={e=>setIngredients(e.target.value)} placeholder="Говядина, рис, морковь" className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/><span className="mt-1 block text-xs font-normal text-[#667085]">Разделяйте ингредиенты запятыми</span></label>
+            <label className="block text-sm font-medium">Аллергены<input value={allergens} onChange={e=>setAllergens(e.target.value)} placeholder="Орехи, глютен" className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/></label>
+            <label className="block text-sm font-medium">Время приготовления, мин<input type="number" min={0} max={360} value={preparationMinutes} onChange={e=>setPreparationMinutes(e.target.value)} placeholder="25" className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/></label>
+          </>}
           <div className="block text-sm font-medium"><span>Цена</span><div className="mt-2 flex items-stretch overflow-hidden rounded-xl border border-[#d0d5dd] focus-within:border-[#6541f5]">
             <input aria-label="Стоимость" inputMode={currency==="UZS"?"numeric":"decimal"} value={price} onChange={e=>setPrice(formatCatalogPrice(e.target.value,currency))} placeholder={currency==="UZS"?"10 000":"100.00"} className="h-11 min-w-0 flex-1 px-3 outline-none"/>
             <select aria-label="Валюта" value={currency} onChange={e=>{const next=e.target.value as CatalogCurrency;setPrice(formatCatalogPrice(price.replace(/\s/g,"").split(".")[0],next));setCurrency(next);}} className="min-w-28 border-l border-[#d0d5dd] bg-[#f9fafb] px-3 text-sm font-semibold outline-none">
