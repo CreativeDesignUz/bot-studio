@@ -51,7 +51,7 @@ test("Telegram OIDC is enabled and starts an authorization-code flow", async ({ 
   expect(destination.searchParams.get("response_type")).toBe("code");
   expect(destination.searchParams.get("code_challenge_method")).toBe("S256");
   expect(destination.searchParams.get("redirect_uri")).toBe("https://bot-studio-staging.slavnauz.workers.dev/api/auth/telegram/callback");
-  expect(destination.searchParams.get("client_id")).toMatch(/^\\d+$/);
+  expect(destination.searchParams.get("client_id")).toMatch(/^[0-9]+$/);
   expect(destination.searchParams.has("bot_id")).toBe(false);
 });
 
