@@ -13,7 +13,7 @@ const bad = (error: string, status: number) => Response.json({ error }, { status
 
 async function owner(request: Request, botId: string, initData: string) {
   const auth = await resolveAppUser(request, initData);
-  if ("error" in auth) return { error: bad(auth.error, auth.status) } as const;
+  if ("error" in auth) return { error: bad(auth.error ?? "Не удалось проверить сессию.", auth.status ?? 401) } as const;
   const { data, error } = await auth.supabase.from("bots")
     .select("id,template_type").eq("id", botId).eq("owner_id", auth.user.id).maybeSingle();
   if (error || !data) return { error: bad("Бот не найден или нет доступа.", 404) } as const;
