@@ -609,3 +609,65 @@ test("demo import refuses anonymous and unconfirmed requests",async({request})=>
  const read=await request.get("/api/demo-content?bot="+id);
  expect([401,403]).toContain(read.status());
 });
+
+
+test("publishing a saved draft menu updates the public Mini App snapshot only after confirmation",async({page})=>{
+ const id="51089a67-742c-495a-8b8c-f04205062df0";
+ let published=false,updates=0,reads=0;
+ const categories=[{id:"c0e5da33-8459-4c49-885e-cdd0693e0401",name:"Тест 01",position:0,is_active:true}];
+ const items=[{id:"f0e5da33-8459-4c49-885e-cdd0693e0401",name:"Плов традиционный",description:"Плов",price_minor:6500000,currency:"UZS",category_id:categories[0].id,is_active:true,stock_quantity:10}];
+ await page.route("**/api/workspace",route=>route.fulfill({
+  status:200,contentType:"application/json",
+  body:JSON.stringify({bots:[{id,name:"закажем еду",username:"studio_51089a67_bot",template_type:"delivery",
+   metrics:{ordersToday:0,revenueTodayMinor:0,catalogItems:1,customers:0,recentOrders:[]}}]})
+ }));
+ await page.route("**/api/catalog?bot=*",route=>route.fulfill({
+  status:200,contentType:"application/json",body:JSON.stringify({items})
+ }));
+ await page.route("**/api/catalog/categories?bot=*",route=>route.fulfill({
+  status:200,contentType:"application/json",body:JSON.stringify({categories})
+ }));
+ await page.route("**/api/demo-content?bot=*",route=>route.fulfill({
+  status:200,contentType:"application/json",body:JSON.stringify({imported:false,canImport:false,notifications:[]})
+ }));
+ await page.route("**/api/catalog/publish**",async route=>{
+  if(route.request().method()==="GET"){
+   reads++;
+   await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({
+    changed:!published,isPublished:true,canUpdate:true,hasDemo:false,revision:published?3:2,
+    draftItems:1,draftCategories:1,publishedItems:published?1:0,publishedCategories:published?1:0
+   })});
+  }else{
+   const body=route.request().postDataJSON() as {botId?:string;confirm?:string;expectedRevision?:number};
+   expect(body).toMatchObject({botId:id,confirm:"PUBLISH_CATALOG",expectedRevision:2});
+   updates++;published=true;
+   await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({ok:true,updated:true,items:1,categories:1,revision:3})});
+  }
+ });
+ await page.goto("/workspace?bot="+id+"&section=catalog");
+ await expect(page.getByRole("heading",{name:"Меню"})).toBeVisible();
+ await expect(page.getByText("Изменения меню ещё не опубликованы")).toBeVisible();
+ await expect(page.getByText(/В Telegram Mini App: 0 позиций и 0 категорий/)).toBeVisible();
+ expect(updates).toBe(0);
+ await page.getByRole("button",{name:"Обновить Mini App"}).click();
+ const confirm=page.getByRole("dialog",{name:"Подтвердить обновление Mini App"});
+ await expect(confirm).toBeVisible();
+ await confirm.getByRole("button",{name:"Отмена"}).click();
+ expect(updates).toBe(0);
+ await page.getByRole("button",{name:"Обновить Mini App"}).click();
+ await confirm.getByRole("button",{name:"Да, обновить Mini App"}).click();
+ await expect(page.getByRole("status").filter({hasText:"Каталог опубликован"})).toBeVisible();
+ await expect(page.getByText("Изменения меню ещё не опубликованы")).toHaveCount(0);
+ expect(updates).toBe(1);
+ expect(reads).toBeGreaterThanOrEqual(2);
+});
+
+test("catalog republish endpoint requires owner login and explicit confirmation",async({request})=>{
+ const id="51089a67-742c-495a-8b8c-f04205062df0";
+ const noConfirm=await request.post("/api/catalog/publish",{data:{botId:id,expectedRevision:2}});
+ expect(noConfirm.status()).toBe(400);
+ const unauthorized=await request.post("/api/catalog/publish",{data:{botId:id,expectedRevision:2,confirm:"PUBLISH_CATALOG"}});
+ expect([401,403]).toContain(unauthorized.status());
+ const read=await request.get("/api/catalog/publish?bot="+id);
+ expect([401,403]).toContain(read.status());
+});
