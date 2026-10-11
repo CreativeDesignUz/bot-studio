@@ -4,13 +4,31 @@ type Order={id:string;customer_name:string;customer_external_id:string|null;stat
 const initData=()=> (window as typeof window & {Telegram?:{WebApp?:{initData?:string}}}).Telegram?.WebApp?.initData??"";
 export default function OrderManager({botId}:{botId:string}){
  const [orders,setOrders]=useState<Order[]>([]),[error,setError]=useState(""),[loading,setLoading]=useState(true);
- useEffect(()=>{const controller=new AbortController();
- async function load(){try{const response=await fetch("/api/orders?bot="+encodeURIComponent(botId),{headers:{"x-telegram-init-data":initData()},cache:"no-store",signal:controller.signal});const body=await response.json() as {orders?:Order[];error?:string};if(!response.ok)throw new Error(body.error??"Не удалось получить заказы");if(!controller.signal.aborted)setOrders(body.orders??[]);}catch(e){if(!controller.signal.aborted)setError(e instanceof Error?e.message:"Ошибка загрузки");}finally{if(!controller.signal.aborted)setLoading(false);}}
- void load();return()=>controller.abort();},[botId]);
+ const [newOrders,setNewOrders]=useState(0);
+ useEffect(()=>{
+  const controller=new AbortController();
+  let first=true;let known=new Set<string>();
+  async function load(){
+   try{
+    const response=await fetch("/api/orders?bot="+encodeURIComponent(botId),{headers:{"x-telegram-init-data":initData()},cache:"no-store",signal:controller.signal});
+    const body=await response.json() as {orders?:Order[];error?:string};
+    if(!response.ok)throw new Error(body.error??"Не удалось получить заказы");
+    if(!controller.signal.aborted){
+      const next=body.orders??[];
+      if(!first){const added=next.filter(o=>!known.has(o.id));if(added.length)setNewOrders(n=>n+added.length);}
+      known=new Set(next.map(o=>o.id));first=false;setOrders(next);setError("");
+    }
+   }catch(e){if(!controller.signal.aborted)setError(e instanceof Error?e.message:"Ошибка загрузки");}
+   finally{if(!controller.signal.aborted)setLoading(false);}
+  }
+  void load();
+  const interval=setInterval(()=>{if(!controller.signal.aborted)void load();},15000);
+  return()=>{controller.abort();clearInterval(interval);};
+ },[botId]);
  if(loading)return <div className="rounded-2xl bg-white p-8">Загружаем заказы…</div>;
  if(error)return <p role="alert" className="rounded-xl bg-red-50 p-5 text-red-700">{error}</p>;
  if(!orders.length)return <div className="rounded-2xl bg-white p-8 text-[#667085]">Пока нет заказов. Когда покупатель оформит заказ, он появится здесь.</div>;
- return <div className="space-y-4">{orders.map(order=>{
+ return <div className="space-y-4">{newOrders>0&&<div role="status" className="flex items-center justify-between rounded-xl bg-[#ecfdf3] p-4 text-sm text-[#027a48]"><span>Новых заказов: {newOrders}</span><button type="button" onClick={()=>setNewOrders(0)} className="font-semibold underline">Просмотрено</button></div>}{orders.map(order=>{
  const address=order.delivery_address&&typeof order.delivery_address==="object"&&!Array.isArray(order.delivery_address)?order.delivery_address as Record<string,unknown>:{};
  return <article key={order.id} className="rounded-2xl border border-[#e4e7ec] bg-white p-5">
   <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-lg font-semibold">Заказ №{order.id.slice(0,8).toUpperCase()}</h2><span className="rounded-lg bg-[#f2f4f7] px-3 py-1 text-sm">{order.status}</span></div>
