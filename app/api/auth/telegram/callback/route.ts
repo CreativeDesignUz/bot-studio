@@ -1,5 +1,5 @@
 import {oidcConfig,readStateCookie,verifyState,redirectUri,verifyIdToken,clearStateCookie} from "@/lib/auth/telegram-oidc";
-import {verifiedTelegramSession} from "@/app/api/auth/account/route";
+import {verifiedTelegramSession} from "@/lib/auth/account-service";
 function fail(request:Request,reason:string){
  return new Response(null,{status:302,headers:{"location":new URL("/auth?error="+encodeURIComponent(reason),request.url).toString(),"set-cookie":clearStateCookie(),"cache-control":"no-store"}});
 }
