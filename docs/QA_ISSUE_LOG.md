@@ -86,3 +86,11 @@ GitHub Actions run [38133282051](https://github.com/CreativeDesignUz/bot-studio/
 - `app/workspace/order-manager.tsx`: действия принятия, приготовления, готовности и завершения заказа, ошибки и индикация сохранения.
 - `tests/order-status-transitions.test.ts`: регрессионные проверки.
 - **Ограничения:** отмена заказа и восстановление остатков НЕ реализованы; пуши Telegram продавцу и карта доставки также НЕ реализованы. E2E с базой не выполнен.
+
+## QA checkpoint: 2026-10-11 — delivery module and release readiness
+
+- **Source review:** shared `delivery_zone` settings available to template types `store` and `delivery`, published into the buyer storefront through `published_snapshot.settings`. Migration 0012 contains SQL radius/fee validation. These are **code findings only**.
+- **Bug QA-016 (map default):** buyer's map defaulted to Tashkent regardless of seller zone. Fixed via `DeliveryLocationPicker.initialCenter` and seller published `centerLat/centerLng`; regression test appended to `tests/delivery-map.test.ts`. CI was running when recorded.
+- **Not executed:** end-to-end create bot → publish → address pin → charge delivery → order visible in admin; real Telegram iOS/Android; zone edge cases and concurrent checkout on real Supabase; Playwright visual QA; ZAP/PageSpeed.
+- **Release BLOCKED:** migrations 0009–0012 have not been applied or verified on isolated staging, and dependent API must not be deployed separately from its database schema/RPC.
+- **Follow-on QA:** test two tenants, both templates, same/reused requestKey, currency restrictions, fee total, radius boundary, sold-out items, history and seller changes after publish.
