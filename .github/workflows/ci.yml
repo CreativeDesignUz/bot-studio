@@ -2,9 +2,8 @@ name: Bot Studio CI
 
 on:
   pull_request:
-    branches: [main, fix/task-02a-security-stability, fix/p0-telegram-webhook-validation-20261011]
   push:
-    branches: [main, fix/p0-telegram-webhook-validation-20261011, chore/cloudflare-staging-20261011]
+    branches: [main, fix/p0-telegram-webhook-validation-20261011, chore/cloudflare-staging-20261011, fix/telegram-oidc-login-20261011]
   workflow_dispatch:
 
 permissions:
