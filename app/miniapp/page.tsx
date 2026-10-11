@@ -6,8 +6,10 @@ import ServiceMiniApp from "./service-miniapp";
 import DeliveryLocationPicker, {type Point} from "./delivery-location-picker";
 
 type Item = { id: string; name: string; description: string; image_url: string | null; price_minor: number | null; currency: string; category_id?:string|null;ingredients?:string[];allergens?:string[];preparation_minutes?:number|null };
-type Shop = { bot: { id: string; name: string; description: string; logoUrl: string | null; color: string; template: string }; items: Item[]; categories?:{id:string;name:string;position:number}[]; design?:{layout?:"food01"|"food02";color?:string;dark?:boolean;themeMode?:"light"|"dark"|"customer";defaultTheme?:"system"|"light"|"dark";banner?:{enabled:boolean;title:string;description:string;imageUrl:string;buttonEnabled:boolean;buttonText:string;linkType:"category"|"product"|"page"|"external";target:string}}|null };
+type Shop = { bot: { id: string; name: string; description: string; logoUrl: string | null; color: string; template: string }; items: Item[]; categories?:{id:string;name:string;position:number}[]; delivery?:DeliveryZone|null; design?:{layout?:"food01"|"food02";color?:string;dark?:boolean;themeMode?:"light"|"dark"|"customer";defaultTheme?:"system"|"light"|"dark";banner?:{enabled:boolean;title:string;description:string;imageUrl:string;buttonEnabled:boolean;buttonText:string;linkType:"category"|"product"|"page"|"external";target:string}}|null };
+type DeliveryZone={enabled:boolean;centerLat:number;centerLng:number;radiusKm:number;feeMinor:number};
 type Tab = "catalog" | "cart" | "profile";
+function deliveryDistanceKm(zone:DeliveryZone,lat:number,lng:number){const rad=Math.PI/180;const a=Math.sin((lat-zone.centerLat)*rad/2)**2+Math.cos(zone.centerLat*rad)*Math.cos(lat*rad)*Math.sin((lng-zone.centerLng)*rad/2)**2;return 6371.0088*2*Math.asin(Math.sqrt(Math.min(1,Math.max(0,a))));}
 
 const money = (value: number, currency = "UZS") => new Intl.NumberFormat("ru-RU", {
   style: "currency", currency, maximumFractionDigits: currency === "UZS" ? 0 : 2,
@@ -86,6 +88,11 @@ export default function MiniAppPage() {
   const selected = useMemo(() => (shop?.items ?? []).filter(item => cart[item.id] > 0), [shop, cart]);
   const total = selected.reduce((sum, item) => sum + Number(item.price_minor ?? 0) * cart[item.id], 0);
   const currency = selected[0]?.currency ?? "UZS";
+  const deliveryZone=shop?.delivery;
+  const deliveryAvailable=deliveryZone?.enabled===true;
+  const insideZone=Boolean(deliveryAvailable&&deliveryPoint&&deliveryDistanceKm(deliveryZone!,deliveryPoint.lat,deliveryPoint.lng)<=deliveryZone!.radiusKm);
+  const deliveryFee=fulfillment==="delivery"&&insideZone?(deliveryZone?.feeMinor??0):0;
+  const deliveryInvalid=fulfillment==="delivery"&&(!deliveryAvailable||!insideZone||currency!=="UZS");
   const mixedCurrency = new Set(selected.map(item => item.currency)).size > 1;
   const isFood=shop?.bot.template==="delivery";
   const themeMode=shop?.design?.themeMode??(shop?.design?.dark?"dark":"light");
@@ -117,6 +124,7 @@ export default function MiniAppPage() {
   async function checkout() {
     if (!shop || sending || !selected.length) return;
     if (mixedCurrency) { setError("В одном заказе нельзя смешивать сумы и доллары. Выберите позиции в одной валюте."); return; }
+    if(deliveryInvalid){setError("Доставка недоступна по этому адресу или для выбранной валюты.");return;}
     const telegram = (window as typeof window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp;
     if (!telegram?.initData) { setError("Для оформления заказа откройте магазин через Telegram"); return; }
     checkoutKey.current ??= crypto.randomUUID().replaceAll("-", "");
@@ -235,10 +243,13 @@ export default function MiniAppPage() {
           <div className="mt-6 rounded-2xl bg-white p-5"><h3 className="mb-4 font-bold">Оформление заказа</h3><label className="mb-3 block text-sm">Имя получателя<input value={name} onChange={e=>{checkoutKey.current=null;setName(e.target.value)}} maxLength={100} className="mt-1 block h-12 w-full rounded-xl border border-[#d0d5dd] px-3 outline-none focus:border-[#667085]" placeholder="Ваше имя"/></label>
             <div className="mb-3 grid grid-cols-2 gap-2"><button onClick={()=>{checkoutKey.current=null;setFulfillment("pickup")}} className={`flex items-center justify-center gap-2 rounded-xl border p-3 text-sm ${fulfillment==="pickup"?"border-[#101828] bg-[#f2f4f7]":"border-[#d0d5dd]"}`}><Store size={16}/> Самовывоз</button><button onClick={()=>{checkoutKey.current=null;setFulfillment("delivery")}} className={`flex items-center justify-center gap-2 rounded-xl border p-3 text-sm ${fulfillment==="delivery"?"border-[#101828] bg-[#f2f4f7]":"border-[#d0d5dd]"}`}><Truck size={16}/> Доставка</button></div>
             {fulfillment==="delivery" && <div className="space-y-3"><DeliveryLocationPicker value={deliveryPoint} onChange={point=>{checkoutKey.current=null;setDeliveryPoint(point);}}/><label className="block text-sm">Адрес доставки<textarea value={address} onChange={e=>{checkoutKey.current=null;setAddress(e.target.value)}} maxLength={500} className="mt-1 block min-h-20 w-full rounded-xl border border-[#d0d5dd] p-3" placeholder="Улица, дом, квартира, подъезд, этаж"/></label></div>}
+            {fulfillment==="delivery"&&!deliveryAvailable&&<p role="alert" className="mb-3 text-sm text-red-600">Продавец ещё не настроил доставку. Выберите самовывоз.</p>}
+            {fulfillment==="delivery"&&deliveryAvailable&&deliveryPoint&&!insideZone&&<p role="alert" className="mb-3 text-sm text-red-600">Точка находится вне зоны доставки. Выберите другую точку или самовывоз.</p>}
+            {fulfillment==="delivery"&&currency!=="UZS"&&<p role="alert" className="mb-3 text-sm text-red-600">Доставка пока доступна только для заказов в сумах (UZS).</p>}
             {mixedCurrency && <p role="alert" className="mb-3 rounded-lg bg-[#fff7ed] p-3 text-sm text-[#9a3412]">Для заказа выберите позиции в одной валюте: UZS или USD.</p>}
             <div className="my-4 flex items-center justify-between border-t border-[#eaecf0] pt-4"><span className="text-[#667085]">Итого</span><b className="text-xl">{mixedCurrency ? "Разные валюты" : money(total,currency)}</b></div>
-            <p className="mb-4 text-xs text-[#667085]">Оплата при получении. Стоимость доставки уточняется магазином.</p>
-            <button onClick={checkout} disabled={sending || mixedCurrency || !name.trim() || (fulfillment==="delivery" && (!address.trim()||!deliveryPoint))} style={{backgroundColor:color}} className="w-full rounded-xl py-4 font-semibold text-white disabled:opacity-50">{sending?"Оформляем…":"Оформить заказ"}</button>
+            <p className="mb-4 text-xs text-[#667085]">Оплата при получении. Стоимость доставки и доступность зоны проверяются при оформлении.</p>
+            <button onClick={checkout} disabled={sending || mixedCurrency || deliveryInvalid || !name.trim() || (fulfillment==="delivery" && (!address.trim()||!deliveryPoint))} style={{backgroundColor:color}} className="w-full rounded-xl py-4 font-semibold text-white disabled:opacity-50">{sending?"Оформляем…":"Оформить заказ"}</button>
           </div>
         </>}
       </section>}
