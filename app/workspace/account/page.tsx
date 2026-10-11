@@ -20,7 +20,7 @@ export default function AccountPage(){
    fetch("/api/auth/providers",{cache:"no-store",signal:controller.signal}).then(r=>r.json() as Promise<Providers>),
   ]).then(([a,p])=>{if(!controller.signal.aborted){setAccount(a);setProviders(p)}})
     .catch(()=>{if(!controller.signal.aborted)setError("Не удалось загрузить настройки аккаунта.")});
-  if(new URLSearchParams(window.location.search).get("linked")==="1")setJustLinked(true);
+  if(new URLSearchParams(window.location.search).get("linked")==="1")void Promise.resolve().then(()=>setJustLinked(true));
   return()=>controller.abort();
  },[]);
  async function connectGoogle(){
