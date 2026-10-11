@@ -5,9 +5,9 @@ function readGuestHash(request:Request){const cookie=(request.headers.get("cooki
 async function hexSha(input:string){return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(input))),byte=>byte.toString(16).padStart(2,"0")).join("")}
 export type VerifiedTelegramIdentity={id:string;first_name:string;last_name:string;username:string|null};
 export async function verifiedTelegramSession(request:Request,tg:VerifiedTelegramIdentity){
- return createAccountSession(request,{telegram_id:tg.id,telegram_username:tg.username,first_name:tg.first_name,last_name:tg.last_name},"telegram_id",tg.id);
+ return createAccountSession(request,{telegram_oidc_sub:tg.id,telegram_username:tg.username,first_name:tg.first_name,last_name:tg.last_name},"telegram_oidc_sub",tg.id);
 }
-export async function createAccountSession(request:Request,account:Record<string,unknown>,identityKey:"auth_user_id"|"telegram_id",identityValue:string){
+export async function createAccountSession(request:Request,account:Record<string,unknown>,identityKey:"auth_user_id"|"telegram_id"|"telegram_oidc_sub",identityValue:string){
  const supabase=getSupabaseServer({privileged:true});
  const {data:existing,error:lookupError}=await supabase.from("app_users").select("id").eq(identityKey,identityValue).maybeSingle();
  if(lookupError)return fail("Не удалось проверить аккаунт.",503);
@@ -17,9 +17,9 @@ export async function createAccountSession(request:Request,account:Record<string
   // Attach a previously created anonymous bot workspace to the verified account.
   // Never overwrite an already claimed Google/Telegram identity.
   const guest=readGuestHash(request),hash=guest?await hexSha(guest):null;
-  const {data:unclaimed}=hash?await supabase.from("app_users").select("id,auth_user_id,telegram_id").eq("web_session_hash",hash).maybeSingle():{data:null};
-  if(unclaimed&&!unclaimed.auth_user_id&&!unclaimed.telegram_id){
-   const {data:linked,error:linkError}=await supabase.from("app_users").update({...account,web_session_hash:null}).eq("id",unclaimed.id).is("auth_user_id",null).is("telegram_id",null).select("id").maybeSingle();
+  const {data:unclaimed}=hash?await supabase.from("app_users").select("id,auth_user_id,telegram_id,telegram_oidc_sub").eq("web_session_hash",hash).maybeSingle():{data:null};
+  if(unclaimed&&!unclaimed.auth_user_id&&!unclaimed.telegram_id&&!unclaimed.telegram_oidc_sub){
+   const {data:linked,error:linkError}=await supabase.from("app_users").update({...account,web_session_hash:null}).eq("id",unclaimed.id).is("auth_user_id",null).is("telegram_id",null).is("telegram_oidc_sub",null).select("id").maybeSingle();
    if(linkError||!linked)return fail("Не удалось привязать существующий кабинет.",409);
    id=linked.id;
   }else{
