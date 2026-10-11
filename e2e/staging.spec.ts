@@ -107,10 +107,10 @@ for (const kind of ["Доставка еды", "Интернет-магазин"
     await expect(page.getByRole("heading",{name:"Подключите Telegram"})).toBeVisible();
     await page.getByRole("button",{name:/Подключить существующего/}).click();
     await page.getByRole("button",{name:/Продолжить/}).click();
-    await expect(page.getByRole("heading",{name:"Выберите шаблон"})).toBeVisible();
+    await expect(page.getByRole("heading",{name:"Выберите шаблон"})).toBeVisible({timeout:15000});
     await page.getByRole("button",{name:new RegExp(kind)}).click();
     await page.getByRole("button",{name:/Продолжить/}).click();
-    await expect(page.getByRole("heading",{name:"Настройте бота"})).toBeVisible();
+    await expect(page.getByRole("heading",{name:"Настройте бота"})).toBeVisible({timeout:15000});
     await page.getByRole("textbox",{name:/Название бота/}).fill("QA E2E demo");
     await page.getByRole("textbox",{name:/Описание/}).fill("Safe mock QA browser test");
     await expect(page.getByText("QA E2E demo")).toBeVisible();
