@@ -17,6 +17,8 @@ const money = (value: number, currency = "UZS") => new Intl.NumberFormat("ru-RU"
 
 export default function MiniAppPage() {
   const [shop, setShop] = useState<Shop | null>(null);
+  const [previewMode,setPreviewMode]=useState(false);
+  const previewDesign=useRef<Shop["design"]|null>(null);
   const [loading, setLoading] = useState(true);
   const [retryCount, setRetryCount] = useState(0);
   const [customerTheme,setCustomerTheme]=useState<"light"|"dark"|null>(null);
@@ -40,13 +42,16 @@ export default function MiniAppPage() {
   useEffect(() => {
     const telegram = (window as typeof window & { Telegram?: { WebApp?: { ready?: () => void; expand?: () => void; initData?: string; initDataUnsafe?: { user?: { first_name?: string } } } } }).Telegram?.WebApp;
     telegram?.ready?.(); telegram?.expand?.();
-    const botId = new URLSearchParams(window.location.search).get("bot");
+    const params=new URLSearchParams(window.location.search);
+    const botId=params.get("bot");
+    const draftPreview=params.get("preview")==="1";
+    queueMicrotask(()=>setPreviewMode(draftPreview));
     if (!botId) { Promise.resolve().then(() => { setError("Не указан магазин"); setLoading(false); }); return; }
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 12000);
-    fetch("/api/miniapp?bot=" + encodeURIComponent(botId), { cache: "no-store", signal: controller.signal })
+    fetch((draftPreview?"/api/miniapp/preview?bot=":"/api/miniapp?bot=") + encodeURIComponent(botId), { cache: "no-store", signal: controller.signal })
       .then(async response => { const body = await response.json() as Shop & { error?: string }; if (!response.ok) throw new Error(body.error ?? "Не удалось загрузить магазин"); return body as Shop; })
-      .then(data => { if (!controller.signal.aborted) { setShop(data); setError(""); } })
+      .then(data => { if (!controller.signal.aborted) { setShop({...data,design:previewDesign.current??data.design}); setError(""); } })
       .catch(e => {
         if (controller.signal.aborted && !controller.signal.reason) return;
         setError(controller.signal.aborted ? "Сервер не ответил за 12 секунд. Проверьте интернет и попробуйте снова." : e instanceof Error ? e.message : "Ошибка загрузки");
@@ -54,6 +59,24 @@ export default function MiniAppPage() {
       .finally(() => { clearTimeout(timeout); setLoading(false); });
     return () => { controller.abort(); clearTimeout(timeout); };
   }, [retryCount]);
+
+  useEffect(()=>{
+    const params=new URLSearchParams(window.location.search);
+    if(params.get("preview")!=="1")return;
+    const botId=params.get("bot");
+    const onUpdate=(event:MessageEvent)=>{
+      if(event.origin!==window.location.origin||event.source!==window.parent)return;
+      const message=event.data as {type?:unknown;botId?:unknown;design?:Shop["design"]};
+      if(message?.type!=="bot-studio:preview-design"||message.botId!==botId)return;
+      const proposed=message.design;
+      if(!proposed||typeof proposed!=="object"||!/^#[0-9a-f]{6}$/i.test(proposed.color??""))return;
+      if(!["light","dark","customer"].includes(proposed.themeMode??"light"))return;
+      previewDesign.current=proposed;
+      setShop(current=>current?{...current,design:{...current.design,...proposed}}:current);
+    };
+    window.addEventListener("message",onUpdate);
+    return()=>window.removeEventListener("message",onUpdate);
+  },[]);
 
   useEffect(()=>{
     const telegram=(window as typeof window & {Telegram?:{WebApp?:{colorScheme?:string;onEvent?:(name:string,cb:()=>void)=>void;offEvent?:(name:string,cb:()=>void)=>void;setHeaderColor?:(color:string)=>void;setBackgroundColor?:(color:string)=>void}}}).Telegram?.WebApp;
@@ -74,6 +97,7 @@ export default function MiniAppPage() {
     if(!b?.buttonEnabled)return;
     if(b.linkType==="external"){
       const webApp=(window as typeof window & {Telegram?:{WebApp?:{openLink?:(url:string)=>void}}}).Telegram?.WebApp;
+      if(previewMode)return;
       try{const url=new URL(b.target);if(url.protocol!=="https:")return; if(webApp?.openLink)webApp.openLink(url.toString());else window.open(url.toString(),"_blank","noopener,noreferrer");}catch{}
     }else if(b.linkType==="page" && ["catalog","cart","profile"].includes(b.target)){
       setTab(b.target as Tab);setShowFoodCategories(false);
@@ -98,7 +122,7 @@ export default function MiniAppPage() {
   const themeMode=shop?.design?.themeMode??(shop?.design?.dark?"dark":"light");
   const defaultTheme=shop?.design?.defaultTheme??"system";
   const preferredTheme=customerTheme??(defaultTheme==="system"?telegramTheme:defaultTheme);
-  const dark=isFood&&(themeMode==="dark"||(themeMode==="customer"&&preferredTheme==="dark"));
+  const dark=(themeMode==="dark"||(themeMode==="customer"&&preferredTheme==="dark"));
   const foodStyle=shop?.design?.layout==="food02"?"food02":"food01";
   const color = isFood&&/^#[\da-f]{6}$/i.test(shop?.design?.color??"")?shop!.design!.color!: /^#[\da-f]{6}$/i.test(shop?.bot.color ?? "") ? shop!.bot.color : "#6541F5";
   const paper=dark?"#20242A":"#fff";const pageBg=dark?"#111418":"#f7f8fa";const ink=dark?"#f9fafb":"#18212b";const hint=dark?"#abb3c1":"#687281";
@@ -123,6 +147,7 @@ export default function MiniAppPage() {
 
   async function checkout() {
     if (!shop || sending || !selected.length) return;
+    if(previewMode){setError("Это предпросмотр. Для реального заказа откройте опубликованный Mini App через Telegram.");return;}
     if (mixedCurrency) { setError("В одном заказе нельзя смешивать сумы и доллары. Выберите позиции в одной валюте."); return; }
     if(deliveryInvalid){setError("Доставка недоступна по этому адресу или для выбранной валюты.");return;}
     const telegram = (window as typeof window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp;
@@ -154,6 +179,8 @@ export default function MiniAppPage() {
 
   return <main className="min-h-dvh pb-28" style={{fontFamily:"Inter,system-ui,sans-serif",background:pageBg,color:ink}}>
     <div className="mx-auto max-w-[550px]">
+       {previewMode&&<div className="sticky top-0 z-40 border-b border-[#e4e7ec] bg-[#f0ecff] px-4 py-2 text-center text-xs font-semibold text-[#5934dc]">Предпросмотр · изменения не опубликованы</div>}
+
       {isFood&&themeMode==="customer"&&<div className="flex justify-end gap-2 px-5 pt-2 text-xs"><button type="button" aria-pressed={!dark} onClick={()=>setBuyerTheme("light")} className="rounded-full px-3 py-1" style={{background:!dark?color:paper,color:!dark?"white":ink}}>Светлая</button><button type="button" aria-pressed={!!dark} onClick={()=>setBuyerTheme("dark")} className="rounded-full px-3 py-1" style={{background:dark?color:paper,color:dark?"white":ink}}>Тёмная</button></div>}
 
       {isFood?<div className="px-5 pt-4"><p className="text-sm font-semibold" style={{color:ink}}>{shop.bot.name}</p></div>:
@@ -249,7 +276,7 @@ export default function MiniAppPage() {
             {mixedCurrency && <p role="alert" className="mb-3 rounded-lg bg-[#fff7ed] p-3 text-sm text-[#9a3412]">Для заказа выберите позиции в одной валюте: UZS или USD.</p>}
             <div className="my-4 space-y-2 border-t border-[#eaecf0] pt-4"><div className="flex justify-between text-sm"><span>Товары</span><span>{money(total,currency)}</span></div>{fulfillment==="delivery"&&insideZone&&<div className="flex justify-between text-sm"><span>Доставка</span><span>{money(deliveryFee,"UZS")}</span></div>}<div className="flex justify-between font-bold"><span>Итого</span><span>{mixedCurrency?"Разные валюты":money(total+deliveryFee,currency)}</span></div></div>
             <p className="mb-4 text-xs text-[#667085]">Оплата при получении. Стоимость доставки и доступность зоны проверяются при оформлении.</p>
-            <button onClick={checkout} disabled={sending || mixedCurrency || deliveryInvalid || !name.trim() || (fulfillment==="delivery" && (!address.trim()||!deliveryPoint))} style={{backgroundColor:color}} className="w-full rounded-xl py-4 font-semibold text-white disabled:opacity-50">{sending?"Оформляем…":"Оформить заказ"}</button>
+            <button onClick={checkout} disabled={previewMode || sending || mixedCurrency || deliveryInvalid || !name.trim() || (fulfillment==="delivery" && (!address.trim()||!deliveryPoint))} style={{backgroundColor:color}} className="w-full rounded-xl py-4 font-semibold text-white disabled:opacity-50">{sending?"Оформляем…":previewMode?"Заказ недоступен в предпросмотре":"Оформить заказ"}</button>
           </div>
         </>}
       </section>}
