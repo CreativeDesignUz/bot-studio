@@ -5,6 +5,9 @@ const initData=()=> (window as typeof window & {Telegram?:{WebApp?:{initData?:st
 export default function OrderManager({botId}:{botId:string}){
  const [orders,setOrders]=useState<Order[]>([]),[error,setError]=useState(""),[loading,setLoading]=useState(true);
  const [newOrders,setNewOrders]=useState(0);
+ const [savingId,setSavingId]=useState("");
+ const statusActions:Record<string,{next:string;label:string}>={new:{next:"confirmed",label:"Принять заказ"},confirmed:{next:"in_progress",label:"Начать приготовление"},in_progress:{next:"ready",label:"Готов к выдаче"},ready:{next:"completed",label:"Завершить заказ"}};
+ async function advance(order:Order){const action=statusActions[order.status];if(!action)return;setSavingId(order.id);setError("");try{const response=await fetch("/api/orders",{method:"PATCH",headers:{"content-type":"application/json","x-telegram-init-data":initData()},body:JSON.stringify({botId,orderId:order.id,expectedStatus:order.status,status:action.next})});const body=await response.json() as {error?:string};if(!response.ok)throw new Error(body.error??"Не удалось изменить статус");setOrders(old=>old.map(item=>item.id===order.id?{...item,status:action.next}:item));}catch(e){setError(e instanceof Error?e.message:"Ошибка изменения статуса");}finally{setSavingId("");}}
  useEffect(()=>{
   const controller=new AbortController();
   let first=true;let known=new Set<string>();
@@ -36,6 +39,7 @@ export default function OrderManager({botId}:{botId:string}){
   <div className="mt-4 grid gap-3 sm:grid-cols-2"><p className="text-sm"><b>Покупатель:</b> {order.customer_name}</p><p className="text-sm"><b>Получение:</b> {order.fulfillment_type==="delivery"?"Доставка":"Самовывоз"}</p></div>
   <h3 className="mb-2 mt-4 font-semibold">Что заказали</h3><ul className="space-y-2">{order.items.map((item,i)=><li key={i} className="flex justify-between gap-2 text-sm"><span>{item.item_name} × {item.quantity}</span><span>{(item.unit_price_minor*item.quantity/100).toLocaleString("ru-RU")} {order.currency}</span></li>)}</ul>
   {order.fulfillment_type==="delivery"&&<p className="mt-4 rounded-xl bg-[#f9fafb] p-3 text-sm"><b>Адрес доставки:</b> {typeof address.address==="string"?address.address:"Не указан"}<span className="mt-1 block text-xs text-[#667085]">Точка на карте отсутствует, пока покупатель не выбирает геопозицию.</span></p>}
+  {statusActions[order.status]&&<div className="mt-4"><button type="button" disabled={savingId===order.id} onClick={()=>void advance(order)} className="rounded-xl bg-[#6541f5] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">{savingId===order.id?"Сохраняем…":statusActions[order.status].label}</button></div>}
   <div className="mt-4 border-t pt-3 text-right font-semibold">Итого: {(order.total_minor/100).toLocaleString("ru-RU")} {order.currency}</div>
  </article>})}</div>;
 }
