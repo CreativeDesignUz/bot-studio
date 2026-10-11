@@ -88,19 +88,6 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
     finally { setSaving(false); }
   }
 
-  async function fillUzbekMenu(){
-    if(!window.confirm("Добавить недостающие демонстрационные узбекские блюда? Существующие блюда, цены и категории не изменятся."))return;
-    setSaving(true);setError("");setNotice("");
-    try{
-      const response=await fetch("/api/catalog/seed-uzbek",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({botId,initData:telegramData()})});
-      const body=await response.json() as ApiResult;
-      if(!response.ok)throw new Error(body.error??"Не удалось заполнить каталог");
-      setNotice((body.created??0)>0?`Добавлено ${body.created} блюд. Существующее меню сохранено.`:"Все 12 демонстрационных блюд уже есть в каталоге.");
-      await refresh();
-    }catch(e){setError(e instanceof Error?e.message:"Не удалось добавить меню")}
-    finally{setSaving(false)}
-  }
-
   async function archive(item: Item) {
     if (!window.confirm(`Скрыть «${item.name}» из Mini App?`)) return;
     setSaving(true); setError("");
@@ -118,7 +105,7 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
     <div className="flex flex-wrap items-center gap-3 border-b border-[#eaecf0] p-5">
       <label className="relative min-w-[180px] flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#98a2b3]"/>
         <input value={query} onChange={e=>setQuery(e.target.value)} className="h-11 w-full rounded-xl border border-[#e4e7ec] pl-10 pr-3 text-sm" placeholder="Поиск по каталогу"/></label>
-      {type==="delivery"&&!loading&&<button type="button" disabled={saving} onClick={()=>void fillUzbekMenu()} className="inline-flex h-11 items-center gap-2 rounded-xl border border-[#6541f5] px-4 text-sm font-semibold text-[#5934dc] disabled:opacity-50">Добавить узбекские блюда</button>}
+      
       {(type==="delivery"||type==="store")&&<button type="button" onClick={()=>{setEditingCategory("new");setCategoryName("")}} className="inline-flex h-11 items-center gap-2 rounded-xl border border-[#d0d5dd] px-4 text-sm font-semibold">+ Категория</button>}
       <button type="button" onClick={()=>open()} className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#101828] px-4 text-sm font-semibold !text-white"><Plus className="size-4"/>Добавить {noun}</button>
     </div>
@@ -139,7 +126,7 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
     {loading ? <div className="flex items-center justify-center gap-2 p-14 text-sm text-[#667085]"><LoaderCircle className="size-4 animate-spin"/>Загружаем реальные данные…</div> :
       items.filter(item=>(chosenCategory==="all"||item.category_id===chosenCategory)&&[item.name,item.description].join(" ").toLowerCase().includes(query.toLowerCase())).length === 0
       ? <div className="p-12 text-center"><h2 className="text-lg font-semibold">Пока нет {type==="service"?"услуг":type==="delivery"?"блюд":"товаров"}</h2>
-          <p className="mt-2 text-sm text-[#667085]">Добавьте первый элемент, и он появится в Mini App после обновления.</p>
+          <p className="mt-2 text-sm text-[#667085]">Добавьте первый элемент, сохраните изменения и опубликуйте приложение, чтобы покупатели увидели меню.</p>
           <button type="button" onClick={()=>open()} className="mt-5 rounded-xl bg-[#6541f5] px-5 py-3 text-sm font-semibold !text-white">Добавить {noun}</button></div>
       : <div className="divide-y divide-[#eaecf0]">{items.filter(item=>(chosenCategory==="all"||item.category_id===chosenCategory)&&[item.name,item.description].join(" ").toLowerCase().includes(query.toLowerCase())).map(item=><div key={item.id} className="flex flex-wrap items-center gap-4 p-5">
           {item.image_url&&<img src={item.image_url} alt="" className="size-16 shrink-0 rounded-xl object-cover"/>}
