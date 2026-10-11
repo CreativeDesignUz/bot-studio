@@ -22,6 +22,7 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
   const [allergens,setAllergens]=useState("");
   const [preparationMinutes,setPreparationMinutes]=useState("");
   const [chosenCategory,setChosenCategory]=useState("all");
+  const [menuView,setMenuView]=useState<"items"|"categories">("items");
   const [notice,setNotice]=useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -106,13 +107,17 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
       <label className="relative min-w-[180px] flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#98a2b3]"/>
         <input value={query} onChange={e=>setQuery(e.target.value)} className="h-11 w-full rounded-xl border border-[#e4e7ec] pl-10 pr-3 text-sm" placeholder="Поиск по каталогу"/></label>
       
-      {(type==="delivery"||type==="store")&&<button type="button" onClick={()=>{setEditingCategory("new");setCategoryName("")}} className="inline-flex h-11 items-center gap-2 rounded-xl border border-[#d0d5dd] px-4 text-sm font-semibold">+ Категория</button>}
-      <button type="button" onClick={()=>open()} className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#101828] px-4 text-sm font-semibold !text-white"><Plus className="size-4"/>Добавить {noun}</button>
+      {(type==="delivery"||type==="store")&&<button type="button" onClick={()=>{setMenuView("categories");setEditingCategory("new");setCategoryName("")}} className="inline-flex h-11 items-center gap-2 rounded-xl border border-[#d0d5dd] px-4 text-sm font-semibold">+ Категория</button>}
+      <button type="button" onClick={()=>{setMenuView("items");open()}} className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#101828] px-4 text-sm font-semibold !text-white"><Plus className="size-4"/>Добавить {noun}</button>
     </div>
+    {(type==="delivery"||type==="store")&&<div className="flex gap-2 border-b border-[#eaecf0] px-5 py-3" role="tablist" aria-label="Управление меню">
+      <button type="button" role="tab" aria-selected={menuView==="items"} onClick={()=>setMenuView("items")} className={`rounded-xl px-4 py-2 text-sm font-semibold ${menuView==="items"?"bg-[#101828] text-white":"bg-[#f2f4f7] text-[#475467]"}`}>{type==="delivery"?"Блюда":"Товары"} ({items.length})</button>
+      <button type="button" role="tab" aria-selected={menuView==="categories"} onClick={()=>setMenuView("categories")} className={`rounded-xl px-4 py-2 text-sm font-semibold ${menuView==="categories"?"bg-[#101828] text-white":"bg-[#f2f4f7] text-[#475467]"}`}>Категории ({categories.length})</button>
+    </div>}
     {notice&&<p role="status" className="mx-5 mt-4 rounded-lg bg-[#ecfdf3] p-3 text-sm text-[#027a48]">{notice}</p>}
     {error && <p role="alert" className="m-5 rounded-xl bg-[#fff1f2] p-3 text-sm text-[#be123c]">{error}</p>}
-    {(type==="delivery"||type==="store")&&categories.filter(c=>c.is_active).length>0&&<div className="flex gap-2 overflow-x-auto border-b border-[#eaecf0] px-5 py-3"><button onClick={()=>setChosenCategory("all")} className={`shrink-0 rounded-full px-4 py-2 text-xs font-semibold ${chosenCategory==="all"?"bg-[#6541f5] text-white":"bg-[#f2f4f7] text-[#667085]"}`}>Все блюда</button>{categories.filter(c=>c.is_active).map(c=><button key={c.id} onClick={()=>setChosenCategory(c.id)} className={`shrink-0 rounded-full px-4 py-2 text-xs font-semibold ${chosenCategory===c.id?"bg-[#6541f5] text-white":"bg-[#f2f4f7] text-[#667085]"}`}>{c.name}</button>)}</div>}
-    {(type==="delivery"||type==="store")&&categories.length>0&&<div className="border-b border-[#eaecf0] px-5 py-3">
+    {menuView==="items"&&(type==="delivery"||type==="store")&&categories.filter(c=>c.is_active).length>0&&<div className="flex gap-2 overflow-x-auto border-b border-[#eaecf0] px-5 py-3"><button onClick={()=>setChosenCategory("all")} className={`shrink-0 rounded-full px-4 py-2 text-xs font-semibold ${chosenCategory==="all"?"bg-[#6541f5] text-white":"bg-[#f2f4f7] text-[#667085]"}`}>Все блюда</button>{categories.filter(c=>c.is_active).map(c=><button key={c.id} onClick={()=>{setChosenCategory(c.id);setMenuView("items")}} className={`shrink-0 rounded-full px-4 py-2 text-xs font-semibold ${chosenCategory===c.id?"bg-[#6541f5] text-white":"bg-[#f2f4f7] text-[#667085]"}`}>{c.name}</button>)}</div>}
+    {menuView==="categories"&&(type==="delivery"||type==="store")&&categories.length>0&&<div className="border-b border-[#eaecf0] px-5 py-3">
       <p className="mb-2 text-xs font-semibold text-[#667085]">Управление категориями</p>
       <div className="flex flex-wrap gap-2">{categories.map(c=><div key={c.id} className="flex items-center gap-1 rounded-lg border border-[#e4e7ec] px-2 py-1 text-xs">
         <span className={c.is_active?"text-[#344054]":"text-[#98a2b3]"}>{c.name}{!c.is_active?" (скрыта)":""}</span>
@@ -123,7 +128,8 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
         <button type="button" disabled={saving} onClick={()=>{if(window.confirm("Удалить категорию? Сначала перенесите все блюда."))void categoryRequest("DELETE",{id:c.id})}} className="p-1 text-[#b42318]" aria-label={"Удалить "+c.name}><Trash2 className="size-3.5"/></button>
       </div>)}</div>
     </div>}
-    {loading ? <div className="flex items-center justify-center gap-2 p-14 text-sm text-[#667085]"><LoaderCircle className="size-4 animate-spin"/>Загружаем реальные данные…</div> :
+    {menuView==="categories"&&!loading&&categories.length===0&&<div className="p-10 text-center text-sm text-[#667085]">Категорий пока нет. Нажмите «+ Категория», чтобы создать первую.</div>}
+    {menuView==="items"&&(loading ? <div className="flex items-center justify-center gap-2 p-14 text-sm text-[#667085]"><LoaderCircle className="size-4 animate-spin"/>Загружаем реальные данные…</div> :
       items.filter(item=>(chosenCategory==="all"||item.category_id===chosenCategory)&&[item.name,item.description].join(" ").toLowerCase().includes(query.toLowerCase())).length === 0
       ? <div className="p-12 text-center"><h2 className="text-lg font-semibold">Пока нет {type==="service"?"услуг":type==="delivery"?"блюд":"товаров"}</h2>
           <p className="mt-2 text-sm text-[#667085]">Добавьте первый элемент, сохраните изменения и опубликуйте приложение, чтобы покупатели увидели меню.</p>
@@ -135,7 +141,7 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
           <span className={item.is_active?"rounded-full bg-[#ecfdf3] px-2 py-1 text-xs text-[#027a48]":"rounded-full bg-[#f2f4f7] px-2 py-1 text-xs text-[#667085]"}>{item.is_active?"Активен":"Скрыт"}</span>
           <button type="button" onClick={()=>open(item)} aria-label={"Изменить "+item.name} className="grid size-10 place-items-center rounded-xl border border-[#d0d5dd]"><Pencil className="size-4"/></button>
           {item.is_active&&<button type="button" disabled={saving} onClick={()=>void archive(item)} aria-label={"Скрыть "+item.name} className="grid size-10 place-items-center rounded-xl border border-[#d0d5dd] text-[#b42318]"><Trash2 className="size-4"/></button>}
-        </div>)}</div>}
+        </div>)}</div>)}
     {editingCategory!==null&&<div className="fixed inset-0 z-50 grid place-items-center bg-[#101828]/60 p-4"><div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
       <div className="flex items-center justify-between"><h2 className="text-xl font-semibold">{editingCategory==="new"?"Новая категория":"Редактировать категорию"}</h2><button type="button" onClick={()=>setEditingCategory(null)} aria-label="Закрыть"><X/></button></div>
       <label className="mt-5 block text-sm font-medium">Название<input maxLength={80} value={categoryName} onChange={e=>setCategoryName(e.target.value)} className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/></label>
