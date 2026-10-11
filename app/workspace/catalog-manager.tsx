@@ -212,7 +212,7 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
          <li>3 уведомления только внутри админки</li>
         </ul>
         <p className="rounded-xl bg-[#fff7ed] p-3 text-xs leading-5 text-[#9a3412]">{demoModal==="import"?
-         "Это демонстрационный контент, а не реальные заказы. Уведомления в Telegram не отправляются. Реальные данные не заменятся. Удалите демо до публикации: после публикации добавленные товары будут видны покупателям.":
+         "Это демонстрационный контент, а не реальные заказы. Уведомления в Telegram не отправляются. Реальные данные не заменятся. Публикация будет заблокирована, пока вы не удалите демо-набор. Это защищает покупателей от тестовых товаров.":
          "Действие нельзя отменить. Обычные товары, категории и реальные заказы останутся без изменений. Удалить демо можно только до публикации."}</p>
         <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[#e4e7ec] p-3 text-sm"><input type="checkbox" checked={demoAcknowledged} onChange={e=>setDemoAcknowledged(e.target.checked)} className="mt-1 size-4 accent-[#6541f5]"/><span>Я понимаю, что это {demoModal==="import"?"тестовые данные":"удаление демонстрационных записей"}.</span></label>
        </div>
