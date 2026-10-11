@@ -10,7 +10,7 @@ export async function GET(request:Request) {
   const botId=new URL(request.url).searchParams.get("bot")??"";
   if(!uuid.test(botId))return fail("Выберите бота для предпросмотра.",400);
   const identity=await resolveAppUser(request,request.headers.get("x-telegram-init-data")??"");
-  if("error" in identity)return fail(identity.error,identity.status);
+  if("error" in identity)return fail(identity.error??"Не удалось проверить сессию.",identity.status??401);
   const {supabase,user,setCookie}=identity;
   const {data:bot,error:botError}=await supabase.from("bots")
     .select("id,name,description,logo_url,primary_color,template_type,settings")
