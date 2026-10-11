@@ -251,7 +251,7 @@ export default function BotBuilder(){
     <aside className="min-h-0 min-w-0 xl:h-full xl:overflow-hidden">
      <div className="mb-3 text-xs font-semibold text-[#080b2b]">Предпросмотр · {activeSection==="profile"?"Профиль":activeSection==="miniapp"?"Mini App":"Чат Telegram"}</div>
      {previewMode==="telegram"?<FigmaTelegramPreview name={name} description={figmaPreview==="chat"?welcome:description} buttons={buttons} color={color} view={figmaPreview} avatar={avatar} bio={bio}/>:
-      {botId?<MiniAppLivePreview botId={botId} design={{layout:foodTemplate,color:foodAccent,dark:foodThemeMode==="dark",themeMode:foodThemeMode,defaultTheme:foodDefaultTheme}}/>:null}
+      botId?<MiniAppLivePreview botId={botId} design={{layout:foodTemplate,color:foodAccent,dark:foodThemeMode==="dark",themeMode:foodThemeMode,defaultTheme:foodDefaultTheme}}/>:null}
     </aside>
     </div>
    </div>
