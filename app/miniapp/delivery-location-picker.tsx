@@ -6,8 +6,8 @@ const clamp=(n:number,min:number,max:number)=>Math.min(max,Math.max(min,n));
 function world(p:Point,z:number){const size=256*2**z;const lat=clamp(p.lat,-85.0511,85.0511);return {x:(p.lng+180)/360*size,y:(1-Math.log(Math.tan(lat*Math.PI/180)+1/Math.cos(lat*Math.PI/180))/Math.PI)/2*size};}
 function position(x:number,y:number,z:number):Point{const size=256*2**z;return {lng:((x/size)*360+540)%360-180,lat:Math.atan(Math.sinh(Math.PI*(1-2*y/size)))*180/Math.PI};}
 const valid=(p:Point)=>Number.isFinite(p.lat)&&Number.isFinite(p.lng)&&p.lat>=-85&&p.lat<=85&&p.lng>=-180&&p.lng<=180;
-export default function DeliveryLocationPicker({value,onChange}:{value:Point|null;onChange:(value:Point)=>void}){
- const [center,setCenter]=useState<Point>(value??{lat:41.2995,lng:69.2401});
+export default function DeliveryLocationPicker({value,onChange,initialCenter}:{value:Point|null;onChange:(value:Point)=>void;initialCenter?:Point}){
+ const [center,setCenter]=useState<Point>(value??initialCenter??{lat:41.2995,lng:69.2401});
  const [zoom,setZoom]=useState(15);
  const [error,setError]=useState("");
  const at=world(center,zoom),tiles=[] as {key:string;url:string;x:number;y:number}[],baseX=Math.floor(at.x/256),baseY=Math.floor(at.y/256);
