@@ -28,13 +28,14 @@ export default function LoginPage({callback=false}:{callback?:boolean}){
  const [working,setWorking]=useState(false);
  const clientRef=useRef<SupabaseClient|null>(null);
  const isCallback=callback;
+ const exchangeStarted=useRef(false);
  const [isPublicDomain,setIsPublicDomain]=useState(false);
  useEffect(()=>{void Promise.resolve().then(()=>setIsPublicDomain(window.location.protocol==="https:"&&!["localhost","127.0.0.1"].includes(window.location.hostname)))},[]);
  const getClient=useCallback(async(config:Providers["google"])=>{
   if(!config)throw new Error("Google OAuth не настроен в Supabase.");
   if(!clientRef.current){
    const {createClient}=await import("@supabase/supabase-js");
-   clientRef.current=createClient(config.supabaseUrl,config.publishableKey,{auth:{persistSession:true,detectSessionInUrl:true,flowType:"implicit",storageKey:"bot-studio-supabase-google"}});
+   clientRef.current=createClient(config.supabaseUrl,config.publishableKey,{auth:{persistSession:true,detectSessionInUrl:false,flowType:"pkce",storageKey:"bot-studio-supabase-google"}});
   }
   return clientRef.current;
  },[]);
@@ -42,7 +43,7 @@ export default function LoginPage({callback=false}:{callback?:boolean}){
   const response=await fetch("/api/auth/account",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
   const result=await response.json() as {error?:string};
   if(!response.ok)throw new Error(result.error??"Вход не завершён.");
-  window.location.replace("/workspace");
+  window.location.replace("mode" in payload && payload.mode==="link"?"/workspace/account?linked=1":"/workspace");
  },[]);
 
  useEffect(()=>{
@@ -51,28 +52,36 @@ export default function LoginPage({callback=false}:{callback?:boolean}){
   return()=>controller.abort();
  },[]);
  useEffect(()=>{
-  if(!isCallback||!providers)return;
-  let cancel=false;
+  if(!isCallback||!providers||exchangeStarted.current)return;
+  exchangeStarted.current=true;
+  let cancelled=false;
   async function exchange(){
-   if(!providers?.google){setError("Google ещё не настроен.");return}
    setWorking(true);
    try{
+    const params=new URLSearchParams(window.location.search);
+    const denied=params.get("error");
+    if(denied)throw new Error("Google отменил вход или не подтвердил доступ.");
+    const code=params.get("code");
+    if(!code||code.length>2048)throw new Error("Google не вернул код подтверждения. Попробуйте снова.");
+    if(!providers?.google)throw new Error("Google пока не настроен в тестовой Supabase.");
     const client=await getClient(providers.google);
-    const {data,error:sessionError}=await client.auth.getSession();
-    if(sessionError||!data.session?.access_token)throw new Error("Google не вернул сессию. Попробуйте войти ещё раз.");
-    if(cancel)return;
-    await finish({provider:"google",accessToken:data.session.access_token});
-   }catch(e){if(!cancel)setError(e instanceof Error?e.message:"Ошибка входа.");}
-   finally{if(!cancel)setWorking(false)}
+    // PKCE verifier is verified by Supabase before issuing an access token.
+    const {data,error:exchangeError}=await client.auth.exchangeCodeForSession(code);
+    if(exchangeError||!data.session?.access_token)throw new Error("Сессия Google не подтверждена. Начните вход заново.");
+    if(cancelled)return;
+    await finish({provider:"google",accessToken:data.session.access_token,mode:params.get("mode")==="link"?"link":"login"});
+   }catch(e){if(!cancelled)setError(e instanceof Error?e.message:"Не удалось подтвердить Google.");}
+   finally{if(!cancelled)setWorking(false)}
   }
-  void exchange();return()=>{cancel=true}
+  void exchange();
+  return()=>{cancelled=true};
  },[isCallback,providers,getClient,finish]);
 
  async function googleLogin(){
   setWorking(true);setError("");
   try{
    const client=await getClient(providers?.google??null);
-   const {error:oauthError}=await client.auth.signInWithOAuth({provider:"google",options:{redirectTo:window.location.origin+"/auth/callback"}});
+   const {error:oauthError}=await client.auth.signInWithOAuth({provider:"google",options:{redirectTo:window.location.origin+"/auth/callback",queryParams:{prompt:"select_account"}}});
    if(oauthError)throw oauthError;
   }catch(e){setError(e instanceof Error?e.message:"Не удалось подключить Google.");setWorking(false)}
  }
