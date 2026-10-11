@@ -158,3 +158,43 @@ for(const template of ["delivery","store"] as const){
   await expect(page.getByRole("button",{name:/Заказ недоступен в предпросмотре/})).toBeDisabled();
  });
 }
+
+
+test("Google PKCE redirects with code challenge instead of implicit access token",async({page})=>{
+ let authorizeUrl="";
+ await page.route("**/api/auth/providers",route=>route.fulfill({
+  status:200,contentType:"application/json",
+  body:JSON.stringify({google:{supabaseUrl:"https://qa-login-auth.supabase.co",publishableKey:"sb_publishable_testing"},telegram:null}),
+ }));
+ await page.route("https://qa-login-auth.supabase.co/auth/v1/authorize**",route=>{
+  authorizeUrl=route.request().url();
+  return route.abort();
+ });
+ await page.goto("/auth");
+ await page.getByRole("button",{name:/Продолжить через Google/}).click();
+ await expect.poll(()=>authorizeUrl,{timeout:10000}).toContain("/auth/v1/authorize");
+ const url=new URL(authorizeUrl);
+ expect(url.searchParams.get("provider")).toBe("google");
+ expect(url.searchParams.get("code_challenge")).toMatch(/^[A-Za-z0-9_-]{40,}$/);
+ expect(url.searchParams.get("code_challenge_method")?.toLowerCase()).toBe("s256");
+ expect(url.searchParams.get("redirect_to")).toContain("/auth/callback");
+});
+
+test("Google callback rejects missing authorization code without creating a session",async({page})=>{
+ let posts=0;
+ await page.route("**/api/auth/providers",route=>route.fulfill({
+  status:200,contentType:"application/json",
+  body:JSON.stringify({google:{supabaseUrl:"https://qa-login-auth.supabase.co",publishableKey:"sb_publishable_testing"},telegram:null}),
+ }));
+ await page.route("**/api/auth/account",route=>{posts++;return route.abort()});
+ await page.goto("/auth/callback");
+ await expect(page.getByRole("alert")).toContainText("Google не вернул код подтверждения");
+ expect(posts).toBe(0);
+});
+
+test("linking Google without a verified session is rejected",async({request})=>{
+ const response=await request.post("/api/auth/account",{
+  data:{provider:"google",mode:"link",accessToken:"not-an-oauth-token"},
+ });
+ expect([400,401]).toContain(response.status());
+});
