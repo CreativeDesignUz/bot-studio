@@ -127,3 +127,34 @@ for (const kind of ["Доставка еды", "Интернет-магазин"
     expect({inspected,connected,published}).toEqual({inspected:true,connected:true,published:true});
   });
 }
+
+
+test("owner draft preview is not publicly readable",async({request})=>{
+ const response=await request.get("/api/miniapp/preview?bot=11111111-1111-4111-8111-111111111111");
+ expect([401,403,404]).toContain(response.status());
+ expect(response.headers()["cache-control"]??"").not.toContain("public");
+});
+
+for(const template of ["delivery","store"] as const){
+ test(`interactive draft Mini App uses real cart and updates theme — ${template}`,async({page})=>{
+  const id="11111111-1111-4111-8111-111111111111";
+  await page.route("**/api/miniapp/preview?bot=*",async route=>{
+   await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({
+    bot:{id,name:template==="delivery"?"QA Food":"QA Store",description:"Предпросмотр",logoUrl:null,color:"#E65D35",template},
+    items:[{id:"33333333-3333-4333-8333-333333333333",name:"QA блюдо",description:"Свежее",image_url:null,price_minor:2500000,currency:"UZS",category_id:"22222222-2222-4222-8222-222222222222"}],
+    categories:[{id:"22222222-2222-4222-8222-222222222222",name:"Горячее",position:0}],
+    design:{layout:"food01",color:"#E65D35",themeMode:"light",defaultTheme:"system",banner:{enabled:true,title:"Вкусная еда рядом",description:"Выбирайте любимое",imageUrl:"",buttonEnabled:false,buttonText:"",linkType:"page",target:"catalog"}}
+   })});
+  });
+  await page.goto(`/miniapp?bot=${id}&preview=1`);
+  await expect(page.getByText("Предпросмотр · изменения не опубликованы")).toBeVisible();
+  await expect(page.getByText("QA блюдо")).toBeVisible();
+  await page.evaluate(botId=>window.postMessage({type:"bot-studio:preview-design",botId,design:{layout:"food02",color:"#6541F5",dark:true,themeMode:"dark",defaultTheme:"dark",banner:{enabled:true,title:"Меню за минуту",description:"Тест баннера",imageUrl:"",buttonEnabled:false,buttonText:"",linkType:"page",target:"catalog"}}},window.location.origin),id);
+  await expect(page.locator("main").last()).toHaveCSS("background-color","rgb(17, 20, 24)");
+  if(template==="delivery")await expect(page.getByText("Меню за минуту")).toBeVisible();
+  await page.getByRole("button",{name:/Добавить/}).first().click();
+  await page.getByRole("button",{name:/Корзина/}).last().click();
+  await expect(page.getByText("Оформление заказа")).toBeVisible();
+  await expect(page.getByRole("button",{name:/Заказ недоступен в предпросмотре/})).toBeDisabled();
+ });
+}
