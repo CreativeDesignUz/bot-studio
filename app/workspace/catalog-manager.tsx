@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { LoaderCircle, Pencil, Plus, Search, Trash2, Upload, X } from "lucide-react";
+import { DatabaseZap, LoaderCircle, Pencil, Plus, Search, Trash2, Upload, X } from "lucide-react";
 import { formatCatalogPrice, formatStoredPrice, priceToMinor, type CatalogCurrency } from "@/lib/catalog/price";
 
 type Item = { id: string; name: string; description: string; price_minor: number | null; is_active: boolean; currency: string; image_url?:string|null;category_id?:string|null; ingredients?:string[];allergens?:string[];preparation_minutes?:number|null;stock_quantity?:number|null };
@@ -36,6 +36,10 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
   const [currency, setCurrency] = useState<CatalogCurrency>("UZS");
   const [active, setActive] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [demoModal,setDemoModal]=useState<"import"|"remove"|null>(null);
+  const [demoAcknowledged,setDemoAcknowledged]=useState(false);
+  const [demoImporting,setDemoImporting]=useState(false);
+  const [demoState,setDemoState]=useState<"loading"|"available"|"imported"|"blocked">("loading");
 
   const refresh = useCallback(async () => {
     setLoading(true); setError("");
@@ -54,6 +58,40 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
     finally { setLoading(false); }
   }, [botId,type]);
   useEffect(() => { void Promise.resolve().then(refresh); }, [refresh]);
+  useEffect(()=>{
+    if(type!=="delivery"&&type!=="store")return;
+    const c=new AbortController();
+    setDemoState("loading");
+    void fetch("/api/demo-content?bot="+encodeURIComponent(botId),{
+      headers:{"x-telegram-init-data":telegramData()},signal:c.signal,cache:"no-store"
+    }).then(async response=>{
+      const result=await response.json() as {imported?:boolean;canImport?:boolean};
+      if(!response.ok)throw new Error("Недоступно");
+      if(!c.signal.aborted)setDemoState(result.imported?"imported":result.canImport?"available":"blocked");
+    }).catch(()=>{if(!c.signal.aborted)setDemoState("blocked")});
+    return()=>c.abort();
+  },[botId,type]);
+
+  async function runDemoAction(){
+    if(!demoModal||!demoAcknowledged||demoImporting)return;
+    const deleting=demoModal==="remove";
+    setDemoImporting(true);setError("");setNotice("");
+    try{
+      const response=await fetch("/api/demo-content",{
+        method:deleting?"DELETE":"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({botId,initData:telegramData(),confirm:deleting?"REMOVE_DEMO_CONTENT":"IMPORT_DEMO_CONTENT"})
+      });
+      const result=await response.json() as {error?:string;alreadyImported?:boolean};
+      if(!response.ok)throw new Error(result.error??"Не удалось обработать демо-данные.");
+      setDemoState(deleting?"available":"imported");
+      setDemoModal(null);setDemoAcknowledged(false);setChosenCategory("all");setMenuView("items");
+      setNotice(deleting?"Демо-данные удалены. Реальные записи не затронуты.":result.alreadyImported?"Демо уже было загружено. Повторных записей нет.":"Демо добавлено: 4 категории, 8 блюд с фото, 3 тестовых заказа и 3 уведомления.");
+      window.dispatchEvent(new CustomEvent("botstudio:demo-updated",{detail:{botId}}));
+      await refresh();
+    }catch(e){setError(e instanceof Error?e.message:"Не удалось изменить демо-данные.");}
+    finally{setDemoImporting(false);}
+  }
+
 
   async function categoryRequest(method:"POST"|"DELETE", payload:Record<string,unknown>){
     setSaving(true);setError("");setNotice("");
@@ -126,6 +164,7 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
       <label className="relative min-w-[180px] flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#98a2b3]"/>
         <input value={query} onChange={e=>setQuery(e.target.value)} className="h-11 w-full rounded-xl border border-[#e4e7ec] pl-10 pr-3 text-sm" placeholder="Поиск по каталогу"/></label>
       
+      {(type==="delivery"||type==="store")&&<button type="button" onClick={()=>{setDemoAcknowledged(false);setDemoModal(demoState==="imported"?"remove":"import")}} disabled={demoState==="loading"||demoState==="blocked"||demoImporting} className="inline-flex h-11 items-center gap-2 rounded-xl border border-[#d6c9ff] bg-[#f7f4ff] px-4 text-sm font-semibold text-[#5934dc] disabled:cursor-not-allowed disabled:opacity-45"><DatabaseZap className="size-4"/>{demoState==="imported"?"Убрать демо":"Загрузить демо-данные"}</button>}
       {(type==="delivery"||type==="store")&&<button type="button" onClick={()=>{setMenuView("categories");setEditingCategory("new");setCategoryName("")}} className="inline-flex h-11 items-center gap-2 rounded-xl border border-[#d0d5dd] px-4 text-sm font-semibold">+ Категория</button>}
       <button type="button" onClick={()=>{setMenuView("items");open()}} className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#101828] px-4 text-sm font-semibold !text-white"><Plus className="size-4"/>Добавить {noun}</button>
     </div>
@@ -162,6 +201,27 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
           <button type="button" onClick={()=>open(item)} aria-label={"Изменить "+item.name} className="grid size-10 place-items-center rounded-xl border border-[#d0d5dd]"><Pencil className="size-4"/></button>
           {item.is_active&&<button type="button" disabled={saving} onClick={()=>void archive(item)} aria-label={"Скрыть "+item.name} className="grid size-10 place-items-center rounded-xl border border-[#d0d5dd] text-[#b42318]"><Trash2 className="size-4"/></button>}
         </div>)}</div>)}
+    {demoModal&&<div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#101828]/60 p-4" role="presentation">
+      <div role="dialog" aria-modal="true" aria-label={demoModal==="import"?"Подтверждение загрузки демо-данных":"Подтверждение удаления демо-данных"} className="w-full max-w-[460px] overflow-hidden rounded-3xl bg-white shadow-2xl">
+       <div className="flex items-center justify-between border-b border-[#eaecf0] px-6 py-4"><h2 className="text-lg font-semibold">{demoModal==="import"?"Загрузить демо-данные?":"Удалить демо-данные?"}</h2><button type="button" aria-label="Закрыть предупреждение" disabled={demoImporting} onClick={()=>{setDemoModal(null);setDemoAcknowledged(false)}}><X className="size-5"/></button></div>
+       <div className="space-y-4 px-6 py-5">
+        <p className="text-sm leading-6 text-[#475467]">{demoModal==="import"?"После подтверждения мы добавим в этот черновик:":"Будут удалены только записи, добавленные демонстрационным импортом:"}</p>
+        <ul className="space-y-2 text-sm text-[#344054]">
+         <li>4 категории: Бургеры, Пицца, Салаты, Напитки</li>
+         <li>8 блюд / товаров с фотографиями еды</li>
+         <li>3 тестовых заказа — без реальных покупателей и оплаты</li>
+         <li>3 уведомления только внутри админки</li>
+        </ul>
+        <p className="rounded-xl bg-[#fff7ed] p-3 text-xs leading-5 text-[#9a3412]">{demoModal==="import"?
+         "Это демонстрационный контент, а не реальные заказы. Уведомления в Telegram не отправляются. Реальные данные не заменятся. Удалите демо до публикации: после публикации добавленные товары будут видны покупателям.":
+         "Действие нельзя отменить. Обычные товары, категории и реальные заказы останутся без изменений. Удалить демо можно только до публикации."}</p>
+        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[#e4e7ec] p-3 text-sm"><input type="checkbox" checked={demoAcknowledged} onChange={e=>setDemoAcknowledged(e.target.checked)} className="mt-1 size-4 accent-[#6541f5]"/><span>Я понимаю, что это {demoModal==="import"?"тестовые данные":"удаление демонстрационных записей"}.</span></label>
+       </div>
+       <div className="flex justify-end gap-2 border-t border-[#eaecf0] px-6 py-4"><button type="button" disabled={demoImporting} onClick={()=>{setDemoModal(null);setDemoAcknowledged(false)}} className="h-11 rounded-xl border border-[#d0d5dd] px-4 text-sm font-semibold">Отмена</button>
+        <button type="button" onClick={()=>void runDemoAction()} disabled={!demoAcknowledged||demoImporting} className={"inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-semibold text-white disabled:opacity-40 "+(demoModal==="remove"?"bg-[#b42318]":"bg-[#6541f5]")}>{demoImporting&&<LoaderCircle className="size-4 animate-spin"/>}{demoImporting?"Подождите…":demoModal==="import"?"Да, загрузить демо":"Удалить демо"}</button>
+       </div>
+      </div>
+     </div>}
     {editingCategory!==null&&<div className="fixed inset-0 z-50 grid place-items-center bg-[#101828]/60 p-4"><div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
       <div className="flex items-center justify-between"><h2 className="text-xl font-semibold">{editingCategory==="new"?"Новая категория":"Редактировать категорию"}</h2><button type="button" onClick={()=>setEditingCategory(null)} aria-label="Закрыть"><X/></button></div>
       <label className="mt-5 block text-sm font-medium">Название<input maxLength={80} value={categoryName} onChange={e=>setCategoryName(e.target.value)} className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/></label>
