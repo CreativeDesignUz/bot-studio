@@ -3,7 +3,7 @@ import { resolveAppUser, withSessionCookie } from "@/lib/auth/app-user";
 import { getTelegramBotIdentity, telegramCall } from "@/lib/channels/telegram-api";
 import { getProjectBotToken } from "@/lib/channels/project-bot-token";
 import { resolvePublicAppOrigin } from "@/lib/http/public-origin";
-import { decryptTelegramToken, encryptTelegramToken, looksLikeTelegramBotToken } from "@/lib/security/telegram-token";
+import { decryptTelegramTokenFromStorage, encryptTelegramTokenForStorage, looksLikeTelegramBotToken } from "@/lib/security/telegram-token";
 
 type RequestPayload = { initData?: string; action?: "inspect" | "connect" | "disconnect"; botId?: string; token?: string; credentialId?: string };
 type PendingCredential = { id: string; bot_id: string; channel_id: string; owner_id: string; external_account_id: string; external_username: string; token_ciphertext: string; token_iv: string; status: string; expires_at: string };
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
   const { supabase, user, setCookie } = identity;
   const { data: bot } = await ownedBot(supabase, payload.botId, user.id);
   if (!bot) return errorResponse("Бот не найден или у вас нет доступа.", 404, setCookie);
-  if (!env.TELEGRAM_TOKEN_ENCRYPTION_KEY) return errorResponse("Серверное шифрование Telegram-токенов не настроено.", 503, setCookie);
+  if (!env.TELEGRAM_TOKEN_ENCRYPTION_KEY_V2 && !env.TELEGRAM_TOKEN_ENCRYPTION_KEY) return errorResponse("Серверное шифрование Telegram-токенов не настроено.", 503, setCookie);
 
   if (payload.action === "inspect") {
     if (!looksLikeTelegramBotToken(payload.token)) return errorResponse("Проверьте формат токена BotFather.", 400, setCookie);
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     }
     if (!telegramBot.is_bot || !telegramBot.username) return errorResponse("Telegram не подтвердил этот аккаунт как бота.", 400, setCookie);
     let encrypted;
-    try { encrypted = await encryptTelegramToken(token, env.TELEGRAM_TOKEN_ENCRYPTION_KEY); }
+    try { encrypted = await encryptTelegramTokenForStorage(token, { v2Key: env.TELEGRAM_TOKEN_ENCRYPTION_KEY_V2, legacyKey: env.TELEGRAM_TOKEN_ENCRYPTION_KEY }); }
     catch { return errorResponse("Серверное шифрование Telegram-токенов настроено неверно.", 503, setCookie); }
     const { data, error } = await supabase.rpc("stage_direct_telegram_credential", {
       p_bot_id: payload.botId, p_owner_id: user.id,
@@ -87,7 +87,7 @@ export async function POST(request: Request) {
     const runtimeSecret = crypto.randomUUID().replaceAll("-", "");
     const miniAppUrl = new URL(`/miniapp?bot=${payload.botId}`, origin).toString();
     try {
-      const token = await decryptTelegramToken(pending.token_ciphertext, pending.token_iv, env.TELEGRAM_TOKEN_ENCRYPTION_KEY);
+      const token = await decryptTelegramTokenFromStorage(pending.token_ciphertext, pending.token_iv, { v2Key: env.TELEGRAM_TOKEN_ENCRYPTION_KEY_V2, legacyKey: env.TELEGRAM_TOKEN_ENCRYPTION_KEY });
       const telegramBot = await getTelegramBotIdentity(token);
       if (String(telegramBot.id) !== pending.external_account_id) throw new Error("TELEGRAM_BOT_CHANGED");
       await telegramCall(token, "setMyCommands", { commands: MANAGED_COMMANDS });
@@ -114,7 +114,7 @@ export async function POST(request: Request) {
     .eq("bot_id", payload.botId).eq("channel", "telegram").eq("status", "connected").maybeSingle();
   if (!channel) return withSessionCookie({ disconnected: true }, 200, setCookie);
   try {
-    const token = await getProjectBotToken(supabase, channel, { managerToken: env.TELEGRAM_MANAGER_TOKEN, encryptionKey: env.TELEGRAM_TOKEN_ENCRYPTION_KEY });
+    const token = await getProjectBotToken(supabase, channel, { managerToken: env.TELEGRAM_MANAGER_TOKEN, encryptionKey: env.TELEGRAM_TOKEN_ENCRYPTION_KEY, encryptionKeyV2: env.TELEGRAM_TOKEN_ENCRYPTION_KEY_V2 });
     await telegramCall(token, "deleteWebhook", { drop_pending_updates: false });
     const { error } = await supabase.rpc("disconnect_telegram_channel", { p_bot_id: payload.botId, p_owner_id: user.id });
     if (error) throw error;

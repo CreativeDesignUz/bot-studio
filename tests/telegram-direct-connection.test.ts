@@ -9,7 +9,7 @@ test("BotFather connection validates ownership, getMe and encrypted credentials"
   const route = await readFile(routeUrl, "utf8");
   assert.match(route, /ownedBot\(supabase, payload\.botId, user\.id\)/);
   assert.match(route, /getTelegramBotIdentity\(token\)/);
-  assert.match(route, /encryptTelegramToken\(token/);
+  assert.match(route, /encryptTelegramTokenForStorage\(token/);
   assert.match(route, /complete_direct_telegram_connection/);
   assert.doesNotMatch(route, /localStorage/);
   assert.doesNotMatch(route, /console\.(?:log|info|error).*token/);

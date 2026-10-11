@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import FigmaTelegramPreview from "./figma-telegram-preview";
+import MiniAppLivePreview from "../miniapp-live-preview";
+import WorkspaceSidebar from "../workspace-sidebar";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, Bot, Check, ChevronRight, Eye, GripVertical, LoaderCircle, Plus, Save, Send, Trash2, MessageCircle, Smartphone, ExternalLink, KeyRound, ShieldCheck, Unplug, Settings } from "lucide-react";
+import { ArrowLeft, Bot, Check, ChevronRight, Eye, GripVertical, LoaderCircle, Plus, Save, Send, Trash2, MessageCircle, Smartphone, ExternalLink, KeyRound, ShieldCheck, Unplug, Settings, Menu, X } from "lucide-react";
 
 type ActionButton={id:string;label:string;action:"home"|"url"|"reply";url?:string;replyText?:string;nextButtons?:ActionButton[]};
 type PublishState="idle"|"validating"|"saving"|"publishing"|"published"|"connection"|"error";
@@ -21,11 +23,13 @@ export default function BotBuilder(){
  const [buttons,setButtons]=useState<ActionButton[]>([]);
  const [bio,setBio]=useState(""),[welcome,setWelcome]=useState(""),[avatar,setAvatar]=useState<string|null>(null),[avatarBusy,setAvatarBusy]=useState(false);
  const [activeSection,setActiveSection]=useState<"profile"|"message"|"buttons"|"miniapp"|"publish">("profile");
- const [searchQuery,setSearchQuery]=useState("");
+ const [botType,setBotType]=useState<"delivery"|"store"|"service">("delivery");
+ const [mobileNav,setMobileNav]=useState(false);
  const previewMode=activeSection==="miniapp"?"miniapp":"telegram";
  const figmaPreview=activeSection==="profile"?"profile":"chat";
  const [foodTemplate,setFoodTemplate]=useState<"food01"|"food02">("food01");
- const [foodDark,setFoodDark]=useState(false);
+ const [foodThemeMode,setFoodThemeMode]=useState<"light"|"dark"|"customer">("light");
+ const [foodDefaultTheme,setFoodDefaultTheme]=useState<"system"|"light"|"dark">("system");
  const [foodAccent,setFoodAccent]=useState("#E65D35");
  const [foodBot,setFoodBot]=useState(false);
  const [foodSaving,setFoodSaving]=useState(false);
@@ -49,10 +53,12 @@ export default function BotBuilder(){
     setName(result.bot.name);setDescription(result.bot.description);setBio(result.bot.settings?.telegram_bio??"");setWelcome(result.bot.settings?.welcome_message??result.bot.description);setAvatar(result.bot.logo_url??null);setColor(result.bot.primary_color);setButtons((result.bot.settings?.home_buttons??[]).map(button=>({...button,id:button.id??crypto.randomUUID(),action:button.action==="url"?"url":button.action==="reply"?"reply":"home",nextButtons:button.nextButtons?.map(next=>({...next,id:next.id??crypto.randomUUID()}))})));
     const designResponse=await fetch(`/api/miniapp/design?bot=${encodeURIComponent(botId)}`,{headers:{"x-telegram-init-data":tg?.initData??""},signal:controller.signal});
     if(designResponse.ok){
-      const theme=await designResponse.json() as {design?:{layout?:"food01"|"food02";color?:string;dark?:boolean};templateType?:string};
-      setFoodBot(theme.templateType==="delivery");
+      const theme=await designResponse.json() as {design?:{layout?:"food01"|"food02";color?:string;dark?:boolean;themeMode?:"light"|"dark"|"customer";defaultTheme?:"system"|"light"|"dark"};templateType?:string};
+      setFoodBot(theme.templateType==="delivery"||theme.templateType==="store");
+      setBotType(theme.templateType==="store"?"store":theme.templateType==="service"?"service":"delivery");
       setFoodTemplate(theme.design?.layout==="food02"?"food02":"food01");
-      setFoodDark(theme.design?.dark===true);
+      setFoodThemeMode(theme.design?.themeMode??(theme.design?.dark?"dark":"light"));
+      setFoodDefaultTheme(theme.design?.defaultTheme??"system");
       setFoodAccent(theme.design?.color??"#E65D35");
     }
     setDirty(false);setSaved(true);setLoadState("ready");
@@ -80,7 +86,7 @@ export default function BotBuilder(){
  }
  async function saveFoodDesign(next?:{layout:"food01"|"food02";color:string;dark:boolean}){
   if(!botId)return;
-  const design=next??{layout:foodTemplate,color:foodAccent,dark:foodDark};
+  const design={...(next??{layout:foodTemplate,color:foodAccent,dark:foodThemeMode==="dark"}),themeMode:foodThemeMode,defaultTheme:foodDefaultTheme};
   setFoodSaving(true);setFoodNotice("");
   try{
     const response=await fetch("/api/miniapp/design",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({botId,initData:telegramInitData(),...design})});
@@ -132,33 +138,17 @@ export default function BotBuilder(){
  if(loadState==="error")return <main className="grid min-h-screen place-items-center bg-[#f4f6f8] p-5 text-[#101828]"><section className="w-full max-w-lg rounded-[24px] border border-[#e4e7ec] bg-white p-8 text-center"><span className="mx-auto grid size-14 place-items-center rounded-2xl bg-[#fff1f3] text-[#c01048]"><Bot/></span><h1 className="mt-5 text-2xl font-semibold">Не удалось открыть редактор</h1><p className="mt-2 text-sm leading-6 text-[#667085]">{loadError}</p><div className="mt-6 flex justify-center gap-3"><Link href="/workspace" className="inline-flex h-11 items-center rounded-xl border border-[#d0d5dd] px-4 text-sm font-semibold no-underline">В кабинет</Link><button onClick={()=>location.reload()} className="h-11 rounded-xl bg-[#101828] px-5 text-sm font-semibold text-white">Повторить</button></div></section></main>;
  return <main className="min-h-dvh bg-[#f4f6f8] text-[#101828] xl:h-dvh xl:overflow-hidden">
   <div className="mx-auto grid min-h-dvh max-w-[1600px] xl:h-full xl:min-h-0 xl:grid-cols-[248px_minmax(0,1fr)]">
-   <aside className="flex min-h-0 flex-col border-r border-[#e4e7ec] bg-white px-4 py-5 xl:h-full xl:overflow-y-auto">
-    <Link href="/workspace" className="flex items-center gap-2 rounded-lg px-1 no-underline"><span className="grid size-9 place-items-center rounded-[9px] bg-[#4420e7] text-white"><Bot className="size-5"/></span><strong className="text-[18px] tracking-[-.02em] text-[#080b2b]">BotStudio</strong></Link>
-    <div className="relative mt-5">
-    <label className="flex h-10 items-center gap-2 rounded-lg border border-[#cbd5e0] bg-[#f8f9fb] px-3 text-[#718096]"><Eye className="size-4"/><input aria-label="Поиск настроек" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Поиск настроек" className="min-w-0 flex-1 bg-transparent text-xs text-[#080b2b] outline-none placeholder:text-[#718096]"/><span className="rounded border px-1 text-[10px]">⌘K</span></label>
-    {searchQuery.trim()&&<div className="absolute left-0 right-0 top-11 z-40 overflow-hidden rounded-lg border border-[#cbd5e0] bg-white shadow-lg">{([["profile","Профиль бота"],["message","Приветствие"],["buttons","Кнопки и сценарии"],["miniapp","Мини-приложение"],["publish","Подключение и запуск"]] as const).filter(([,label])=>label.toLowerCase().includes(searchQuery.toLowerCase())).map(([id,label])=><button type="button" key={id} className="block w-full px-3 py-3 text-left text-xs hover:bg-[#f0ecff]" onClick={()=>{setActiveSection(id);setSearchQuery("")}}>{label}</button>)}{!["Профиль бота","Приветствие","Кнопки и сценарии","Мини-приложение","Подключение и запуск"].some(label=>label.toLowerCase().includes(searchQuery.toLowerCase()))&&<p className="px-3 py-3 text-xs text-[#718096]">Настройки не найдены</p>}</div>}
-   </div>
-    <nav className="mt-7 space-y-1 text-sm">
-     <Link href={`/workspace?bot=${encodeURIComponent(botId??"")}`} className="flex h-11 items-center gap-3 rounded-xl px-3 text-[#667085] no-underline hover:bg-[#f9fafb]"><Bot size={18}/>Обзор</Link>
-     <Link href={`/workspace?bot=${encodeURIComponent(botId??"")}`} className="flex h-11 items-center gap-3 rounded-xl px-3 text-[#667085] no-underline hover:bg-[#f9fafb]"><Save size={18}/>Заказы и заявки</Link>
-    </nav>
-    <p className="mt-7 px-3 text-[11px] font-semibold uppercase tracking-[.06em]">Интеграция</p>
-    <div className="mt-3 rounded-[10px] bg-[#6541F5] px-3 py-3 text-[14px] font-medium text-white"><span className="flex items-center gap-2"><Send size={17}/>Телеграм бот <ChevronRight className="ml-auto size-4 rotate-90"/></span></div>
-    <nav className="ml-4 border-l border-[#ddd6fe] pl-2 text-sm">
-     <button type="button" onClick={()=>setActiveSection("message")} className={`mt-1 flex h-10 w-full items-center justify-between rounded-[8px] px-3 text-left ${activeSection==="message"?"bg-[#f0ecff] text-[#5934dc]":"text-[#080b2b]"}`}>Приветствие<ChevronRight size={14}/></button>
-     <button type="button" onClick={()=>setActiveSection("profile")} className={`mt-1 flex h-10 w-full items-center justify-between rounded-[8px] px-3 text-left ${activeSection==="profile"?"bg-[#e8e2ff] text-[#4420e7]":"text-[#080b2b]"}`}>Профиль бота<ChevronRight size={14}/></button>
-     <button type="button" onClick={()=>setActiveSection("buttons")} className={`mt-1 flex h-10 w-full items-center justify-between rounded-[8px] px-3 text-left ${activeSection==="buttons"?"bg-[#e8e2ff] text-[#4420e7]":"text-[#080b2b]"}`}>Все WorkFlow<ChevronRight size={14}/></button>
-     <button type="button" onClick={()=>setActiveSection("miniapp")} className={`mt-1 flex h-10 w-full items-center justify-between rounded-[8px] px-3 text-left ${activeSection==="miniapp"?"bg-[#e8e2ff] text-[#4420e7]":"text-[#080b2b]"}`}>Мини-приложение<ChevronRight size={14}/></button>
-     <button type="button" onClick={()=>setActiveSection("publish")} className={`mt-1 flex h-10 w-full items-center justify-between rounded-[8px] px-3 text-left ${activeSection==="publish"?"bg-[#e8e2ff] text-[#4420e7]":"text-[#080b2b]"}`}>Подключение<ChevronRight size={14}/></button>
-    </nav>
-    <div className="mt-auto border-t border-[#eaecf0] pt-4 text-sm text-[#667085]"><span className="flex h-11 items-center gap-3 rounded-xl bg-[#f0ecff] px-3 font-medium text-[#5934dc]"><Settings size={18}/>Настройки бота</span><Link href="/onboarding" className="mt-1 flex h-11 items-center gap-3 rounded-xl px-3 font-semibold text-[#5934dc] no-underline"><Plus size={18}/>Создать ещё бота</Link></div>
-   </aside>
+   <div className="hidden min-h-0 xl:block xl:h-full"><WorkspaceSidebar botId={botId??""} botType={botType} bots={[{id:botId??"",name:name||"Текущий бот",type:botType}]} editorSection={activeSection} onEditorSectionChange={id=>{setActiveSection(id);setMobileNav(false)}}/></div>
+   {mobileNav&&<div className="fixed inset-0 z-[65] bg-[#101828]/45 xl:hidden" onClick={()=>setMobileNav(false)}>
+    <div className="relative h-dvh w-[min(86vw,310px)] bg-white" onClick={e=>e.stopPropagation()}><WorkspaceSidebar botId={botId??""} botType={botType} bots={[{id:botId??"",name:name||"Текущий бот",type:botType}]} editorSection={activeSection} onEditorSectionChange={id=>{setActiveSection(id);setMobileNav(false)}}/><button type="button" aria-label="Закрыть меню" onClick={()=>setMobileNav(false)} className="absolute right-2 top-5 grid size-9 place-items-center rounded-lg bg-[#f2f4f7]"><X size={17}/></button></div>
+   </div>}
    <div className="flex min-h-0 min-w-0 flex-col px-5 py-5 sm:px-8 xl:h-full xl:overflow-hidden xl:px-9">
     <div className="flex flex-wrap items-center justify-between gap-3">
+     <button type="button" aria-label="Открыть разделы" onClick={()=>setMobileNav(true)} className="grid size-10 place-items-center rounded-xl border border-[#d0d5dd] xl:hidden"><Menu size={19}/></button>
      <Link href={`/workspace?bot=${encodeURIComponent(botId??"")}`} className="flex items-center gap-3 text-sm font-semibold text-[#101828] no-underline"><ArrowLeft className="size-5 text-[#6541F5]"/>Назад в кабинет</Link>
      <div className="flex gap-2"><button onClick={save} disabled={!dirty} className="h-10 rounded-[8px] border border-[#cbd5e0] px-4 text-sm font-medium disabled:opacity-50">Сохранить</button><button onClick={publish} className="h-10 rounded-[8px] bg-[#4420e7] px-4 text-sm font-semibold !text-white">Опубликовать</button></div>
     </div>
-    <div className={`mt-7 min-h-0 flex-1 ${(activeSection==="profile"||activeSection==="message")?"grid max-w-[850px] items-start gap-6 lg:grid-cols-[minmax(0,460px)_minmax(0,370px)]":"grid max-w-[1150px] items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,370px)]"} xl:ml-[clamp(0px,7vw,120px)] xl:overflow-hidden`}>
+    <div className={`mt-7 min-h-0 flex-1 ${(activeSection==="profile"||activeSection==="message")?"grid max-w-[850px] items-start gap-6 lg:grid-cols-[minmax(0,460px)_minmax(0,370px)]":"grid max-w-[1150px] items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,370px)]"} xl:ml-[clamp(0px,7vw,120px)]`}>
     <section className="min-h-0 min-w-0 space-y-5 xl:h-full xl:overflow-y-auto xl:pr-1">
     {(activeSection==="profile"||activeSection==="message") && <div className="rounded-[10px] border border-[#dadadd] bg-white px-4 py-5">
       <div className="space-y-4 text-[14px]">
@@ -211,14 +201,17 @@ export default function BotBuilder(){
       <h1 className="mt-2 text-2xl font-semibold">Дизайн приложения</h1>
       <p className="mt-2 text-sm leading-6 text-[#667085]">Выберите стиль, цвет и режим Mini App. Изменения сохраняются отдельно для выбранного бота.</p>
       {foodBot?<div className="mt-6 space-y-6">
-       <div><h2 className="mb-3 text-sm font-semibold">Стиль доставки еды</h2><div className="grid grid-cols-2 gap-3">
+       <div><h2 className="mb-3 text-sm font-semibold">Стиль Mini App</h2><div className="grid grid-cols-2 gap-3">
          {([{id:"food01",label:"Food 01 · Minimal",detail:"Светлый, с категориями и списком"},{id:"food02",label:"Food 02 · Expressive",detail:"Яркий, с крупными карточками"}] as const).map(theme=><button key={theme.id} type="button" onClick={()=>setFoodTemplate(theme.id)} className={`rounded-xl border p-3 text-left ${foodTemplate===theme.id?"border-[#6541F5] bg-[#f3efff]":"border-[#e4e7ec]"}`}><span className="text-sm font-semibold">{theme.label}</span><p className="mt-1 text-xs text-[#667085]">{theme.detail}</p></button>)}
         </div></div>
        <div><h2 className="mb-3 text-sm font-semibold">Основной цвет</h2><div className="flex flex-wrap items-center gap-3">
         {["#E65D35","#FF5A3C","#6541F5","#13A874","#2563EB"].map(hex=><button aria-label={`Цвет ${hex}`} key={hex} type="button" onClick={()=>setFoodAccent(hex)} className={`size-10 rounded-full border-4 border-white ${foodAccent===hex?"ring-2 ring-[#6541F5]":""}`} style={{background:hex}}/>)}
         <input type="color" aria-label="Свой цвет" value={foodAccent} onChange={e=>setFoodAccent(e.target.value)} className="size-10"/>
        </div></div>
-       <label className="flex items-center justify-between rounded-xl border border-[#e4e7ec] p-4"><span><strong className="block text-sm">Тёмная тема</strong><small className="text-[#667085]">Светлый или тёмный Mini App</small></span><input type="checkbox" checked={foodDark} onChange={e=>setFoodDark(e.target.checked)} className="size-5 accent-[#6541F5]"/></label>
+       <div className="rounded-xl border border-[#e4e7ec] p-4"><h2 className="mb-3 text-sm font-semibold">Тема для покупателей</h2>
+        <div className="grid grid-cols-3 gap-2" role="group" aria-label="Режим оформления Mini App">{([{id:"light",label:"Светлая"},{id:"dark",label:"Тёмная"},{id:"customer",label:"На выбор"}] as const).map(option=><button type="button" key={option.id} aria-pressed={foodThemeMode===option.id} onClick={()=>setFoodThemeMode(option.id)} className={`rounded-xl border px-2 py-3 text-xs font-semibold ${foodThemeMode===option.id?"border-[#6541F5] bg-[#f1edff] text-[#5934dc]":"border-[#e4e7ec] text-[#667085]"}`}>{option.label}</button>)}</div>
+        {foodThemeMode==="customer"&&<label className="mt-3 block text-xs text-[#667085]">Тема при первом открытии<select className="mt-2 h-10 w-full rounded-lg border border-[#e4e7ec] bg-white px-3 text-sm text-[#101828]" value={foodDefaultTheme} onChange={e=>setFoodDefaultTheme(e.target.value as typeof foodDefaultTheme)}><option value="system">Как в Telegram</option><option value="light">Светлая</option><option value="dark">Тёмная</option></select></label>}
+       </div>
        <button type="button" disabled={foodSaving} onClick={()=>void saveFoodDesign()} className="h-11 w-full rounded-xl bg-[#6541F5] px-4 text-sm font-semibold text-white disabled:opacity-50">{foodSaving?"Сохраняем…":"Сохранить оформление"}</button>
        {foodNotice&&<p role="status" className="text-sm text-[#475467]">{foodNotice}</p>}
        <a href={botId?`/miniapp?bot=${encodeURIComponent(botId)}`:"/miniapp"} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm font-semibold text-[#6541F5]">Открыть клиентский Mini App <ExternalLink size={16}/></a>
@@ -242,12 +235,10 @@ export default function BotBuilder(){
       <p className="mt-4 text-xs text-[#98a2b3]">Предпросмотр справа не отправляет сообщения в Telegram, пока бот не подключён и не опубликован.</p>
     </div>}
     </section>
-    <aside className="min-h-0 min-w-0 xl:h-full xl:overflow-hidden">
+    <aside className="min-h-0 min-w-0 xl:sticky xl:top-4 xl:self-start">
      <div className="mb-3 text-xs font-semibold text-[#080b2b]">Предпросмотр · {activeSection==="profile"?"Профиль":activeSection==="miniapp"?"Mini App":"Чат Telegram"}</div>
      {previewMode==="telegram"?<FigmaTelegramPreview name={name} description={figmaPreview==="chat"?welcome:description} buttons={buttons} color={color} view={figmaPreview} avatar={avatar} bio={bio}/>:
-     <div className="overflow-hidden rounded-xl border border-[#cbd5e0] p-3" style={{background:foodBot&&foodDark?"#16191d":"#f7f8fa",color:foodBot&&foodDark?"#fff":"#18212b"}}>
-      {foodBot?<><div className="mb-3 text-sm font-semibold">{foodTemplate==="food01"?"Food 01 · Minimal":"Food 02 · Expressive"}</div><div className="rounded-xl p-4 text-white" style={{background:foodTemplate==="food01"?"#f1d5c5":foodAccent,color:foodTemplate==="food01"?"#18212b":"white"}}><h3 className="text-lg font-bold">{name}</h3><p className="mt-2 text-sm">{description}</p></div><div className="mt-4 flex flex-wrap gap-2">{["Плов","Горячие блюда","Шашлык"].map(label=><span key={label} className="rounded-xl px-3 py-2 text-xs" style={{background:foodTemplate==="food01"?"white":foodAccent,color:foodTemplate==="food01"?"#18212b":"white"}}>{label}</span>)}</div><p className="mt-4 text-xs opacity-70">Полное оформление и фото блюд доступны в клиентском Mini App.</p></>:<><div className="rounded-lg p-6 text-white" style={{background:color}}><h3 className="text-lg font-semibold">{name}</h3><p className="mt-3 text-sm">{description}</p></div></>}
-     </div>}
+      botId?<MiniAppLivePreview botId={botId} design={{layout:foodTemplate,color:foodAccent,dark:foodThemeMode==="dark",themeMode:foodThemeMode,defaultTheme:foodDefaultTheme}}/>:null}
     </aside>
     </div>
    </div>

@@ -1,5 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
+import {ImagePlus,LoaderCircle,Upload} from "lucide-react";
+import MiniAppLivePreview from "./miniapp-live-preview";
 
 type Category={id:string;name:string};
 type Item={id:string;name:string};
@@ -13,6 +15,7 @@ export default function MiniAppAppearance({botId}:{botId:string}){
  const [items,setItems]=useState<Item[]>([]);
  const [loading,setLoading]=useState(true);
  const [saving,setSaving]=useState(false);
+ const [uploadingBanner,setUploadingBanner]=useState(false);
  const [message,setMessage]=useState("");
  const [error,setError]=useState("");
  const update=(change:Partial<Design>)=>setDesign(d=>({...d,...change}));
@@ -39,7 +42,20 @@ export default function MiniAppAppearance({botId}:{botId:string}){
   }
   void load();return()=>abort.abort();
  },[botId]);
+ async function uploadBanner(file:File){
+  if(!["image/png","image/jpeg","image/webp"].includes(file.type)||file.size===0||file.size>2*1024*1024){setError("Загрузите JPG, PNG или WebP до 2 МБ.");return}
+  setUploadingBanner(true);setError("");
+  try{
+   const form=new FormData();form.append("botId",botId);form.append("initData",telegramData());form.append("image",file);
+   const response=await fetch("/api/catalog/image",{method:"POST",body:form});
+   const result=await response.json() as {imageUrl?:string;error?:string};
+   if(!response.ok||!result.imageUrl)throw new Error(result.error??"Не удалось загрузить баннер.");
+   banner({imageUrl:result.imageUrl});
+  }catch(e){setError(e instanceof Error?e.message:"Ошибка загрузки баннера.");}
+  finally{setUploadingBanner(false);}
+ }
  async function save(){
+  if(uploadingBanner)return;
   setSaving(true);setMessage("");setError("");
   try{
    const res=await fetch("/api/miniapp/design",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({botId,initData:telegramData(),...design})});
@@ -52,7 +68,7 @@ export default function MiniAppAppearance({botId}:{botId:string}){
  const field="w-full rounded-xl border border-[#d0d5dd] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#6541f5]";
  const label="mb-1.5 block text-xs font-semibold text-[#475467]";
  if(loading)return <div className="rounded-2xl bg-white p-8 text-sm">Загрузка настроек Mini App…</div>;
- return <section className="space-y-5 rounded-2xl border border-[#e4e7ec] bg-white p-5">
+ return <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]"><section className="min-w-0 space-y-5 rounded-2xl border border-[#e4e7ec] bg-white p-5">
   <div><h2 className="text-xl font-semibold">Оформление Mini App</h2><p className="mt-1 text-sm text-[#667085]">Шаблон, тема и контент главного баннера. Изменения сохраняются в черновик.</p></div>
   {error&&<p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
   {message&&<p role="status" className="rounded-lg bg-green-50 p-3 text-sm text-green-700">{message}</p>}
@@ -67,8 +83,17 @@ export default function MiniAppAppearance({botId}:{botId:string}){
    {design.banner.enabled&&<>
     <label className="block"><span className={label}>Заголовок</span><input className={field} maxLength={100} value={design.banner.title} onChange={e=>banner({title:e.target.value})}/></label>
     <label className="block"><span className={label}>Описание</span><textarea rows={2} maxLength={300} className={field} value={design.banner.description} onChange={e=>banner({description:e.target.value})}/></label>
-    <label className="block"><span className={label}>Ссылка на изображение (HTTPS)</span><input type="url" className={field} value={design.banner.imageUrl} onChange={e=>banner({imageUrl:e.target.value})} placeholder="https://example.com/banner.jpg"/></label>
-    {design.banner.imageUrl.startsWith("https://")&&<img src={design.banner.imageUrl} alt="Предпросмотр баннера" className="h-32 w-full rounded-xl object-cover"/>}
+    <div className="space-y-2">
+     <span className={label}>Изображение баннера</span>
+     <label className="flex min-h-24 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#d0d5dd] bg-[#f9fafb] p-4 text-sm hover:border-[#6541f5]">
+      {uploadingBanner?<LoaderCircle size={22} className="animate-spin text-[#6541f5]"/>:<Upload size={22} className="text-[#6541f5]"/>}
+      <span className="font-semibold text-[#4420e7]">{uploadingBanner?"Загружаем изображение…":"Загрузить фото с устройства"}</span>
+      <span className="text-xs text-[#667085]">JPG, PNG или WebP до 2 МБ</span>
+      <input aria-label="Загрузить фото баннера" type="file" accept="image/jpeg,image/png,image/webp" disabled={uploadingBanner||saving} onChange={e=>{const file=e.target.files?.[0];if(file)void uploadBanner(file);e.currentTarget.value="";}} className="sr-only"/>
+     </label>
+     {design.banner.imageUrl.startsWith("https://")&&<div className="relative"><img src={design.banner.imageUrl} alt="Предпросмотр баннера" className="h-32 w-full rounded-xl object-cover"/><button type="button" onClick={()=>banner({imageUrl:""})} className="absolute right-2 top-2 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold">Убрать фото</button></div>}
+     <details className="text-xs text-[#667085]"><summary className="cursor-pointer">Или вставить HTTPS-ссылку</summary><input type="url" aria-label="HTTPS-ссылка баннера" className={field+" mt-2"} value={design.banner.imageUrl} onChange={e=>banner({imageUrl:e.target.value})} placeholder="https://example.com/banner.jpg"/></details>
+    </div>
     <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={design.banner.buttonEnabled} onChange={e=>banner({buttonEnabled:e.target.checked})}/>Кнопка на баннере</label>
     {design.banner.buttonEnabled&&<div className="grid gap-3 sm:grid-cols-2">
      <label><span className={label}>Название кнопки</span><input className={field} maxLength={50} value={design.banner.buttonText} onChange={e=>banner({buttonText:e.target.value})}/></label>
@@ -82,6 +107,6 @@ export default function MiniAppAppearance({botId}:{botId:string}){
     </div>}
    </>}
   </div>
-  <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4"><span className="text-xs text-[#667085]">Настройки попадут к покупателям после публикации.</span><button disabled={saving||!/#[0-9A-F]{6}/i.test(design.color)} onClick={()=>void save()} className="rounded-xl bg-[#6541f5] px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">{saving?"Сохранение…":"Сохранить черновик"}</button></div>
- </section>;
+  <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4"><span className="text-xs text-[#667085]">Настройки попадут к покупателям после публикации.</span><button disabled={saving||uploadingBanner||!/#[0-9A-F]{6}/i.test(design.color)} onClick={()=>void save()} className="rounded-xl bg-[#6541f5] px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">{saving?"Сохранение…":"Сохранить черновик"}</button></div>
+ </section><MiniAppLivePreview botId={botId} design={design}/></div>;
 }

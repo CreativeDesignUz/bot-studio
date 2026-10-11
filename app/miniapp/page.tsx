@@ -17,6 +17,8 @@ const money = (value: number, currency = "UZS") => new Intl.NumberFormat("ru-RU"
 
 export default function MiniAppPage() {
   const [shop, setShop] = useState<Shop | null>(null);
+  const [previewMode,setPreviewMode]=useState(false);
+  const previewDesign=useRef<Shop["design"]|null>(null);
   const [loading, setLoading] = useState(true);
   const [retryCount, setRetryCount] = useState(0);
   const [customerTheme,setCustomerTheme]=useState<"light"|"dark"|null>(null);
@@ -40,13 +42,16 @@ export default function MiniAppPage() {
   useEffect(() => {
     const telegram = (window as typeof window & { Telegram?: { WebApp?: { ready?: () => void; expand?: () => void; initData?: string; initDataUnsafe?: { user?: { first_name?: string } } } } }).Telegram?.WebApp;
     telegram?.ready?.(); telegram?.expand?.();
-    const botId = new URLSearchParams(window.location.search).get("bot");
+    const params=new URLSearchParams(window.location.search);
+    const botId=params.get("bot");
+    const draftPreview=params.get("preview")==="1";
+    queueMicrotask(()=>setPreviewMode(draftPreview));
     if (!botId) { Promise.resolve().then(() => { setError("Не указан магазин"); setLoading(false); }); return; }
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 12000);
-    fetch("/api/miniapp?bot=" + encodeURIComponent(botId), { cache: "no-store", signal: controller.signal })
+    fetch((draftPreview?"/api/miniapp/preview?bot=":"/api/miniapp?bot=") + encodeURIComponent(botId), { cache: "no-store", signal: controller.signal })
       .then(async response => { const body = await response.json() as Shop & { error?: string }; if (!response.ok) throw new Error(body.error ?? "Не удалось загрузить магазин"); return body as Shop; })
-      .then(data => { if (!controller.signal.aborted) { setShop(data); setError(""); } })
+      .then(data => { if (!controller.signal.aborted) { setShop({...data,design:previewDesign.current?{...data.design,...previewDesign.current}:data.design}); setError(""); } })
       .catch(e => {
         if (controller.signal.aborted && !controller.signal.reason) return;
         setError(controller.signal.aborted ? "Сервер не ответил за 12 секунд. Проверьте интернет и попробуйте снова." : e instanceof Error ? e.message : "Ошибка загрузки");
@@ -54,6 +59,24 @@ export default function MiniAppPage() {
       .finally(() => { clearTimeout(timeout); setLoading(false); });
     return () => { controller.abort(); clearTimeout(timeout); };
   }, [retryCount]);
+
+  useEffect(()=>{
+    const params=new URLSearchParams(window.location.search);
+    if(params.get("preview")!=="1")return;
+    const botId=params.get("bot");
+    const onUpdate=(event:MessageEvent)=>{
+      if(event.origin!==window.location.origin||event.source!==window.parent)return;
+      const message=event.data as {type?:unknown;botId?:unknown;design?:Shop["design"]};
+      if(message?.type!=="bot-studio:preview-design"||message.botId!==botId)return;
+      const proposed=message.design;
+      if(!proposed||typeof proposed!=="object"||!/^#[0-9a-f]{6}$/i.test(proposed.color??""))return;
+      if(!["light","dark","customer"].includes(proposed.themeMode??"light"))return;
+      previewDesign.current=proposed;
+      setShop(current=>current?{...current,design:{...current.design,...proposed}}:current);
+    };
+    window.addEventListener("message",onUpdate);
+    return()=>window.removeEventListener("message",onUpdate);
+  },[]);
 
   useEffect(()=>{
     const telegram=(window as typeof window & {Telegram?:{WebApp?:{colorScheme?:string;onEvent?:(name:string,cb:()=>void)=>void;offEvent?:(name:string,cb:()=>void)=>void;setHeaderColor?:(color:string)=>void;setBackgroundColor?:(color:string)=>void}}}).Telegram?.WebApp;
@@ -74,6 +97,7 @@ export default function MiniAppPage() {
     if(!b?.buttonEnabled)return;
     if(b.linkType==="external"){
       const webApp=(window as typeof window & {Telegram?:{WebApp?:{openLink?:(url:string)=>void}}}).Telegram?.WebApp;
+      if(previewMode)return;
       try{const url=new URL(b.target);if(url.protocol!=="https:")return; if(webApp?.openLink)webApp.openLink(url.toString());else window.open(url.toString(),"_blank","noopener,noreferrer");}catch{}
     }else if(b.linkType==="page" && ["catalog","cart","profile"].includes(b.target)){
       setTab(b.target as Tab);setShowFoodCategories(false);
@@ -98,9 +122,9 @@ export default function MiniAppPage() {
   const themeMode=shop?.design?.themeMode??(shop?.design?.dark?"dark":"light");
   const defaultTheme=shop?.design?.defaultTheme??"system";
   const preferredTheme=customerTheme??(defaultTheme==="system"?telegramTheme:defaultTheme);
-  const dark=isFood&&(themeMode==="dark"||(themeMode==="customer"&&preferredTheme==="dark"));
+  const dark=(themeMode==="dark"||(themeMode==="customer"&&preferredTheme==="dark"));
   const foodStyle=shop?.design?.layout==="food02"?"food02":"food01";
-  const color = isFood&&/^#[\da-f]{6}$/i.test(shop?.design?.color??"")?shop!.design!.color!: /^#[\da-f]{6}$/i.test(shop?.bot.color ?? "") ? shop!.bot.color : "#6541F5";
+  const color = /^#[\da-f]{6}$/i.test(shop?.design?.color??"")?shop!.design!.color!: /^#[\da-f]{6}$/i.test(shop?.bot.color ?? "") ? shop!.bot.color : "#6541F5";
   const paper=dark?"#20242A":"#fff";const pageBg=dark?"#111418":"#f7f8fa";const ink=dark?"#f9fafb":"#18212b";const hint=dark?"#abb3c1":"#687281";
   useEffect(()=>{
     if(!shop||shop.bot.template!=="delivery")return;
@@ -123,6 +147,7 @@ export default function MiniAppPage() {
 
   async function checkout() {
     if (!shop || sending || !selected.length) return;
+    if(previewMode){setError("Это предпросмотр. Для реального заказа откройте опубликованный Mini App через Telegram.");return;}
     if (mixedCurrency) { setError("В одном заказе нельзя смешивать сумы и доллары. Выберите позиции в одной валюте."); return; }
     if(deliveryInvalid){setError("Доставка недоступна по этому адресу или для выбранной валюты.");return;}
     const telegram = (window as typeof window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp;
@@ -154,10 +179,12 @@ export default function MiniAppPage() {
 
   return <main className="min-h-dvh pb-28" style={{fontFamily:"Inter,system-ui,sans-serif",background:pageBg,color:ink}}>
     <div className="mx-auto max-w-[550px]">
-      {isFood&&themeMode==="customer"&&<div className="flex justify-end gap-2 px-5 pt-2 text-xs"><button type="button" aria-pressed={!dark} onClick={()=>setBuyerTheme("light")} className="rounded-full px-3 py-1" style={{background:!dark?color:paper,color:!dark?"white":ink}}>Светлая</button><button type="button" aria-pressed={!!dark} onClick={()=>setBuyerTheme("dark")} className="rounded-full px-3 py-1" style={{background:dark?color:paper,color:dark?"white":ink}}>Тёмная</button></div>}
+       {previewMode&&<div className="sticky top-0 z-40 border-b border-[#e4e7ec] bg-[#f0ecff] px-4 py-2 text-center text-xs font-semibold text-[#5934dc]">Предпросмотр · изменения не опубликованы</div>}
 
-      {isFood?<div className="px-5 pt-4"><p className="text-sm font-semibold" style={{color:ink}}>{shop.bot.name}</p></div>:
-      <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-[#e9edf2] bg-white/95 px-5 py-4 backdrop-blur">
+      {themeMode==="customer"&&<div className="flex justify-end gap-2 px-5 pt-2 text-xs"><button type="button" aria-pressed={!dark} onClick={()=>setBuyerTheme("light")} className="rounded-full px-3 py-1" style={{background:!dark?color:paper,color:!dark?"white":ink}}>Светлая</button><button type="button" aria-pressed={!!dark} onClick={()=>setBuyerTheme("dark")} className="rounded-full px-3 py-1" style={{background:dark?color:paper,color:dark?"white":ink}}>Тёмная</button></div>}
+
+      {isFood?<div className="flex items-center gap-3 px-5 pt-4">{shop.bot.logoUrl&&<img src={shop.bot.logoUrl} alt="" className="size-9 rounded-xl object-cover"/>}<p className="text-sm font-semibold" style={{color:ink}}>{shop.bot.name}</p></div>:
+      <header className="sticky top-0 z-20 flex items-center gap-3 border-b px-5 py-4 backdrop-blur" style={{background:dark?"#20242Af5":"#ffffffed",borderColor:dark?"#3d4148":"#e9edf2"}}>
         {shop.bot.logoUrl ? <img src={shop.bot.logoUrl} alt="" className="size-12 rounded-2xl object-cover"/> :
           <span className="grid size-12 place-items-center rounded-2xl text-white" style={{ backgroundColor: color }}><Store className="size-6"/></span>}
         <div className="min-w-0 flex-1"><h1 className="truncate text-lg font-bold">{shop.bot.name}</h1><p className="truncate text-xs text-[#667085]">{shop.bot.description || "Добро пожаловать!"}</p></div>
@@ -179,6 +206,7 @@ export default function MiniAppPage() {
         </div>
         <label className="mt-6 flex h-[45px] items-center gap-3 rounded-[12px] px-4" style={{background:paper,color:hint}}><Search size={17}/><input value={foodSearch} onChange={e=>setFoodSearch(e.target.value)} placeholder="Поиск и фильтры" className="min-w-0 flex-1 bg-transparent text-[14px] outline-none" style={{color:ink}}/></label>
         {showFoodCategories?<>
+          {!(shop.categories?.length)&&!visibleFood.length&&<div className="mt-8 rounded-2xl border border-[#e4e7ec] p-6 text-center"><ShoppingBag className="mx-auto mb-3 size-8" style={{color:hint}}/><h2 className="text-base font-semibold">Меню пока пустое</h2><p className="mt-2 text-sm" style={{color:hint}}>Здесь появятся категории и блюда, когда ресторан опубликует меню.</p></div>}
           <div className="mt-6 grid grid-cols-2 gap-[10px]">{shop.categories?.map(c=><button key={c.id} onClick={()=>setCategory(c.id)} className="h-[46px] rounded-[13px] px-[14px] text-left text-[13px] font-semibold" style={{background:category===c.id?(dark?"#45302e":"#fff0e8"):paper,color:ink,border:category===c.id?`1px solid ${color}`:"1px solid transparent"}}>{c.name}</button>)}</div>
           <div className="mt-7 space-y-3">{visibleFood.map(item=><article key={item.id} className="flex min-h-[92px] items-center gap-3 overflow-hidden rounded-[14px] p-3" style={{background:dark?"#302623":"#fff0e8"}}>
             {item.image_url?<img src={item.image_url} loading="lazy" decoding="async" className="h-[68px] w-[68px] rounded-[11px] object-cover" alt={item.name}/>:<div className="grid h-[68px] w-[68px] rounded-[11px] place-items-center" style={{background:color}}><ShoppingBag className="text-white"/></div>}
@@ -201,15 +229,17 @@ export default function MiniAppPage() {
         </>}
       </section>:<>
 
-        <section className="px-5 pb-3 pt-7"><div className="rounded-3xl p-6 text-white" style={{ background: `linear-gradient(120deg, ${color}, #20223a)` }}>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-widest opacity-80">Добро пожаловать</p>
-          <h2 className="text-2xl font-bold leading-tight">{shop.bot.name}</h2>
-          <p className="mt-2 max-w-xs text-sm opacity-90">{shop.bot.description || "Выберите понравившееся из нашего каталога"}</p>
-        </div></section>
+        {shop.design?.banner?.enabled!==false&&<section className="px-5 pb-3 pt-7"><div className="relative overflow-hidden rounded-3xl p-6 text-white" style={{ background: `linear-gradient(120deg, ${color}, #20223a)` }}>
+          <div className="relative z-10 max-w-[72%]"><p className="mb-2 text-xs font-semibold uppercase tracking-widest opacity-80">Добро пожаловать</p>
+          <h2 className="text-2xl font-bold leading-tight">{shop.design?.banner?.title||shop.bot.name}</h2>
+          <p className="mt-2 max-w-xs text-sm opacity-90">{shop.design?.banner?.description||shop.bot.description||"Выберите понравившееся из нашего каталога"}</p>
+          {shop.design?.banner?.buttonEnabled&&<button type="button" onClick={bannerAction} className="mt-4 rounded-xl bg-white px-4 py-2 text-xs font-semibold" style={{color}}>{shop.design.banner.buttonText}</button>}</div>
+          {shop.design?.banner?.imageUrl&&<img src={shop.design.banner.imageUrl} alt="" className="absolute -bottom-3 -right-6 size-[148px] rounded-full object-cover"/>}
+        </div></section>}
         <section className="px-5"><div className="mb-4 mt-5 flex items-center justify-between"><h2 className="text-xl font-bold">{shop.bot.template === "delivery" ? "Наше меню" : shop.bot.template === "service" ? "Услуги" : "Каталог"}</h2><span className="text-sm text-[#667085]">{shop.items.length} позиций</span></div>
-          {shop.bot.template==="delivery"&&!!shop.categories?.length&&<div className="mb-4 flex gap-2 overflow-x-auto pb-2"><button type="button" onClick={()=>setCategory("all")} className="shrink-0 rounded-full px-4 py-2 text-xs font-semibold" style={{background:category==="all"?color:"#fff",color:category==="all"?"#fff":"#667085"}}>Все блюда</button>{shop.categories.map(c=><button key={c.id} type="button" onClick={()=>setCategory(c.id)} className="shrink-0 rounded-full px-4 py-2 text-xs font-semibold" style={{background:category===c.id?color:"#fff",color:category===c.id?"#fff":"#667085"}}>{c.name}</button>)}</div>}
-          {!shop.items.length ? <div className="rounded-2xl bg-white p-9 text-center text-sm text-[#667085]">В каталоге пока нет товаров</div> :
-          <div className="grid grid-cols-2 gap-3">{shop.items.filter(item=>category==="all"||item.category_id===category).map(item => <article key={item.id} className="overflow-hidden rounded-[22px] border border-[#edf0f4] bg-white shadow-sm">
+          {shop.bot.template==="delivery"&&!!shop.categories?.length&&<div className="mb-4 flex gap-2 overflow-x-auto pb-2"><button type="button" onClick={()=>setCategory("all")} className="shrink-0 rounded-full px-4 py-2 text-xs font-semibold" style={{background:category==="all"?color:paper,color:category==="all"?"#fff":ink}}>Все блюда</button>{shop.categories.map(c=><button key={c.id} type="button" onClick={()=>setCategory(c.id)} className="shrink-0 rounded-full px-4 py-2 text-xs font-semibold" style={{background:category===c.id?color:paper,color:category===c.id?"#fff":ink}}>{c.name}</button>)}</div>}
+          {!shop.items.length ? <div className="rounded-2xl p-9 text-center text-sm" style={{background:paper,color:hint}}>В каталоге пока нет товаров</div> :
+          <div className={foodStyle==="food02"?"grid grid-cols-1 gap-3":"grid grid-cols-2 gap-3"}>{shop.items.filter(item=>category==="all"||item.category_id===category).map(item => <article key={item.id} className="overflow-hidden rounded-[22px] border shadow-sm" style={{background:paper,borderColor:dark?"#343941":"#edf0f4"}}>
             {item.image_url ? <img src={item.image_url} alt={item.name} loading="lazy" decoding="async" className="aspect-[4/3] w-full object-cover"/> : <div className="grid aspect-[4/3] place-items-center bg-[#edf0f6]"><ShoppingBag size={29} color="#98a2b3"/></div>}
             <div className="p-3"><h3 className="line-clamp-2 min-h-10 text-sm font-semibold">{item.name}</h3><p className="mb-3 line-clamp-2 min-h-8 text-xs text-[#98a2b3]">{item.description}</p>
               <div className="flex items-center justify-between gap-1"><span className="text-sm font-bold">{item.price_minor == null ? "По запросу" : money(Number(item.price_minor), item.currency)}</span></div>
@@ -234,13 +264,13 @@ export default function MiniAppPage() {
         </section>
       </div>}
       {tab === "cart" && <section className="px-5 pt-7" style={{color:ink}}><div className="flex items-center gap-3"><button onClick={()=>setTab("catalog")} aria-label="Назад"><ArrowLeft/></button><h2 className="text-2xl font-bold">Корзина</h2></div>
-        {!selected.length ? <div className="mt-8 rounded-2xl bg-white p-10 text-center"><ShoppingBag className="mx-auto mb-3 text-[#98a2b3]"/><p className="text-[#667085]">Корзина пока пуста</p><button onClick={()=>setTab("catalog")} className="mt-4 font-semibold underline">Открыть каталог</button></div> :
-        <><div className="mt-6 space-y-3">{selected.map(item=><article key={item.id} className="flex items-center gap-3 rounded-2xl bg-white p-3">
+        {!selected.length ? <div className="mt-8 rounded-2xl p-10 text-center" style={{background:paper}}><ShoppingBag className="mx-auto mb-3 text-[#98a2b3]"/><p className="text-[#667085]">Корзина пока пуста</p><button onClick={()=>setTab("catalog")} className="mt-4 font-semibold underline">Открыть каталог</button></div> :
+        <><div className="mt-6 space-y-3">{selected.map(item=><article key={item.id} className="flex items-center gap-3 rounded-2xl p-3" style={{background:paper}}>
           {item.image_url ? <img src={item.image_url} alt="" className="size-16 rounded-xl object-cover"/> : <span className="grid size-16 place-items-center rounded-xl bg-[#f2f4f7]"><ShoppingBag/></span>}
           <div className="min-w-0 flex-1"><h3 className="truncate font-semibold">{item.name}</h3><span className="text-sm text-[#667085]">{money(Number(item.price_minor ?? 0), item.currency)}</span></div>
           <div className="flex items-center gap-2"><button onClick={()=>adjust(item.id,-1)} aria-label="Уменьшить"><Minus size={17}/></button><b>{cart[item.id]}</b><button onClick={()=>adjust(item.id,1)} aria-label="Увеличить"><Plus size={17}/></button></div>
         </article>)}</div>
-          <div className="mt-6 rounded-2xl bg-white p-5"><h3 className="mb-4 font-bold">Оформление заказа</h3><label className="mb-3 block text-sm">Имя получателя<input value={name} onChange={e=>{checkoutKey.current=null;setName(e.target.value)}} maxLength={100} className="mt-1 block h-12 w-full rounded-xl border border-[#d0d5dd] px-3 outline-none focus:border-[#667085]" placeholder="Ваше имя"/></label>
+          <div className="mt-6 rounded-2xl p-5" style={{background:paper}}><h3 className="mb-4 font-bold">Оформление заказа</h3><label className="mb-3 block text-sm">Имя получателя<input value={name} onChange={e=>{checkoutKey.current=null;setName(e.target.value)}} maxLength={100} className="mt-1 block h-12 w-full rounded-xl border border-[#d0d5dd] px-3 outline-none focus:border-[#667085]" placeholder="Ваше имя"/></label>
             <div className="mb-3 grid grid-cols-2 gap-2"><button onClick={()=>{checkoutKey.current=null;setFulfillment("pickup")}} className={`flex items-center justify-center gap-2 rounded-xl border p-3 text-sm ${fulfillment==="pickup"?"border-[#101828] bg-[#f2f4f7]":"border-[#d0d5dd]"}`}><Store size={16}/> Самовывоз</button><button onClick={()=>{checkoutKey.current=null;setFulfillment("delivery")}} className={`flex items-center justify-center gap-2 rounded-xl border p-3 text-sm ${fulfillment==="delivery"?"border-[#101828] bg-[#f2f4f7]":"border-[#d0d5dd]"}`}><Truck size={16}/> Доставка</button></div>
             {fulfillment==="delivery" && <div className="space-y-3"><DeliveryLocationPicker key={shop.bot.id+":"+String(deliveryZone?.centerLat)+":"+String(deliveryZone?.centerLng)} initialCenter={deliveryZone?{lat:deliveryZone.centerLat,lng:deliveryZone.centerLng}:undefined} value={deliveryPoint} onChange={point=>{checkoutKey.current=null;setDeliveryPoint(point);}}/><label className="block text-sm">Адрес доставки<textarea value={address} onChange={e=>{checkoutKey.current=null;setAddress(e.target.value)}} maxLength={500} className="mt-1 block min-h-20 w-full rounded-xl border border-[#d0d5dd] p-3" placeholder="Улица, дом, квартира, подъезд, этаж"/></label></div>}
             {fulfillment==="delivery"&&!deliveryAvailable&&<p role="alert" className="mb-3 text-sm text-red-600">Продавец ещё не настроил доставку. Выберите самовывоз.</p>}
@@ -249,7 +279,7 @@ export default function MiniAppPage() {
             {mixedCurrency && <p role="alert" className="mb-3 rounded-lg bg-[#fff7ed] p-3 text-sm text-[#9a3412]">Для заказа выберите позиции в одной валюте: UZS или USD.</p>}
             <div className="my-4 space-y-2 border-t border-[#eaecf0] pt-4"><div className="flex justify-between text-sm"><span>Товары</span><span>{money(total,currency)}</span></div>{fulfillment==="delivery"&&insideZone&&<div className="flex justify-between text-sm"><span>Доставка</span><span>{money(deliveryFee,"UZS")}</span></div>}<div className="flex justify-between font-bold"><span>Итого</span><span>{mixedCurrency?"Разные валюты":money(total+deliveryFee,currency)}</span></div></div>
             <p className="mb-4 text-xs text-[#667085]">Оплата при получении. Стоимость доставки и доступность зоны проверяются при оформлении.</p>
-            <button onClick={checkout} disabled={sending || mixedCurrency || deliveryInvalid || !name.trim() || (fulfillment==="delivery" && (!address.trim()||!deliveryPoint))} style={{backgroundColor:color}} className="w-full rounded-xl py-4 font-semibold text-white disabled:opacity-50">{sending?"Оформляем…":"Оформить заказ"}</button>
+            <button onClick={checkout} disabled={previewMode || sending || mixedCurrency || deliveryInvalid || !name.trim() || (fulfillment==="delivery" && (!address.trim()||!deliveryPoint))} style={{backgroundColor:color}} className="w-full rounded-xl py-4 font-semibold text-white disabled:opacity-50">{sending?"Оформляем…":previewMode?"Заказ недоступен в предпросмотре":"Оформить заказ"}</button>
           </div>
         </>}
       </section>}

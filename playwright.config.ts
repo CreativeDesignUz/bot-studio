@@ -5,7 +5,7 @@ const baseURL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:8787";
 export default defineConfig({
   testDir: "./e2e",
   timeout: 30_000,
-  retries: process.env.CI ? 1 : 0,
+  retries: 0, // Fail loudly on intermittent regressions; never hide flakiness behind a retry.
   reporter: process.env.CI ? "github" : "list",
   use: {
     baseURL,

@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   const identity = await resolveAppUser(request, initData);
   if ("error" in identity) return Response.json({ error: identity.error }, { status: identity.status });
   const { supabase, user, setCookie } = identity;
-  const { data, error } = await supabase.from("bots").select("id,name,description,primary_color,settings,status,template_type").eq("id", botId).eq("owner_id", user.id).single();
+  const { data, error } = await supabase.from("bots").select("id,name,description,logo_url,primary_color,settings,status,template_type").eq("id", botId).eq("owner_id", user.id).single();
   if (error || !data) return Response.json({ error: "Бот не найден или у вас нет доступа." }, { status: 404 });
   return withSessionCookie({ bot: data }, 200, setCookie);
 }

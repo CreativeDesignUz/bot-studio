@@ -53,3 +53,30 @@ export async function telegramTokenFingerprint(token: string) {
 export function looksLikeTelegramBotToken(value: unknown): value is string {
   return typeof value === "string" && /^\d{6,12}:[A-Za-z0-9_-]{30,80}$/.test(value.trim());
 }
+
+/**
+ * Versioned storage: new credentials use a dedicated Cloudflare V2 key.
+ * Legacy credentials retain their existing IV and legacy key; never rotate
+ * that key while legacy records may still exist.
+ */
+export type TelegramStorageKeys = { legacyKey?: string; v2Key?: string };
+
+export async function encryptTelegramTokenForStorage(token: string, keys: TelegramStorageKeys) {
+  if (keys.v2Key) {
+    const encrypted = await encryptTelegramToken(token, keys.v2Key);
+    return { ...encrypted, iv: `v2.${encrypted.iv}` };
+  }
+  if (!keys.legacyKey) throw new Error("TELEGRAM_TOKEN_ENCRYPTION_KEY_MISSING");
+  return encryptTelegramToken(token, keys.legacyKey);
+}
+
+export async function decryptTelegramTokenFromStorage(
+  ciphertext: string, iv: string, keys: TelegramStorageKeys,
+) {
+  if (iv.startsWith("v2.")) {
+    if (!keys.v2Key) throw new Error("TELEGRAM_TOKEN_ENCRYPTION_KEY_V2_MISSING");
+    return decryptTelegramToken(ciphertext, iv.slice(3), keys.v2Key);
+  }
+  if (!keys.legacyKey) throw new Error("TELEGRAM_TOKEN_ENCRYPTION_KEY_MISSING");
+  return decryptTelegramToken(ciphertext, iv, keys.legacyKey);
+}

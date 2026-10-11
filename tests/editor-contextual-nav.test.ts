@@ -6,9 +6,14 @@ test("settings sidebar alone chooses profile chat or Mini App preview",async()=>
  const editor=await readFile(new URL("../app/workspace/builder/page.tsx",import.meta.url),"utf8");
  assert.match(editor,/activeSection==="profile"\?"profile":"chat"/);
  assert.match(editor,/activeSection==="miniapp"\?"miniapp":"telegram"/);
- assert.match(editor,/Приветствие/);
- assert.match(editor,/setSearchQuery/);
- assert.match(editor,/Настройки не найдены/);
+ const sidebar=await readFile(new URL("../app/workspace/workspace-sidebar.tsx",import.meta.url),"utf8");
+ assert.match(editor,/WorkspaceSidebar/);
+ assert.match(sidebar,/Приветствие/);
+ assert.match(sidebar,/WorkFlow/);
+ assert.match(sidebar,/Создать бота/);
+ assert.match(sidebar,/Выбор бота/);
+ assert.match(sidebar,/Настройки доступа/);
+ assert.match(sidebar,/productTemplates\[botType\]\.modules/);
  assert.doesNotMatch(editor,/setFigmaPreview/);
 });
 test("provider states are checked before advertising Google and localhost Telegram login",async()=>{

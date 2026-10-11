@@ -6,7 +6,7 @@ export async function GET(request: Request) {
     const identity = await resolveAppUser(request, initData);
     if ("error" in identity) return Response.json({ error: identity.error }, { status: identity.status });
     const { supabase, user, setCookie } = identity;
-    const { data, error } = await supabase.from("bots").select("id,name,username,template_type,status,updated_at").eq("owner_id", user.id).order("updated_at", { ascending: false });
+    const { data, error } = await supabase.from("bots").select("id,name,username,template_type,status,settings,updated_at").eq("owner_id", user.id).order("updated_at", { ascending: false });
     if (error) throw error;
     const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
     const bots = await Promise.all((data ?? []).map(async (bot) => {
@@ -16,7 +16,7 @@ export async function GET(request: Request) {
         supabase.from("customers").select("id", { count: "exact", head: true }).eq("bot_id", bot.id),
         supabase.from("orders").select("id,customer_name,status,total_minor,created_at").eq("bot_id", bot.id).order("created_at", { ascending: false }).limit(3),
       ]);
-      return { ...bot, metrics: { ordersToday: today.data?.length ?? 0, revenueTodayMinor: today.data?.reduce((sum, order) => sum + Number(order.total_minor), 0) ?? 0, catalogItems: catalog.count ?? 0, customers: customers.count ?? 0, recentOrders: recent.data ?? [] } };
+      return { id:bot.id,name:bot.name,username:bot.username,template_type:bot.template_type,status:bot.status,updated_at:bot.updated_at,demoImported:Boolean((bot.settings as {demo_content?:unknown}|null)?.demo_content), metrics: { ordersToday: today.data?.length ?? 0, revenueTodayMinor: today.data?.reduce((sum, order) => sum + Number(order.total_minor), 0) ?? 0, catalogItems: catalog.count ?? 0, customers: customers.count ?? 0, recentOrders: recent.data ?? [] } };
     }));
     return withSessionCookie({ bots, user: { firstName: user.first_name, telegramLinked: Boolean(user.telegram_id) } }, 200, setCookie);
   } catch (error) {

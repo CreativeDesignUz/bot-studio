@@ -6,25 +6,36 @@ import { CircleAlert, LoaderCircle } from "lucide-react";
 import Link from "next/link";
 
 type Providers={google:{supabaseUrl:string;publishableKey:string}|null;googleSetupRequired?:boolean;telegram:{username:string}|null};
-type TelegramUser={id:number;first_name:string;last_name?:string;username?:string;auth_date:number;hash:string;photo_url?:string};
-declare global{interface Window{onBotStudioTelegramAuth?:(user:TelegramUser)=>void}}
 const card="relative w-full max-w-[460px] overflow-hidden rounded-[20px] bg-[#f9fafb] px-6 py-8 shadow-[0_12px_40px_1px_rgba(0,0,0,.06)] sm:px-8";
 export default function LoginPage({callback=false}:{callback?:boolean}){
  const [mode,setMode]=useState<"login"|"signup">("login");
  const [providers,setProviders]=useState<Providers|null>(null);
  const [error,setError]=useState("");
+ useEffect(()=>{
+  const code=new URLSearchParams(window.location.search).get("error");
+  if(!code)return;
+  const messages:Record<string,string>={
+   telegram_session_expired:"Сессия входа Telegram истекла или не сохранилась. Попробуйте войти ещё раз в том же браузере.",
+   telegram_state_invalid:"Telegram вернул неверное подтверждение запроса. Попробуйте снова.",
+   telegram_exchange_failed:"Telegram не выдал токен авторизации. Проверьте Client Secret и Redirect URI.",
+   telegram_missing_identity:"Telegram не вернул подтверждённую личность.",
+   telegram_account_failed:"Telegram подтвердил вход, но сервер не смог создать кабинет. Требуется проверка Supabase.",
+   telegram_login_failed:"Ошибка проверки ответа Telegram. Повторите попытку или сообщите код ошибки.",
+   telegram_not_configured:"Telegram OIDC не настроен на сервере."
+  };
+  void Promise.resolve().then(()=>setError(messages[code]??"Не удалось завершить вход. Код: "+code));
+ },[]);
  const [working,setWorking]=useState(false);
- const widgetRef=useRef<HTMLDivElement>(null);
  const clientRef=useRef<SupabaseClient|null>(null);
  const isCallback=callback;
+ const exchangeStarted=useRef(false);
  const [isPublicDomain,setIsPublicDomain]=useState(false);
  useEffect(()=>{void Promise.resolve().then(()=>setIsPublicDomain(window.location.protocol==="https:"&&!["localhost","127.0.0.1"].includes(window.location.hostname)))},[]);
- const telegramUsername=providers?.telegram?.username;
  const getClient=useCallback(async(config:Providers["google"])=>{
   if(!config)throw new Error("Google OAuth не настроен в Supabase.");
   if(!clientRef.current){
    const {createClient}=await import("@supabase/supabase-js");
-   clientRef.current=createClient(config.supabaseUrl,config.publishableKey,{auth:{persistSession:true,detectSessionInUrl:true,flowType:"implicit",storageKey:"bot-studio-supabase-google"}});
+   clientRef.current=createClient(config.supabaseUrl,config.publishableKey,{auth:{persistSession:true,detectSessionInUrl:false,flowType:"pkce",storageKey:"bot-studio-supabase-google"}});
   }
   return clientRef.current;
  },[]);
@@ -32,7 +43,7 @@ export default function LoginPage({callback=false}:{callback?:boolean}){
   const response=await fetch("/api/auth/account",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
   const result=await response.json() as {error?:string};
   if(!response.ok)throw new Error(result.error??"Вход не завершён.");
-  window.location.replace("/workspace");
+  window.location.replace("mode" in payload && payload.mode==="link"?"/workspace/account?linked=1":"/workspace");
  },[]);
 
  useEffect(()=>{
@@ -41,47 +52,33 @@ export default function LoginPage({callback=false}:{callback?:boolean}){
   return()=>controller.abort();
  },[]);
  useEffect(()=>{
-  if(!isCallback||!providers)return;
-  let cancel=false;
+  if(!isCallback||!providers||exchangeStarted.current)return;
+  exchangeStarted.current=true;
   async function exchange(){
-   if(!providers?.google){setError("Google ещё не настроен.");return}
    setWorking(true);
    try{
+    const params=new URLSearchParams(window.location.search);
+    const denied=params.get("error");
+    if(denied)throw new Error("Google отменил вход или не подтвердил доступ.");
+    const code=params.get("code");
+    if(!code||code.length>2048)throw new Error("Google не вернул код подтверждения. Попробуйте снова.");
+    if(!providers?.google)throw new Error("Google пока не настроен в тестовой Supabase.");
     const client=await getClient(providers.google);
-    const {data,error:sessionError}=await client.auth.getSession();
-    if(sessionError||!data.session?.access_token)throw new Error("Google не вернул сессию. Попробуйте войти ещё раз.");
-    if(cancel)return;
-    await finish({provider:"google",accessToken:data.session.access_token});
-   }catch(e){if(!cancel)setError(e instanceof Error?e.message:"Ошибка входа.");}
-   finally{if(!cancel)setWorking(false)}
+    // PKCE verifier is verified by Supabase before issuing an access token.
+    const {data,error:exchangeError}=await client.auth.exchangeCodeForSession(code);
+    if(exchangeError||!data.session?.access_token)throw new Error("Сессия Google не подтверждена. Начните вход заново.");
+    await finish({provider:"google",accessToken:data.session.access_token,mode:params.get("mode")==="link"?"link":"login"});
+   }catch(e){setError(e instanceof Error?e.message:"Не удалось подтвердить Google.");}
+   finally{setWorking(false)}
   }
-  void exchange();return()=>{cancel=true}
+  void exchange();
  },[isCallback,providers,getClient,finish]);
- useEffect(()=>{
-  if(isCallback||!isPublicDomain||!telegramUsername||!widgetRef.current)return;
-  window.onBotStudioTelegramAuth=async(user)=>{
-   setWorking(true);setError("");
-   try{await finish({provider:"telegram",telegram:user})}
-   catch(e){setError(e instanceof Error?e.message:"Telegram не подтвердил вход.");setWorking(false)}
-  };
-  const mount=widgetRef.current;mount.innerHTML="";
-  const script=document.createElement("script");
-  script.src="https://telegram.org/js/telegram-widget.js?22";
-  script.async=true;
-  script.setAttribute("data-telegram-login",telegramUsername);
-  script.setAttribute("data-size","large");
-  script.setAttribute("data-radius","8");
-  script.setAttribute("data-request-access","write");
-  script.setAttribute("data-onauth","onBotStudioTelegramAuth(user)");
-  mount.appendChild(script);
-  return()=>{if(window.onBotStudioTelegramAuth)delete window.onBotStudioTelegramAuth;mount.innerHTML=""};
- },[telegramUsername,isCallback,isPublicDomain,finish]);
 
  async function googleLogin(){
   setWorking(true);setError("");
   try{
    const client=await getClient(providers?.google??null);
-   const {error:oauthError}=await client.auth.signInWithOAuth({provider:"google",options:{redirectTo:window.location.origin+"/auth/callback"}});
+   const {error:oauthError}=await client.auth.signInWithOAuth({provider:"google",options:{redirectTo:window.location.origin+"/auth/callback",queryParams:{prompt:"select_account"}}});
    if(oauthError)throw oauthError;
   }catch(e){setError(e instanceof Error?e.message:"Не удалось подключить Google.");setWorking(false)}
  }
@@ -106,7 +103,7 @@ export default function LoginPage({callback=false}:{callback?:boolean}){
      {!providers?.google&&<p className="rounded-lg bg-[#fff7ed] p-3 text-left text-[12px] leading-5 text-[#9a3412]">Google пока не включён в тестовом Supabase. Включите Authentication → Sign In / Providers → Google и настройте Client ID / Secret. До этого вход через Google недоступен.</p>}
      <div className="flex items-center gap-3 text-[12px] text-[#8f909a]"><div className="h-px flex-1 bg-[#e5e7eb]"/>или<div className="h-px flex-1 bg-[#e5e7eb]"/></div>
      <div className="flex min-h-[44px] items-center justify-center rounded-[8px] border border-[#654be7] bg-white px-3">
-      {providers?.telegram&&isPublicDomain?<div ref={widgetRef} aria-label="Авторизация через Telegram" className="flex justify-center"/>:<span className="text-[12px] text-[#718096]">{!isPublicDomain?"Вход через Telegram доступен только на публичном HTTPS-домене": "Telegram Login не настроен"}</span>}
+      {providers?.telegram&&isPublicDomain?<a href="/api/auth/telegram/start" className="inline-flex h-10 items-center justify-center rounded-lg bg-[#54a9eb] px-6 text-sm font-semibold text-white">Войти через Telegram</a>:<span className="text-[12px] text-[#718096]">{!isPublicDomain?"Вход через Telegram доступен только на публичном HTTPS-домене":"Telegram OIDC не настроен"}</span>}
      </div>
      <p className="text-center text-[12px] leading-5 text-[#718096]">После входа ваши боты и настройки будут доступны в кабинете.</p>
      <div className="pt-2 text-center text-[14px]">{mode==="login"?"Ещё нет аккаунта?":"Уже есть аккаунт?"} <button type="button" onClick={()=>{setMode(mode==="login"?"signup":"login");setError("")}} className="ml-1 font-semibold text-[#3d1ddd]">{mode==="login"?"Регистрация":"Войти"}</button></div>

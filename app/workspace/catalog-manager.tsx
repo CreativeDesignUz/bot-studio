@@ -1,12 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { LoaderCircle, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { DatabaseZap, LoaderCircle, Pencil, Plus, Search, Trash2, Upload, X } from "lucide-react";
 import { formatCatalogPrice, formatStoredPrice, priceToMinor, type CatalogCurrency } from "@/lib/catalog/price";
 
 type Item = { id: string; name: string; description: string; price_minor: number | null; is_active: boolean; currency: string; image_url?:string|null;category_id?:string|null; ingredients?:string[];allergens?:string[];preparation_minutes?:number|null;stock_quantity?:number|null };
 type Category={id:string;name:string;position:number;is_active:boolean};
 type ApiResult = { items?: Item[]; categories?:Category[]; item?: Item; created?:number; error?: string };
+type PublicationStatus = {
+  isPublished:boolean; canUpdate:boolean; hasDemo:boolean; changed:boolean; revision:number;
+  draftItems:number; draftCategories:number; publishedItems:number; publishedCategories:number;
+};
 const formatMoney = (minor: number, currency: string) => `${formatStoredPrice(minor, currency === "USD" ? "USD" : "UZS")} ${currency === "USD" ? "$" : "сум"}`;
 const telegramData = () => (window as typeof window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData ?? "";
 
@@ -18,6 +22,7 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
   const [categoryName,setCategoryName]=useState("");
   const [editingCategory,setEditingCategory]=useState<Category|"new"|null>(null);
   const [imageUrl,setImageUrl]=useState("");
+  const [uploadingImage,setUploadingImage]=useState(false);
   const [ingredients,setIngredients]=useState("");
   const [allergens,setAllergens]=useState("");
   const [preparationMinutes,setPreparationMinutes]=useState("");
@@ -35,6 +40,23 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
   const [currency, setCurrency] = useState<CatalogCurrency>("UZS");
   const [active, setActive] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [demoModal,setDemoModal]=useState<"import"|"remove"|null>(null);
+  const [demoAcknowledged,setDemoAcknowledged]=useState(false);
+  const [demoImporting,setDemoImporting]=useState(false);
+  const [demoState,setDemoState]=useState<"loading"|"available"|"imported"|"blocked">("loading");
+  const [publication,setPublication]=useState<PublicationStatus|null>(null);
+  const [publicationDialog,setPublicationDialog]=useState(false);
+  const [publishingCatalog,setPublishingCatalog]=useState(false);
+  const readPublicationStatus=useCallback(async()=>{
+    if(type==="service")return;
+    try{
+      const response=await fetch("/api/catalog/publish?bot="+encodeURIComponent(botId),{
+        headers:{"x-telegram-init-data":telegramData()},cache:"no-store"
+      });
+      if(!response.ok)throw Error("Проверка публикации недоступна");
+      setPublication(await response.json() as PublicationStatus);
+    }catch{setPublication(null)}
+  },[botId,type]);
 
   const refresh = useCallback(async () => {
     setLoading(true); setError("");
@@ -49,10 +71,63 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
         if(!categoriesResponse.ok)throw new Error(categoriesBody.error??"Не удалось загрузить категории.");
         setCategories(categoriesBody.categories??[]);
       } else setCategories([]);
+      await readPublicationStatus();
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Ошибка загрузки."); }
     finally { setLoading(false); }
-  }, [botId,type]);
+  }, [botId,type,readPublicationStatus]);
   useEffect(() => { void Promise.resolve().then(refresh); }, [refresh]);
+  useEffect(()=>{
+    if(type!=="delivery"&&type!=="store")return;
+    const c=new AbortController();
+    void fetch("/api/demo-content?bot="+encodeURIComponent(botId),{
+      headers:{"x-telegram-init-data":telegramData()},signal:c.signal,cache:"no-store"
+    }).then(async response=>{
+      const result=await response.json() as {imported?:boolean;canImport?:boolean};
+      if(!response.ok)throw new Error("Недоступно");
+      if(!c.signal.aborted)setDemoState(result.imported?"imported":result.canImport?"available":"blocked");
+    }).catch(()=>{if(!c.signal.aborted)setDemoState("blocked")});
+    return()=>c.abort();
+  },[botId,type]);
+
+  async function updateMiniApp(){
+    if(!publication||!publication.canUpdate||!publication.changed||publishingCatalog)return;
+    setPublishingCatalog(true);setError("");setNotice("");
+    try{
+      const response=await fetch("/api/catalog/publish",{
+        method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({botId,initData:telegramData(),
+          expectedRevision:publication.revision,confirm:"PUBLISH_CATALOG"})
+      });
+      const result=await response.json() as {error?:string;items?:number;categories?:number};
+      if(!response.ok)throw Error(result.error??"Не удалось обновить Mini App");
+      setPublicationDialog(false);
+      await readPublicationStatus();
+      setNotice("Каталог опубликован: "+(result.items??0)+" блюд / товаров, "+
+        (result.categories??0)+" категорий. Закройте и откройте Mini App в Telegram, чтобы увидеть обновление.");
+    }catch(cause){setError(cause instanceof Error?cause.message:"Не удалось обновить каталог");setPublicationDialog(false);await readPublicationStatus();}
+    finally{setPublishingCatalog(false)}
+  }
+
+  async function runDemoAction(){
+    if(!demoModal||!demoAcknowledged||demoImporting)return;
+    const deleting=demoModal==="remove";
+    setDemoImporting(true);setError("");setNotice("");
+    try{
+      const response=await fetch("/api/demo-content",{
+        method:deleting?"DELETE":"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({botId,initData:telegramData(),confirm:deleting?"REMOVE_DEMO_CONTENT":"IMPORT_DEMO_CONTENT"})
+      });
+      const result=await response.json() as {error?:string;alreadyImported?:boolean};
+      if(!response.ok)throw new Error(result.error??"Не удалось обработать демо-данные.");
+      setDemoState(deleting?"available":"imported");
+      setDemoModal(null);setDemoAcknowledged(false);setChosenCategory("all");setMenuView("items");
+      setNotice(deleting?"Демо-данные удалены. Реальные записи не затронуты.":result.alreadyImported?"Демо уже было загружено. Повторных записей нет.":"Демо добавлено: 4 категории, 8 блюд с фото, 3 тестовых заказа и 3 уведомления.");
+      window.dispatchEvent(new CustomEvent("botstudio:demo-updated",{detail:{botId}}));
+      await refresh();
+    }catch(e){setError(e instanceof Error?e.message:"Не удалось изменить демо-данные.");}
+    finally{setDemoImporting(false);}
+  }
+
 
   async function categoryRequest(method:"POST"|"DELETE", payload:Record<string,unknown>){
     setSaving(true);setError("");setNotice("");
@@ -72,6 +147,20 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
     setPrice(item?.price_minor == null ? "" : formatStoredPrice(item.price_minor, nextCurrency)); setActive(item?.is_active ?? true); setError("");
   }
 
+  async function uploadImage(file:File){
+    if(!["image/png","image/jpeg","image/webp"].includes(file.type)||file.size===0||file.size>2*1024*1024){setError("Загрузите JPG, PNG или WebP до 2 МБ.");return}
+    setUploadingImage(true);setError("");
+    try{
+      const form=new FormData();
+      form.append("botId",botId);form.append("initData",telegramData());form.append("image",file);
+      const response=await fetch("/api/catalog/image",{method:"POST",body:form});
+      const result=await response.json() as {imageUrl?:string;error?:string};
+      if(!response.ok||!result.imageUrl)throw new Error(result.error??"Не удалось загрузить фото.");
+      setImageUrl(result.imageUrl);
+    }catch(cause){setError(cause instanceof Error?cause.message:"Не удалось загрузить фото.");}
+    finally{setUploadingImage(false);}
+  }
+
   async function save() {
     let priceMinor: number | null;
     try { priceMinor = priceToMinor(price, currency); }
@@ -79,6 +168,7 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
     if (!name.trim()) { setError("Введите название."); return; }
     if (stock!=="" && (!/^\d+$/.test(stock)||!Number.isSafeInteger(Number(stock))||Number(stock)>100000000)){setError("Остаток должен быть целым числом от 0 до 100 000 000.");return;}
     if(type==="delivery" && preparationMinutes!=="" && (!/^\d{1,3}$/.test(preparationMinutes)||Number(preparationMinutes)>360)) {setError("Время приготовления: от 0 до 360 минут.");return;}
+    if(uploadingImage){setError("Дождитесь завершения загрузки фото.");return;}
     setSaving(true); setError("");
     try {
       const response = await fetch("/api/catalog", { method: "POST", headers: { "content-type": "application/json" },
@@ -110,9 +200,18 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
       <label className="relative min-w-[180px] flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#98a2b3]"/>
         <input value={query} onChange={e=>setQuery(e.target.value)} className="h-11 w-full rounded-xl border border-[#e4e7ec] pl-10 pr-3 text-sm" placeholder="Поиск по каталогу"/></label>
       
+      {(type==="delivery"||type==="store")&&<button type="button" onClick={()=>{setDemoAcknowledged(false);setDemoModal(demoState==="imported"?"remove":"import")}} disabled={demoState==="loading"||demoState==="blocked"||demoImporting} className="inline-flex h-11 items-center gap-2 rounded-xl border border-[#d6c9ff] bg-[#f7f4ff] px-4 text-sm font-semibold text-[#5934dc] disabled:cursor-not-allowed disabled:opacity-45"><DatabaseZap className="size-4"/>{demoState==="imported"?"Убрать демо":"Загрузить демо-данные"}</button>}
       {(type==="delivery"||type==="store")&&<button type="button" onClick={()=>{setMenuView("categories");setEditingCategory("new");setCategoryName("")}} className="inline-flex h-11 items-center gap-2 rounded-xl border border-[#d0d5dd] px-4 text-sm font-semibold">+ Категория</button>}
       <button type="button" onClick={()=>{setMenuView("items");open()}} className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#101828] px-4 text-sm font-semibold !text-white"><Plus className="size-4"/>Добавить {noun}</button>
     </div>
+    {publication?.changed&&publication.isPublished&&<div role="status" className="mx-5 my-4 flex flex-wrap items-center gap-3 rounded-2xl border border-[#fcd99b] bg-[#fffbeb] p-4 text-sm text-[#92400e]">
+      <div className="min-w-0 flex-1"><strong className="block font-semibold">Изменения меню ещё не опубликованы</strong><p className="mt-1 leading-5">В кабинете: {publication.draftItems} позиций и {publication.draftCategories} категорий. В Telegram Mini App: {publication.publishedItems} позиций и {publication.publishedCategories} категорий.</p>
+      {publication.hasDemo&&<p className="mt-2 font-medium">Перед обновлением удалите демо-данные.</p>}</div>
+      <button type="button" disabled={!publication.canUpdate||publishingCatalog} onClick={()=>setPublicationDialog(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#6541f5] px-4 font-semibold text-white disabled:opacity-40">
+       {publishingCatalog&&<LoaderCircle className="size-4 animate-spin"/>}Обновить Mini App
+      </button>
+    </div>}
+    {publication&&!publication.isPublished&&<p className="mx-5 my-4 rounded-xl bg-[#f2f4f7] p-3 text-sm text-[#667085]">Меню сохранено как черновик. Чтобы покупатели увидели его в Telegram, сначала опубликуйте бота через мастер запуска.</p>}
     {(type==="delivery"||type==="store")&&<div className="flex gap-2 border-b border-[#eaecf0] px-5 py-3" role="tablist" aria-label="Управление меню">
       <button type="button" role="tab" aria-selected={menuView==="items"} onClick={()=>setMenuView("items")} className={`rounded-xl px-4 py-2 text-sm font-semibold ${menuView==="items"?"bg-[#101828] text-white":"bg-[#f2f4f7] text-[#475467]"}`}>{type==="delivery"?"Блюда":"Товары"} ({items.length})</button>
       <button type="button" role="tab" aria-selected={menuView==="categories"} onClick={()=>setMenuView("categories")} className={`rounded-xl px-4 py-2 text-sm font-semibold ${menuView==="categories"?"bg-[#101828] text-white":"bg-[#f2f4f7] text-[#475467]"}`}>Категории ({categories.length})</button>
@@ -146,21 +245,62 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
           <button type="button" onClick={()=>open(item)} aria-label={"Изменить "+item.name} className="grid size-10 place-items-center rounded-xl border border-[#d0d5dd]"><Pencil className="size-4"/></button>
           {item.is_active&&<button type="button" disabled={saving} onClick={()=>void archive(item)} aria-label={"Скрыть "+item.name} className="grid size-10 place-items-center rounded-xl border border-[#d0d5dd] text-[#b42318]"><Trash2 className="size-4"/></button>}
         </div>)}</div>)}
+    {publicationDialog&&publication&&<div className="fixed inset-0 z-[70] grid place-items-center bg-[#101828]/60 p-4" role="presentation">
+      <div role="dialog" aria-modal="true" aria-label="Подтвердить обновление Mini App" className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-[#eaecf0] px-6 py-4"><h2 className="text-lg font-semibold">Обновить меню в Telegram?</h2><button type="button" aria-label="Закрыть обновление" disabled={publishingCatalog} onClick={()=>setPublicationDialog(false)}><X className="size-5"/></button></div>
+        <div className="space-y-3 px-6 py-5 text-sm leading-6 text-[#475467]">
+          <p>Покупатели увидят <strong>{publication.draftItems} блюд / товаров</strong> и <strong>{publication.draftCategories} категорий</strong> после обновления Mini App.</p>
+          <p>Цены и фотографии из сохранённого каталога станут доступны покупателям. Подключать бота через BotFather повторно не требуется.</p>
+          <p className="rounded-xl bg-[#fff7ed] p-3 text-xs text-[#9a3412]">Проверьте названия, цены и изображения перед публикацией. Демо-данные публиковать нельзя.</p>
+        </div>
+        <div className="flex justify-end gap-3 border-t border-[#eaecf0] px-6 py-4"><button type="button" disabled={publishingCatalog} onClick={()=>setPublicationDialog(false)} className="h-11 rounded-xl border border-[#d0d5dd] px-4 text-sm font-semibold">Отмена</button><button type="button" onClick={()=>void updateMiniApp()} disabled={publishingCatalog||!publication.canUpdate} className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#6541f5] px-4 text-sm font-semibold text-white disabled:opacity-40">{publishingCatalog&&<LoaderCircle className="size-4 animate-spin"/>}{publishingCatalog?"Обновляем…":"Да, обновить Mini App"}</button></div>
+      </div>
+    </div>}
+    {demoModal&&<div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#101828]/60 p-4" role="presentation">
+      <div role="dialog" aria-modal="true" aria-label={demoModal==="import"?"Подтверждение загрузки демо-данных":"Подтверждение удаления демо-данных"} className="w-full max-w-[460px] overflow-hidden rounded-3xl bg-white shadow-2xl">
+       <div className="flex items-center justify-between border-b border-[#eaecf0] px-6 py-4"><h2 className="text-lg font-semibold">{demoModal==="import"?"Загрузить демо-данные?":"Удалить демо-данные?"}</h2><button type="button" aria-label="Закрыть предупреждение" disabled={demoImporting} onClick={()=>{setDemoModal(null);setDemoAcknowledged(false)}}><X className="size-5"/></button></div>
+       <div className="space-y-4 px-6 py-5">
+        <p className="text-sm leading-6 text-[#475467]">{demoModal==="import"?"После подтверждения мы добавим в этот черновик:":"Будут удалены только записи, добавленные демонстрационным импортом:"}</p>
+        <ul className="space-y-2 text-sm text-[#344054]">
+         <li>4 категории: Бургеры, Пицца, Салаты, Напитки</li>
+         <li>8 блюд / товаров с фотографиями еды</li>
+         <li>3 тестовых заказа — без реальных покупателей и оплаты</li>
+         <li>3 уведомления только внутри админки</li>
+        </ul>
+        <p className="rounded-xl bg-[#fff7ed] p-3 text-xs leading-5 text-[#9a3412]">{demoModal==="import"?
+         "Это демонстрационный контент, а не реальные заказы. Уведомления в Telegram не отправляются. Реальные данные не заменятся. Публикация будет заблокирована, пока вы не удалите демо-набор. Это защищает покупателей от тестовых товаров.":
+         "Действие нельзя отменить. Обычные товары, категории и реальные заказы останутся без изменений. Удалить демо можно только до публикации."}</p>
+        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[#e4e7ec] p-3 text-sm"><input type="checkbox" checked={demoAcknowledged} onChange={e=>setDemoAcknowledged(e.target.checked)} className="mt-1 size-4 accent-[#6541f5]"/><span>Я понимаю, что это {demoModal==="import"?"тестовые данные":"удаление демонстрационных записей"}.</span></label>
+       </div>
+       <div className="flex justify-end gap-2 border-t border-[#eaecf0] px-6 py-4"><button type="button" disabled={demoImporting} onClick={()=>{setDemoModal(null);setDemoAcknowledged(false)}} className="h-11 rounded-xl border border-[#d0d5dd] px-4 text-sm font-semibold">Отмена</button>
+        <button type="button" onClick={()=>void runDemoAction()} disabled={!demoAcknowledged||demoImporting} className={"inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-semibold text-white disabled:opacity-40 "+(demoModal==="remove"?"bg-[#b42318]":"bg-[#6541f5]")}>{demoImporting&&<LoaderCircle className="size-4 animate-spin"/>}{demoImporting?"Подождите…":demoModal==="import"?"Да, загрузить демо":"Удалить демо"}</button>
+       </div>
+      </div>
+     </div>}
     {editingCategory!==null&&<div className="fixed inset-0 z-50 grid place-items-center bg-[#101828]/60 p-4"><div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
       <div className="flex items-center justify-between"><h2 className="text-xl font-semibold">{editingCategory==="new"?"Новая категория":"Редактировать категорию"}</h2><button type="button" onClick={()=>setEditingCategory(null)} aria-label="Закрыть"><X/></button></div>
       <label className="mt-5 block text-sm font-medium">Название<input maxLength={80} value={categoryName} onChange={e=>setCategoryName(e.target.value)} className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/></label>
       <div className="mt-6 flex justify-end gap-3"><button type="button" onClick={()=>setEditingCategory(null)} className="h-11 rounded-xl border px-4">Отмена</button>
       <button type="button" disabled={saving||!categoryName.trim()} onClick={()=>void categoryRequest("POST",{...(editingCategory==="new"?{position:categories.length}:{id:editingCategory.id}),name:categoryName.trim()})} className="h-11 rounded-xl bg-[#6541f5] px-5 text-sm font-semibold !text-white disabled:opacity-60">Сохранить</button></div>
     </div></div>}
-    {editing!==null&&<div className="fixed inset-0 z-50 grid place-items-center bg-[#101828]/60 p-4">
-      <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
-        <div className="flex items-center justify-between"><h2 className="text-xl font-semibold">{editing==="new"?"Добавить":"Редактировать"} {noun}</h2><button type="button" onClick={()=>setEditing(null)} aria-label="Закрыть"><X/></button></div>
-        <div className="mt-5 space-y-4"><label className="block text-sm font-medium">Название<input maxLength={120} value={name} onChange={e=>setName(e.target.value)} className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/></label>
+    {editing!==null&&<div className="fixed inset-0 z-50 flex items-center justify-center bg-[#101828]/60 p-3 sm:p-5">
+      <div role="dialog" aria-modal="true" aria-label={editing==="new"?"Добавить "+noun:"Редактировать "+noun} className="flex max-h-[min(85dvh,740px)] min-h-0 w-full max-w-lg flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+        <div className="flex shrink-0 items-center justify-between border-b border-[#eaecf0] px-5 py-4 sm:px-6"><h2 className="text-lg font-semibold">{editing==="new"?"Добавить":"Редактировать"} {noun}</h2><button type="button" onClick={()=>setEditing(null)} aria-label="Закрыть" className="grid size-9 place-items-center rounded-lg hover:bg-[#f2f4f7]"><X size={19}/></button></div>
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6">
+          {error&&<p role="alert" className="rounded-lg bg-[#fff1f2] p-3 text-sm text-[#be123c]">{error}</p>}<label className="block text-sm font-medium">Название<input maxLength={120} value={name} onChange={e=>setName(e.target.value)} className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/></label>
           <label className="block text-sm font-medium">Описание<textarea maxLength={2000} value={description} onChange={e=>setDescription(e.target.value)} rows={3} className="mt-2 w-full rounded-xl border border-[#d0d5dd] p-3"/></label>
           {(type==="delivery"||type==="store")&&<label className="block text-sm font-medium">Категория<select value={categoryId} onChange={e=>setCategoryId(e.target.value)} className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"><option value="">Без категории</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
-          <label className="block text-sm font-medium">{type==="delivery"?"Фото блюда":"Фото товара"} (HTTPS-ссылка)<input type="url" value={imageUrl} onChange={e=>setImageUrl(e.target.value)} placeholder="https://..." className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/></label>
-          {imageUrl&&/^https:\/\//i.test(imageUrl)&&<img src={imageUrl} loading="lazy" alt="Предпросмотр фотографии" className="h-28 w-full rounded-xl bg-[#f2f4f7] object-cover"/>}
-          {type==="delivery"&&<>
+          <div className="space-y-3 text-sm font-medium"><p>{type==="delivery"?"Фото блюда":"Фото товара"}</p>
+            <label className="flex min-h-24 cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[#d0d5dd] bg-[#f9fafb] p-4 text-center transition-colors hover:border-[#6541f5]">
+             {uploadingImage?<LoaderCircle className="size-6 animate-spin text-[#6541f5]"/>:<Upload className="size-6 text-[#6541f5]"/>}
+             <span className="text-sm font-semibold text-[#4420e7]">{uploadingImage?"Загружаем фото…":"Загрузить фото с устройства"}</span>
+             <span className="text-xs font-normal text-[#667085]">JPG, PNG или WebP до 2 МБ</span>
+             <input type="file" accept="image/jpeg,image/png,image/webp" aria-label="Загрузить фото" disabled={uploadingImage||saving} className="sr-only" onChange={event=>{const file=event.target.files?.[0];if(file)void uploadImage(file);event.currentTarget.value="";}}/>
+            </label>
+            {imageUrl&&/^https:\/\//i.test(imageUrl)&&<div className="relative"><img src={imageUrl} loading="lazy" alt="Предпросмотр фотографии" className="h-32 w-full rounded-xl bg-[#f2f4f7] object-cover"/><button type="button" onClick={()=>setImageUrl("")} className="absolute right-2 top-2 rounded-lg bg-white/95 px-3 py-1.5 text-xs font-semibold">Убрать фото</button></div>}
+            <details className="text-xs font-normal text-[#667085]"><summary className="cursor-pointer">Или вставить ссылку на изображение</summary><input type="url" aria-label="HTTPS-ссылка на фото" value={imageUrl} onChange={e=>setImageUrl(e.target.value)} placeholder="https://..." className="mt-2 h-10 w-full rounded-xl border border-[#d0d5dd] px-3"/></details>
+           </div>
+                    {type==="delivery"&&<>
             <label className="block text-sm font-medium">Состав блюда<input value={ingredients} onChange={e=>setIngredients(e.target.value)} placeholder="Говядина, рис, морковь" className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/><span className="mt-1 block text-xs font-normal text-[#667085]">Разделяйте ингредиенты запятыми</span></label>
             <label className="block text-sm font-medium">Аллергены<input value={allergens} onChange={e=>setAllergens(e.target.value)} placeholder="Орехи, глютен" className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/></label>
             <label className="block text-sm font-medium">Время приготовления, мин<input type="number" min={0} max={360} value={preparationMinutes} onChange={e=>setPreparationMinutes(e.target.value)} placeholder="25" className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/></label>
@@ -172,8 +312,8 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
             </select></div><p className="mt-1 text-xs font-normal text-[#667085]">Валюта сохраняется вместе с ценой, конвертация не выполняется.</p></div>
           {(type==="delivery"||type==="store")&&<label className="block text-sm font-medium">Количество в наличии<input type="number" min={0} max={100000000} step={1} value={stock} onChange={e=>setStock(e.target.value)} placeholder="Не ограничено" className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/><span className="mt-1 block text-xs font-normal text-[#667085]">0 — скрыть у покупателя, пусто — не учитывать остаток. После заказа количество уменьшится.</span></label>}
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={active} onChange={e=>setActive(e.target.checked)}/>Показывать в Mini App</label></div>
-        <div className="mt-6 flex justify-end gap-3"><button type="button" onClick={()=>setEditing(null)} className="h-11 rounded-xl border px-4 text-sm">Отмена</button>
-          <button type="button" disabled={saving} onClick={()=>void save()} className="h-11 rounded-xl bg-[#6541f5] px-5 text-sm font-semibold !text-white disabled:opacity-60">{saving?"Сохраняем…":"Сохранить"}</button></div>
+        <div className="flex shrink-0 justify-end gap-3 border-t border-[#eaecf0] bg-white px-5 py-3 sm:px-6"><button type="button" onClick={()=>setEditing(null)} className="h-10 rounded-xl border px-4 text-sm">Отмена</button>
+          <button type="button" disabled={saving||uploadingImage} onClick={()=>void save()} className="h-10 rounded-xl bg-[#6541f5] px-5 text-sm font-semibold !text-white disabled:opacity-60">{saving?"Сохраняем…":"Сохранить"}</button></div>
       </div></div>}
   </section>;
 }

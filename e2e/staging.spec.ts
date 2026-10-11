@@ -36,3 +36,638 @@ test("authentication layout fits a mobile viewport", async ({ page }, testInfo) 
   expect(dimensions.content).toBeLessThanOrEqual(dimensions.viewport);
   await expect(page.getByRole("button", { name: /Продолжить через Google/i })).toBeVisible();
 });
+
+test("Telegram OIDC is enabled and starts an authorization-code flow", async ({ request, page }) => {
+  const providers = await request.get("/api/auth/providers");
+  expect(providers.ok()).toBeTruthy();
+  const config = await providers.json();
+  expect(config.telegram, "Staging must advertise configured Telegram OIDC").not.toBeNull();
+  await page.goto("/auth");
+  await expect(page.getByRole("link", { name: /Войти через Telegram/ })).toBeVisible();
+  const start = await request.get("/api/auth/telegram/start", { maxRedirects: 0 });
+  expect(start.status()).toBe(302);
+  const destination = new URL(start.headers()["location"]);
+  expect(destination.hostname).toBe("oauth.telegram.org");
+  expect(destination.searchParams.get("response_type")).toBe("code");
+  expect(destination.searchParams.get("code_challenge_method")).toBe("S256");
+  expect(destination.searchParams.get("redirect_uri")).toBe("https://bot-studio-staging.slavnauz.workers.dev/api/auth/telegram/callback");
+  expect(destination.searchParams.get("client_id")).toMatch(/^[0-9]+$/);
+  expect(destination.searchParams.has("bot_id")).toBe(false);
+});
+
+test("Telegram callback fails closed without valid CSRF cookie", async ({ request }) => {
+  const response = await request.get("/api/auth/telegram/callback?code=fake&state=fake", { maxRedirects: 0 });
+  expect(response.status()).toBe(302);
+  expect(response.headers()["location"]).toContain("/auth?error=telegram_session_expired");
+});
+
+// This blocks releases if the exact Cloudflare Worker encryption configuration is broken.
+test("Telegram token encryption round-trip works on deployed Worker", async ({ request }) => {
+  const response = await request.get("/api/health/telegram-encryption");
+  expect(response.status(), "BotFather token encryption must be ready before onboarding").toBe(200);
+  const payload = await response.json();
+  expect(payload).toEqual({ ready: true, component: "telegram-token-encryption" });
+});
+
+
+/**
+ * Safe browser-flow QA: no real Telegram bot is modified, no Supabase rows are created.
+ * Real Telegram getMe/webhook/publishing still require a dedicated QA bot fixture.
+ */
+for (const kind of ["Доставка еды", "Интернет-магазин"] as const) {
+  test(`Five-stage onboarding with saved interactive Mini App design — ${kind}`, async ({ page }) => {
+    const mockId = "c86fd579-1498-462f-8980-83a52aa42e1f";
+    let inspected = false;
+    let connected = false;
+    let published = false;
+    let savedDesign:Record<string,unknown>|null=null;
+    // A verified account is required for the real onboarding page.
+    await page.route("**/api/auth/account",route=>route.fulfill({
+      status:200,contentType:"application/json",body:JSON.stringify({authenticated:true})
+    }));
+    await page.route("**/api/onboarding", async (route) => {
+      const payload = route.request().postDataJSON() as { botName?: string; templateType?: string };
+      expect(payload.botName).toBe("QA E2E demo");
+      expect(payload.templateType).toBe(kind === "Доставка еды" ? "delivery" : "store");
+      await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({bot:{id:mockId}})});
+    });
+    await page.route("**/api/channels/telegram/token", async (route) => {
+      const payload = route.request().postDataJSON() as {action?:string};
+      if (payload.action === "inspect") {
+        inspected = true;
+        await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({credentialId:"c3d21650-e18c-4f9a-83a9-9a2663df04ee",bot:{id:123456789,name:"QA bot",username:"BotStudioQaTestBot"}})});
+      } else if (payload.action === "connect") {
+        connected = true;
+        await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({connected:true,bot:{name:"QA bot",username:"BotStudioQaTestBot"}})});
+      } else throw Error(`Unexpected mocked Telegram action: ${payload.action}`);
+    });
+    await page.route("**/api/miniapp/design**",async route=>{
+      if(route.request().method()==="POST"){
+        savedDesign=route.request().postDataJSON() as Record<string,unknown>;
+        return route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({ok:true})});
+      }
+      return route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({
+        design:{layout:"food02",color:"#00CD69",dark:true,themeMode:"dark",defaultTheme:"system"},templateType:"delivery"
+      })});
+    });
+    await page.route("**/api/miniapp/preview?bot=*",route=>route.fulfill({
+      status:200,contentType:"application/json",body:JSON.stringify({
+       bot:{id:mockId,name:"QA E2E demo",description:"QA Food",logoUrl:null,color:"#6541F5",
+        template:kind==="Доставка еды"?"delivery":"store"},
+       design:{layout:"food01",color:"#6541F5",themeMode:"light",defaultTheme:"system",
+        banner:{enabled:true,title:"Вкусная еда рядом",description:"Выбирайте",imageUrl:"",buttonEnabled:false,buttonText:"",linkType:"page",target:"catalog"}},
+       items:[{id:"33333333-3333-4333-8333-333333333333",name:"QA блюдо",description:"Вкусно",image_url:null,price_minor:2500000,currency:"UZS"}],categories:[]
+      })
+    }));
+    await page.route("**/api/publish", async (route) => {
+      const payload=route.request().postDataJSON() as {botId?:string};
+      expect(payload.botId).toBe(mockId);
+      published=true;
+      await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({status:"published"})});
+    });
+
+    await page.goto("/onboarding");
+    await expect(page.getByRole("heading",{name:"Подключите Telegram"})).toBeVisible();
+    await page.getByRole("button",{name:/Подключить существующего/}).click();
+    await page.getByRole("button",{name:/Продолжить/}).click();
+    await expect(page.getByRole("heading",{name:"Выберите шаблон"})).toBeVisible({timeout:15000});
+    await page.getByRole("button",{name:new RegExp(kind)}).click();
+    await page.getByRole("button",{name:/Продолжить/}).click();
+    await expect(page.getByRole("heading",{name:"Настройте бота"})).toBeVisible({timeout:15000});
+    await page.getByRole("textbox",{name:/Название бота/}).fill("QA E2E demo");
+    await page.getByRole("textbox",{name:/Описание/}).fill("Safe mock QA browser test");
+    await expect(page.getByText("QA E2E demo")).toBeVisible();
+    await page.getByPlaceholder("Telegram Bot API token").fill("123456789:"+ "A".repeat(46));
+    await page.getByRole("button",{name:"Проверить",exact:true}).click();
+    await expect(page.getByText(/QA bot · @BotStudioQaTestBot/)).toBeVisible();
+    await page.getByRole("button",{name:"Подтвердить подключение"}).click();
+    await expect(page.getByText("Telegram подключён: @BotStudioQaTestBot")).toBeVisible();
+    await page.getByRole("button",{name:/К дизайну Mini App/}).click();
+    await expect(page.getByRole("heading",{name:"Дизайн Mini App"})).toBeVisible();
+    await expect(page.getByText("Шаг 4 из 5")).toBeVisible();
+    await expect(page.getByRole("heading",{name:"Живой Mini App"})).toBeVisible();
+    await page.getByRole("group",{name:"Стиль Mini App"}).getByRole("button",{name:/Food 02/}).click();
+    await page.getByRole("group",{name:"Готовые цвета Mini App"}).getByRole("button",{name:"Зелёный"}).click();
+    await page.getByRole("group",{name:"Тема Mini App"}).getByRole("button",{name:"Тёмная"}).click();
+    await page.getByRole("button",{name:/Сохранить и продолжить/}).click();
+    await expect(page.getByRole("heading",{name:"Проверка и запуск"})).toBeVisible();
+    await expect(page.getByText("Шаг 5 из 5")).toBeVisible();
+    expect(savedDesign).toMatchObject({botId:mockId,layout:"food02",color:"#00CD69",dark:true,themeMode:"dark",defaultTheme:"system"});
+    await expect(page.getByText("Проект «QA E2E demo» создан")).toBeVisible();
+    await page.getByRole("button",{name:/Опубликовать бота/}).click();
+    await expect(page.getByRole("heading",{name:"Бот опубликован!"})).toBeVisible();
+    expect({inspected,connected,published}).toEqual({inspected:true,connected:true,published:true});
+  });
+}
+
+
+test("owner draft preview is not publicly readable",async({request})=>{
+ const response=await request.get("/api/miniapp/preview?bot=11111111-1111-4111-8111-111111111111");
+ expect([401,403,404]).toContain(response.status());
+ expect(response.headers()["cache-control"]??"").not.toContain("public");
+});
+
+for(const template of ["delivery","store"] as const){
+ test(`interactive draft Mini App uses real cart and updates theme — ${template}`,async({page})=>{
+  const id="11111111-1111-4111-8111-111111111111";
+  await page.route("**/api/miniapp/preview?bot=*",async route=>{
+   await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({
+    bot:{id,name:template==="delivery"?"QA Food":"QA Store",description:"Предпросмотр",logoUrl:null,color:"#E65D35",template},
+    items:[{id:"33333333-3333-4333-8333-333333333333",name:"QA блюдо",description:"Свежее",image_url:null,price_minor:2500000,currency:"UZS",category_id:"22222222-2222-4222-8222-222222222222"}],
+    categories:[{id:"22222222-2222-4222-8222-222222222222",name:"Горячее",position:0}],
+    design:{layout:"food01",color:"#E65D35",themeMode:"light",defaultTheme:"system",banner:{enabled:true,title:"Вкусная еда рядом",description:"Выбирайте любимое",imageUrl:"",buttonEnabled:false,buttonText:"",linkType:"page",target:"catalog"}}
+   })});
+  });
+  await page.goto(`/miniapp?bot=${id}&preview=1`);
+  await expect(page.getByText("Предпросмотр · изменения не опубликованы")).toBeVisible();
+  await expect(page.getByText("QA блюдо")).toBeVisible();
+  await page.evaluate(botId=>window.postMessage({type:"bot-studio:preview-design",botId,design:{layout:"food02",color:"#6541F5",dark:true,themeMode:"dark",defaultTheme:"dark",banner:{enabled:true,title:"Меню за минуту",description:"Тест баннера",imageUrl:"",buttonEnabled:false,buttonText:"",linkType:"page",target:"catalog"}}},window.location.origin),id);
+  await expect(page.locator("main").last()).toHaveCSS("background-color","rgb(17, 20, 24)");
+  if(template==="delivery")await expect(page.getByText("Меню за минуту")).toBeVisible();
+  await page.getByRole("button",{name:/Добавить/}).first().click();
+  await page.getByRole("button",{name:/Корзина/}).last().click();
+  await expect(page.getByText("Оформление заказа")).toBeVisible();
+  await expect(page.getByRole("button",{name:/Заказ недоступен в предпросмотре/})).toBeDisabled();
+ });
+}
+
+
+test("Google PKCE redirects with code challenge instead of implicit access token",async({page})=>{
+ let authorizeUrl="";
+ await page.route("**/api/auth/providers",route=>route.fulfill({
+  status:200,contentType:"application/json",
+  body:JSON.stringify({google:{supabaseUrl:"https://qa-login-auth.supabase.co",publishableKey:"sb_publishable_testing"},telegram:null}),
+ }));
+ await page.route("https://qa-login-auth.supabase.co/auth/v1/authorize**",route=>{
+  authorizeUrl=route.request().url();
+  return route.abort();
+ });
+ await page.goto("/auth");
+ await page.getByRole("button",{name:/Продолжить через Google/}).click();
+ await expect.poll(()=>authorizeUrl,{timeout:10000}).toContain("/auth/v1/authorize");
+ const url=new URL(authorizeUrl);
+ expect(url.searchParams.get("provider")).toBe("google");
+ expect(url.searchParams.get("code_challenge")).toMatch(/^[A-Za-z0-9_-]{40,}$/);
+ expect(url.searchParams.get("code_challenge_method")?.toLowerCase()).toBe("s256");
+ expect(url.searchParams.get("redirect_to")).toContain("/auth/callback");
+});
+
+test("Google callback rejects missing authorization code without creating a session",async({page})=>{
+ let posts=0;
+ await page.route("**/api/auth/providers",route=>route.fulfill({
+  status:200,contentType:"application/json",
+  body:JSON.stringify({google:{supabaseUrl:"https://qa-login-auth.supabase.co",publishableKey:"sb_publishable_testing"},telegram:null}),
+ }));
+ await page.route("**/api/auth/account",route=>{posts++;return route.abort()});
+ await page.goto("/auth/callback");
+ await expect(page.getByRole("alert")).toContainText("Google не вернул код подтверждения");
+ expect(posts).toBe(0);
+});
+
+test("linking Google without a verified session is rejected",async({request})=>{
+ const response=await request.post("/api/auth/account",{
+  data:{provider:"google",mode:"link",accessToken:"not-an-oauth-token"},
+ });
+ expect([400,401]).toContain(response.status());
+});
+
+
+// QA 2026-10-11: actual admin UI and theme-picker regression
+test("admin cabinet renders the selected delivery bot and exposes creation", async ({ page },testInfo) => {
+  const id = "d071c20c-b54c-45cc-8033-982a09c945a1";
+  await page.route("**/api/workspace", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({bots:[{
+      id,name:"QA Delivery Cabinet",username:"qa_delivery_staging_bot",template_type:"delivery",
+      metrics:{ordersToday:2,revenueTodayMinor:5000000,catalogItems:3,customers:2,recentOrders:[]}
+    }]}),
+  }));
+  await page.goto("/workspace");
+  await expect(page.getByRole("heading",{name:"Обзор"})).toBeVisible();
+  await expect(page.locator("select").first()).toHaveValue(id);
+  await expect(page.getByRole("link",{name:/Создать (ещё )?бота/})).toBeVisible();
+   if(testInfo.project.name==="mobile")await page.getByRole("button",{name:"Открыть все разделы"}).click();
+   for(const title of ["Меню","Заказы","Доставка","Клиенты","Акции","Поддержка","Отчёты","Оформление Mini App","Настройки доставки","Настройки бота","Настройки доступа"])await expect(page.getByRole("link",{name:title}).or(page.getByRole("button",{name:title})).first()).toBeVisible();
+});
+
+test("admin theme and template picker saves customer choice and default dark mode", async ({ page }) => {
+  const id = "d071c20c-b54c-45cc-8033-982a09c945a1";
+  const banner = {enabled:true,title:"QA баннер",description:"Тест",imageUrl:"",buttonEnabled:false,buttonText:"",linkType:"page",target:"catalog"};
+  const initialDesign = {layout:"food01",color:"#E65D35",dark:false,themeMode:"light",defaultTheme:"system",banner};
+  let submitted:Record<string,unknown>|null=null;
+  await page.route("**/api/workspace",route=>route.fulfill({
+    status:200,contentType:"application/json",
+    body:JSON.stringify({bots:[{id,name:"QA Food",username:"qa_food_bot",template_type:"delivery",
+      metrics:{ordersToday:0,revenueTodayMinor:0,catalogItems:0,customers:0,recentOrders:[]}}]}),
+  }));
+  await page.route("**/api/miniapp/design**",async route=>{
+    if(route.request().method()==="POST"){
+      submitted=route.request().postDataJSON() as Record<string,unknown>;
+      return route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({ok:true})});
+    }
+    return route.fulfill({status:200,contentType:"application/json",
+      body:JSON.stringify({design:initialDesign,templateType:"delivery"})});
+  });
+  await page.route("**/api/catalog/categories?bot=*",route=>route.fulfill({
+    status:200,contentType:"application/json",body:JSON.stringify({categories:[]})
+  }));
+  await page.route("**/api/catalog?bot=*",route=>route.fulfill({
+    status:200,contentType:"application/json",body:JSON.stringify({items:[]})
+  }));
+  await page.route("**/api/miniapp/preview?bot=*",route=>route.fulfill({
+    status:200,contentType:"application/json",body:JSON.stringify({
+      bot:{id,name:"QA Food",description:"preview",logoUrl:null,color:"#E65D35",template:"delivery"},
+      design:initialDesign,items:[],categories:[]
+    })
+  }));
+  await page.goto("/workspace");
+  await expect(page.getByRole("heading",{name:"Обзор"})).toBeVisible();
+  await page.getByRole("button",{name:"Оформление Mini App"}).click();
+  await expect(page.locator("h2",{hasText:"Оформление Mini App"})).toBeVisible();
+  await page.locator("label").filter({hasText:"Шаблон"}).locator("select").selectOption("food02");
+  await page.locator("label").filter({hasText:"Тема для покупателей"}).locator("select").selectOption("dark");
+  await expect(page.locator("label").filter({hasText:"Тема для покупателей"}).locator("select")).toHaveValue("dark");
+  await page.locator("label").filter({hasText:"Тема для покупателей"}).locator("select").selectOption("customer");
+  await page.locator("label").filter({hasText:"Тема при первом открытии"}).locator("select").selectOption("dark");
+  await page.getByRole("button",{name:"Сохранить черновик"}).click();
+  await expect(page.getByRole("status")).toContainText("Черновик оформления сохранён");
+  expect(submitted).toMatchObject({botId:id,layout:"food02",themeMode:"customer",defaultTheme:"dark"});
+});
+
+test("cabinet and design APIs reject unsigned requests", async ({ request }) => {
+  const id = "d071c20c-b54c-45cc-8033-982a09c945a1";
+  for (const path of ["/api/workspace","/api/bots/draft?bot="+id,"/api/miniapp/design?bot="+id]) {
+    const result=await request.get(path);
+    expect([401,403],path+" must not expose an account to guests").toContain(result.status());
+  }
+});
+
+
+test("onboarding requires login before creating a bot in the browser",async({page})=>{
+  await page.route("**/api/auth/account",route=>route.fulfill({
+    status:200,contentType:"application/json",body:JSON.stringify({authenticated:false})
+  }));
+  await page.goto("/onboarding");
+  await expect(page).toHaveURL(/\/auth$/);
+});
+
+test("onboarding API rejects unsigned bot creation",async({request})=>{
+  const response=await request.post("/api/onboarding",{data:{
+    botName:"Unauthorized QA",templateType:"delivery",requestKey:"a".repeat(32)
+  }});
+  expect([401,403]).toContain(response.status());
+});
+
+test("unsigned admin workspace redirects to login",async({page})=>{
+  await page.route("**/api/workspace",route=>route.fulfill({
+    status:401,contentType:"application/json",body:JSON.stringify({error:"Войдите в аккаунт."})
+  }));
+  await page.goto("/workspace");
+  await expect(page).toHaveURL(/\/auth$/);
+});
+
+
+// Verification UX: test real browser states without contacting or modifying a Telegram bot.
+test("BotFather verification button animates until Telegram responds",async({page})=>{
+  const botId="c86fd579-1498-462f-8980-83a52aa42e1f";
+  let inspectionCalls=0;
+  let releaseInspection!:()=>void;
+  const pendingInspection=new Promise<void>(resolve=>{releaseInspection=resolve});
+  await page.route("**/api/auth/account",route=>route.fulfill({
+    status:200,contentType:"application/json",body:JSON.stringify({authenticated:true})
+  }));
+  await page.route("**/api/onboarding",route=>route.fulfill({
+    status:200,contentType:"application/json",body:JSON.stringify({bot:{id:botId}})
+  }));
+  await page.route("**/api/channels/telegram/token",async route=>{
+    inspectionCalls++;
+    await pendingInspection;
+    await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({
+      credentialId:"c3d21650-e18c-4f9a-83a9-9a2663df04ee",
+      bot:{id:123456789,name:"QA bot",username:"BotStudioQaTestBot"}
+    })});
+  });
+  await page.goto("/onboarding");
+  await page.getByRole("button",{name:/Продолжить/}).click();
+  await page.getByRole("button",{name:/Продолжить/}).click();
+  await page.getByRole("textbox",{name:/Название бота/}).fill("QA E2E demo");
+  await page.getByPlaceholder("Telegram Bot API token").fill("123456789:"+"A".repeat(46));
+  await page.getByRole("button",{name:"Проверить",exact:true}).click();
+  const checking=page.getByRole("button",{name:"Проверяем…"});
+  await expect(checking).toBeVisible();
+  await expect(checking).toBeDisabled();
+  await expect(page.getByLabel("Telegram Bot API token")).toBeDisabled();
+  await expect(page.getByText("Токен успешно проверен")).toHaveCount(0);
+  expect(inspectionCalls).toBe(1);
+  releaseInspection();
+  await expect(page.getByRole("button",{name:"Успешно"})).toBeVisible();
+  await expect(page.getByText("Токен успешно проверен")).toBeVisible();
+  await expect(page.getByRole("button",{name:"Подтвердить подключение"})).toBeVisible();
+  await page.getByRole("button",{name:"Другой токен"}).click();
+  await expect(page.getByRole("button",{name:"Проверить",exact:true})).toBeVisible();
+  await expect(page.getByLabel("Telegram Bot API token")).toBeEnabled();
+});
+
+test("BotFather token rejection never reports success and permits retry",async({page})=>{
+  await page.route("**/api/auth/account",route=>route.fulfill({
+    status:200,contentType:"application/json",body:JSON.stringify({authenticated:true})
+  }));
+  await page.route("**/api/onboarding",route=>route.fulfill({
+    status:200,contentType:"application/json",body:JSON.stringify({bot:{id:"c86fd579-1498-462f-8980-83a52aa42e1f"}})
+  }));
+  await page.route("**/api/channels/telegram/token",route=>route.fulfill({
+    status:401,contentType:"application/json",body:JSON.stringify({error:"Telegram отклонил токен"})
+  }));
+  await page.goto("/onboarding");
+  await page.getByRole("button",{name:/Продолжить/}).click();
+  await page.getByRole("button",{name:/Продолжить/}).click();
+  await page.getByRole("textbox",{name:/Название бота/}).fill("QA E2E demo");
+  await page.getByPlaceholder("Telegram Bot API token").fill("123456789:"+"A".repeat(46));
+  await page.getByRole("button",{name:"Проверить",exact:true}).click();
+  await expect(page.getByRole("alert")).toContainText("Telegram отклонил токен");
+  await expect(page.getByRole("button",{name:"Проверить",exact:true})).toBeEnabled();
+  await expect(page.getByRole("button",{name:"Успешно"})).toHaveCount(0);
+  await expect(page.getByText("Токен успешно проверен")).toHaveCount(0);
+});
+
+
+test("wizard navigation has one back button and header cabinet link",async({page})=>{
+ await page.route("**/api/auth/account",route=>route.fulfill({
+  status:200,contentType:"application/json",body:JSON.stringify({authenticated:true})
+ }));
+ await page.goto("/onboarding");
+ await expect(page.locator("header").getByRole("link",{name:"В кабинет"})).toHaveAttribute("href","/workspace");
+ await expect(page.getByRole("button",{name:"Назад",exact:true})).toHaveCount(0);
+ await expect(page.getByRole("button",{name:"Назад к предыдущему шагу"})).toHaveCount(0);
+ await page.getByRole("button",{name:/Продолжить/}).click();
+ await expect(page.getByRole("heading",{name:"Выберите шаблон"})).toBeVisible();
+ await expect(page.getByRole("button",{name:"Назад",exact:true})).toHaveCount(1);
+ await expect(page.getByRole("button",{name:"Назад к предыдущему шагу"})).toHaveCount(0);
+ await expect(page.locator("header").getByRole("link",{name:"В кабинет"})).toBeVisible();
+ await page.getByRole("button",{name:"Назад",exact:true}).click();
+ await expect(page.getByRole("heading",{name:"Подключите Telegram"})).toBeVisible();
+});
+
+test("wizard recovers a connected Telegram bot after lost connect response",async({page})=>{
+ const id="c86fd579-1498-462f-8980-83a52aa42e1f";
+ let confirmCount=0, statusCount=0;
+ await page.route("**/api/auth/account",route=>route.fulfill({
+  status:200,contentType:"application/json",body:JSON.stringify({authenticated:true})
+ }));
+ await page.route("**/api/onboarding",route=>route.fulfill({
+  status:200,contentType:"application/json",body:JSON.stringify({bot:{id}})
+ }));
+ await page.route("**/api/channels/telegram/token**",async route=>{
+  if(route.request().method()==="GET"){
+   statusCount++;
+   return route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({
+    connection:{status:"connected",username:"BotStudioQaTestBot",mode:"botfather"}
+   })});
+  }
+  const payload=route.request().postDataJSON() as {action?:string};
+  if(payload.action==="inspect")return route.fulfill({
+   status:200,contentType:"application/json",body:JSON.stringify({
+    credentialId:"c3d21650-e18c-4f9a-83a9-9a2663df04ee",
+    bot:{id:123456789,name:"QA Bot",username:"BotStudioQaTestBot"}
+   })
+  });
+  if(payload.action==="connect"){
+   confirmCount++;
+   return route.fulfill({status:502,contentType:"application/json",
+    body:JSON.stringify({error:"Gateway timed out after Telegram finished"})});
+  }
+  throw new Error("Unexpected Telegram QA action");
+ });
+ await page.goto("/onboarding");
+ await page.getByRole("button",{name:/Продолжить/}).click();
+ await page.getByRole("button",{name:/Продолжить/}).click();
+ await page.getByRole("textbox",{name:/Название бота/}).fill("QA E2E demo");
+ await page.getByPlaceholder("Telegram Bot API token").fill("123456789:"+"A".repeat(46));
+ await page.getByRole("button",{name:"Проверить",exact:true}).click();
+ await expect(page.getByText("Токен успешно проверен")).toBeVisible();
+ await page.getByRole("button",{name:"Подтвердить подключение"}).click();
+ await expect.poll(()=>confirmCount,{message:"Telegram connect POST must run"}).toBe(1);
+ await expect.poll(()=>statusCount,{message:"Browser must re-read channel status after POST fails",timeout:8000}).toBe(1);
+ await expect(page.getByText("Telegram подключён: @BotStudioQaTestBot")).toBeVisible({timeout:10000});
+ await expect(page.getByRole("alert")).toHaveCount(0);
+});
+
+
+test("dish modal scroll and local photo upload save a returned image URL",async({page})=>{
+ const id="d071c20c-b54c-45cc-8033-982a09c945a1";
+ let uploadCount=0,saved:Record<string,unknown>|null=null;
+ await page.route("**/api/workspace",route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({
+  bots:[{id,name:"QA Restaurant",username:"qa_food_bot",template_type:"delivery",metrics:{ordersToday:0,revenueTodayMinor:0,catalogItems:0,customers:0,recentOrders:[]}}]
+ })}));
+ await page.route("**/api/catalog/categories?bot=*",route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({categories:[]})}));
+ await page.route("**/api/catalog?bot=*",route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({items:[]})}));
+ await page.route("**/api/catalog/image",async route=>{
+  uploadCount++;
+  await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({imageUrl:"https://example.org/dish.jpg"})});
+ });
+ await page.route("**/api/catalog",async route=>{
+  if(route.request().method()==="POST"){
+   saved=route.request().postDataJSON() as Record<string,unknown>;
+   await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({item:{id:"96f0e739-8adf-4c3a-8dd7-e7205ae0a110"}})});
+  }else await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({items:[]})});
+ });
+ await page.goto("/workspace?bot="+id+"&section=catalog");
+ await expect(page.getByRole("heading",{name:"Меню"})).toBeVisible();
+ await page.getByRole("button",{name:"Добавить блюдо"}).first().click();
+ const dialog=page.getByRole("dialog",{name:"Добавить блюдо"});
+ await expect(dialog).toBeVisible();
+ await expect(dialog.locator(".overflow-y-auto")).toBeVisible();
+ await dialog.getByLabel("Загрузить фото").setInputFiles({name:"qa.jpg",mimeType:"image/jpeg",buffer:Buffer.from([255,216,255,224,0,1,2,3])});
+ await expect(dialog.getByRole("img",{name:"Предпросмотр фотографии"})).toBeVisible();
+ await expect.poll(()=>uploadCount).toBe(1);
+ await dialog.locator("input[maxlength='120']").fill("QA обед");
+ await dialog.getByRole("textbox",{name:"Стоимость"}).fill("45000");
+ await dialog.getByRole("button",{name:"Сохранить",exact:true}).click();
+ await expect.poll(()=>saved).toMatchObject({name:"QA обед",imageUrl:"https://example.org/dish.jpg"});
+});
+
+test("catalog photo upload rejects anonymous requests",async({request})=>{
+ const response=await request.post("/api/catalog/image",{multipart:{
+  botId:"d071c20c-b54c-45cc-8033-982a09c945a1",
+  image:{name:"photo.png",mimeType:"image/png",buffer:Buffer.from([137,80,78,71,13,10,26,10,1,2,3])}
+ }});
+ expect([401,403]).toContain(response.status());
+});
+
+
+test("delivery settings allow manual numbers with right-side units and save valid UZS amounts",async({page})=>{
+ const id="d071c20c-b54c-45cc-8033-982a09c945a1";
+ let submitted:Record<string,unknown>|null=null;
+ await page.route("https://tile.openstreetmap.org/**",route=>route.abort());
+ await page.route("**/api/workspace",route=>route.fulfill({
+  status:200,contentType:"application/json",body:JSON.stringify({bots:[{
+   id,name:"QA Delivery",username:"qa_bot",template_type:"delivery",
+   metrics:{ordersToday:0,revenueTodayMinor:0,catalogItems:0,customers:0,recentOrders:[]}
+  }]})
+ }));
+ await page.route("**/api/delivery/settings**",async route=>{
+  if(route.request().method()==="POST"){
+   submitted=route.request().postDataJSON() as Record<string,unknown>;
+   await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({ok:true})});
+  }else await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({
+   delivery:{enabled:true,centerLat:41.2995,centerLng:69.2401,radiusKm:60,feeMinor:0}
+  })});
+ });
+ await page.goto("/workspace?bot="+id+"&section=delivery_settings");
+ await expect(page.getByRole("heading",{name:"Зона и стоимость доставки"})).toBeVisible();
+ const radius=page.getByRole("textbox",{name:"Радиус доставки"});
+ const fee=page.getByRole("textbox",{name:"Стоимость доставки"});
+ await expect(radius).toHaveAttribute("type","text");
+ await expect(fee).toHaveAttribute("type","text");
+ await expect(radius).toHaveAttribute("inputmode","decimal");
+ await expect(fee).toHaveAttribute("inputmode","numeric");
+ await expect(radius.locator("..").getByText("км",{exact:true})).toBeVisible();
+ await expect(fee.locator("..").getByText("сум",{exact:true})).toBeVisible();
+ await expect(page.locator('input[type="number"]')).toHaveCount(0);
+ await radius.fill("");
+ await expect(radius).toHaveValue("");
+ await expect(page.getByRole("button",{name:"Сохранить черновик"})).toBeDisabled();
+ await radius.fill("7,5");
+ await fee.fill("15 000");
+ await expect(page.getByRole("button",{name:"Сохранить черновик"})).toBeEnabled();
+ await page.getByRole("button",{name:"Сохранить черновик"}).click();
+ await expect(page.getByRole("status")).toContainText("Черновик доставки сохранён");
+ await expect.poll(()=>submitted).toMatchObject({botId:id,delivery:{radiusKm:7.5,feeMinor:1500000}});
+});
+
+
+test("demo catalog import requires modal confirmation and cannot create data on cancel",async({page})=>{
+ const id="d071c20c-b54c-45cc-8033-982a09c945a1";
+ let imports=0,deletes=0,imported=false;
+ await page.route("**/api/workspace",route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({
+  bots:[{id,name:"QA Restaurant",username:"qa_food_bot",template_type:"delivery",demoImported:imported,
+   metrics:{ordersToday:0,revenueTodayMinor:0,catalogItems:0,customers:0,recentOrders:[]}}]
+ })}));
+ await page.route("**/api/catalog?bot=*",route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({
+  items:imported?[{id:"f0e5da33-8459-4c49-885e-cdd0693e0401",name:"Классический бургер",description:"Демо",price_minor:4900000,currency:"UZS",is_active:true,image_url:"https://images.unsplash.com/photo-1568901346375-23c9450c58cd"}]:[]
+ })}));
+ await page.route("**/api/catalog/categories?bot=*",route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({
+  categories:imported?[{id:"c0e5da33-8459-4c49-885e-cdd0693e0401",name:"Бургеры",position:0,is_active:true}]:[]
+ })}));
+ await page.route("**/api/demo-content**",async route=>{
+  if(route.request().method()==="GET"){
+   await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({
+    imported,canImport:true,notifications:imported?[{id:"d0e5da33-8459-4c49-885e-cdd0693e0401",title:"Новый демо-заказ",body:"Это тест",created_at:new Date().toISOString()}]:[]
+   })});return;
+  }
+  if(route.request().method()==="POST"){
+   const b=route.request().postDataJSON() as {botId:string;confirm:string};
+   expect(b).toMatchObject({botId:id,confirm:"IMPORT_DEMO_CONTENT"});
+   imports++;imported=true;
+   await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({ok:true,imported:true,items:8,orders:3,notifications:3})});return;
+  }
+  if(route.request().method()==="DELETE"){
+   const b=route.request().postDataJSON() as {botId:string;confirm:string};
+   expect(b).toMatchObject({botId:id,confirm:"REMOVE_DEMO_CONTENT"});
+   deletes++;imported=false;
+   await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({ok:true,removed:true})});return;
+  }
+  await route.abort();
+ });
+ await page.goto("/workspace?bot="+id+"&section=catalog");
+ await expect(page.getByRole("button",{name:"Загрузить демо-данные"})).toBeVisible();
+ expect(imports).toBe(0);
+ await page.getByRole("button",{name:"Загрузить демо-данные"}).click();
+ const modal=page.getByRole("dialog",{name:"Подтверждение загрузки демо-данных"});
+ await expect(modal).toBeVisible();
+ await expect(modal).toContainText("3 тестовых заказа");
+ await expect(modal.getByRole("button",{name:"Да, загрузить демо"})).toBeDisabled();
+ await modal.getByRole("button",{name:"Отмена"}).click();
+ expect(imports).toBe(0);
+ await page.getByRole("button",{name:"Загрузить демо-данные"}).click();
+ await modal.getByRole("checkbox").check();
+ await modal.getByRole("button",{name:"Да, загрузить демо"}).click();
+ await expect(page.getByRole("button",{name:"Убрать демо"})).toBeVisible();
+ await expect(page.getByText("Классический бургер")).toBeVisible();
+ await expect(page.getByText("ДЕМО-КОНТЕНТ")).toBeVisible();
+ expect(imports).toBe(1);
+ await page.getByRole("button",{name:"Уведомления"}).click();
+ await expect(page.getByText("Новый демо-заказ")).toBeVisible();
+ await page.getByRole("button",{name:"Убрать демо"}).click();
+ const remove=page.getByRole("dialog",{name:"Подтверждение удаления демо-данных"});
+ await expect(remove.getByRole("button",{name:"Удалить демо"})).toBeDisabled();
+ await remove.getByRole("checkbox").check();
+ await remove.getByRole("button",{name:"Удалить демо"}).click();
+ await expect(page.getByRole("button",{name:"Загрузить демо-данные"})).toBeVisible();
+ expect(deletes).toBe(1);
+ expect(imports).toBe(1);
+});
+
+test("demo import refuses anonymous and unconfirmed requests",async({request})=>{
+ const id="d071c20c-b54c-45cc-8033-982a09c945a1";
+ const noConfirm=await request.post("/api/demo-content",{data:{botId:id}});
+ expect(noConfirm.status()).toBe(400);
+ const anonymous=await request.post("/api/demo-content",{
+  data:{botId:id,confirm:"IMPORT_DEMO_CONTENT"}
+ });
+ expect([401,403]).toContain(anonymous.status());
+ const read=await request.get("/api/demo-content?bot="+id);
+ expect([401,403]).toContain(read.status());
+});
+
+
+test("publishing a saved draft menu updates the public Mini App snapshot only after confirmation",async({page})=>{
+ const id="51089a67-742c-495a-8b8c-f04205062df0";
+ let published=false,updates=0,reads=0;
+ const categories=[{id:"c0e5da33-8459-4c49-885e-cdd0693e0401",name:"Тест 01",position:0,is_active:true}];
+ const items=[{id:"f0e5da33-8459-4c49-885e-cdd0693e0401",name:"Плов традиционный",description:"Плов",price_minor:6500000,currency:"UZS",category_id:categories[0].id,is_active:true,stock_quantity:10}];
+ await page.route("**/api/workspace",route=>route.fulfill({
+  status:200,contentType:"application/json",
+  body:JSON.stringify({bots:[{id,name:"закажем еду",username:"studio_51089a67_bot",template_type:"delivery",
+   metrics:{ordersToday:0,revenueTodayMinor:0,catalogItems:1,customers:0,recentOrders:[]}}]})
+ }));
+ await page.route("**/api/catalog?bot=*",route=>route.fulfill({
+  status:200,contentType:"application/json",body:JSON.stringify({items})
+ }));
+ await page.route("**/api/catalog/categories?bot=*",route=>route.fulfill({
+  status:200,contentType:"application/json",body:JSON.stringify({categories})
+ }));
+ await page.route("**/api/demo-content?bot=*",route=>route.fulfill({
+  status:200,contentType:"application/json",body:JSON.stringify({imported:false,canImport:false,notifications:[]})
+ }));
+ await page.route("**/api/catalog/publish**",async route=>{
+  if(route.request().method()==="GET"){
+   reads++;
+   await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({
+    changed:!published,isPublished:true,canUpdate:true,hasDemo:false,revision:published?3:2,
+    draftItems:1,draftCategories:1,publishedItems:published?1:0,publishedCategories:published?1:0
+   })});
+  }else{
+   const body=route.request().postDataJSON() as {botId?:string;confirm?:string;expectedRevision?:number};
+   expect(body).toMatchObject({botId:id,confirm:"PUBLISH_CATALOG",expectedRevision:2});
+   updates++;published=true;
+   await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({ok:true,updated:true,items:1,categories:1,revision:3})});
+  }
+ });
+ await page.goto("/workspace?bot="+id+"&section=catalog");
+ await expect(page.getByRole("heading",{name:"Меню"})).toBeVisible();
+ await expect(page.getByText("Изменения меню ещё не опубликованы")).toBeVisible();
+ await expect(page.getByText(/В Telegram Mini App: 0 позиций и 0 категорий/)).toBeVisible();
+ expect(updates).toBe(0);
+ await page.getByRole("button",{name:"Обновить Mini App"}).click();
+ const confirm=page.getByRole("dialog",{name:"Подтвердить обновление Mini App"});
+ await expect(confirm).toBeVisible();
+ await confirm.getByRole("button",{name:"Отмена"}).click();
+ expect(updates).toBe(0);
+ await page.getByRole("button",{name:"Обновить Mini App"}).click();
+ await confirm.getByRole("button",{name:"Да, обновить Mini App"}).click();
+ await expect(page.getByRole("status").filter({hasText:"Каталог опубликован"})).toBeVisible();
+ await expect(page.getByText("Изменения меню ещё не опубликованы")).toHaveCount(0);
+ expect(updates).toBe(1);
+ expect(reads).toBeGreaterThanOrEqual(2);
+});
+
+test("catalog republish endpoint requires owner login and explicit confirmation",async({request})=>{
+ const id="51089a67-742c-495a-8b8c-f04205062df0";
+ const noConfirm=await request.post("/api/catalog/publish",{data:{botId:id,expectedRevision:2}});
+ expect(noConfirm.status()).toBe(400);
+ const unauthorized=await request.post("/api/catalog/publish",{data:{botId:id,expectedRevision:2,confirm:"PUBLISH_CATALOG"}});
+ expect([401,403]).toContain(unauthorized.status());
+ const read=await request.get("/api/catalog/publish?bot="+id);
+ expect([401,403]).toContain(read.status());
+});
