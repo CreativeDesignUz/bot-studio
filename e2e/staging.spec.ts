@@ -245,7 +245,8 @@ test("admin cabinet renders the selected delivery bot and exposes creation", asy
   await page.goto("/workspace");
   await expect(page.getByRole("heading",{name:"Обзор"})).toBeVisible();
   await expect(page.locator("select").first()).toHaveValue(id);
-  await expect(page.getByRole("link",{name:"Создать ещё бота"})).toBeVisible();
+  await expect(page.getByRole("link",{name:/Создать (ещё )?бота/})).toBeVisible();
+   for(const title of ["Меню","Заказы","Доставка","Клиенты","Акции","Поддержка","Отчёты","Оформление Mini App","Настройки доставки","Настройки бота","Настройки доступа"])await expect(page.getByRole("link",{name:title}).or(page.getByRole("button",{name:title})).first()).toBeVisible();
 });
 
 test("admin theme and template picker saves customer choice and default dark mode", async ({ page }) => {
@@ -448,4 +449,46 @@ test("wizard recovers a connected Telegram bot after lost connect response",asyn
  await expect.poll(()=>statusCount,{message:"Browser must re-read channel status after POST fails",timeout:8000}).toBe(1);
  await expect(page.getByText("Telegram подключён: @BotStudioQaTestBot")).toBeVisible({timeout:10000});
  await expect(page.getByRole("alert")).toHaveCount(0);
+});
+
+
+test("dish modal scroll and local photo upload save a returned image URL",async({page})=>{
+ const id="d071c20c-b54c-45cc-8033-982a09c945a1";
+ let uploadCount=0,saved:Record<string,unknown>|null=null;
+ await page.route("**/api/workspace",route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({
+  bots:[{id,name:"QA Restaurant",username:"qa_food_bot",template_type:"delivery",metrics:{ordersToday:0,revenueTodayMinor:0,catalogItems:0,customers:0,recentOrders:[]}}]
+ })}));
+ await page.route("**/api/catalog/categories?bot=*",route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({categories:[]})}));
+ await page.route("**/api/catalog?bot=*",route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({items:[]})}));
+ await page.route("**/api/catalog/image",async route=>{
+  uploadCount++;
+  await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({imageUrl:"https://example.org/dish.jpg"})});
+ });
+ await page.route("**/api/catalog",async route=>{
+  if(route.request().method()==="POST"){
+   saved=route.request().postDataJSON() as Record<string,unknown>;
+   await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({item:{id:"96f0e739-8adf-4c3a-8dd7-e7205ae0a110"}})});
+  }else await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({items:[]})});
+ });
+ await page.goto("/workspace?bot="+id+"&section=catalog");
+ await expect(page.getByRole("heading",{name:"Меню"})).toBeVisible();
+ await page.getByRole("button",{name:"Добавить блюдо"}).first().click();
+ const dialog=page.getByRole("dialog",{name:"Добавить блюдо"});
+ await expect(dialog).toBeVisible();
+ await expect(dialog.locator(".overflow-y-auto")).toBeVisible();
+ await dialog.getByLabel("Загрузить фото").setInputFiles({name:"qa.jpg",mimeType:"image/jpeg",buffer:Buffer.from([255,216,255,224,0,1,2,3])});
+ await expect(dialog.getByRole("img",{name:"Предпросмотр фотографии"})).toBeVisible();
+ await expect.poll(()=>uploadCount).toBe(1);
+ await dialog.locator("input[maxlength='120']").fill("QA обед");
+ await dialog.getByRole("textbox",{name:"Стоимость"}).fill("45000");
+ await dialog.getByRole("button",{name:"Сохранить",exact:true}).click();
+ await expect.poll(()=>saved).toMatchObject({name:"QA обед",imageUrl:"https://example.org/dish.jpg"});
+});
+
+test("catalog photo upload rejects anonymous requests",async({request})=>{
+ const response=await request.post("/api/catalog/image",{multipart:{
+  botId:"d071c20c-b54c-45cc-8033-982a09c945a1",
+  image:{name:"photo.png",mimeType:"image/png",buffer:Buffer.from([137,80,78,71,13,10,26,10,1,2,3])}
+ }});
+ expect([401,403]).toContain(response.status());
 });
