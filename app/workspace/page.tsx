@@ -47,6 +47,11 @@ export default function WorkspacePage() {
     async function loadWorkspace(){
       try{
         const response=await fetch("/api/workspace",{headers:{"x-telegram-init-data":initData}});
+        if(response.status===401){
+          // Do not render guest or stale workspaces as an administrator dashboard.
+          window.location.replace("/auth");
+          return;
+        }
         if(!response.ok)throw new Error("Workspace request failed");
         const result=await response.json() as WorkspaceResponse;
         const loaded=result.bots.map(item=>({id:item.id,name:item.name,type:item.template_type,username:item.username??`studio_${item.id.slice(0,8)}_bot`,metrics:item.metrics}));
@@ -79,7 +84,8 @@ export default function WorkspacePage() {
         <header className="sticky top-0 z-20 flex h-[72px] items-center gap-3 border-b border-[#e4e7ec] bg-white/90 px-4 backdrop-blur-xl sm:px-7">
           <label className="relative min-w-0 flex-1 lg:hidden"><select value={botId} onChange={(event) => switchBot(event.target.value)} className="h-11 w-full appearance-none rounded-xl border border-[#e4e7ec] bg-white px-3 pr-9 text-sm font-semibold">{bots.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2" /></label>
           <label className="relative hidden max-w-md flex-1 lg:block"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#98a2b3]" /><input className="h-11 w-full rounded-xl border border-[#e4e7ec] bg-[#f9fafb] pl-10 pr-4 text-sm outline-none focus:border-[#6d45f5]" placeholder="Поиск по кабинету" /></label>
-          <button className="ml-auto grid size-11 place-items-center rounded-xl border border-[#e4e7ec] bg-white"><Bell className="size-[18px]" /></button><Link href="/workspace/account" aria-label="Настройки аккаунта и входа" className="grid size-10 place-items-center rounded-full bg-[#eee9ff] text-sm font-semibold text-[#5934dc] no-underline">A</Link>
+          <Link href="/onboarding" aria-label="Создать ещё бота" title="Создать бота" className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#6541f5] text-white no-underline lg:hidden"><Plus className="size-[20px]" /></Link>
+          <button className="ml-auto grid size-11 shrink-0 place-items-center rounded-xl border border-[#e4e7ec] bg-white"><Bell className="size-[18px]" /></button><Link href="/workspace/account" aria-label="Настройки аккаунта и входа" className="grid size-10 place-items-center rounded-full bg-[#eee9ff] text-sm font-semibold text-[#5934dc] no-underline">A</Link>
         </header>
         <div className="border-b border-[#e4e7ec] bg-white px-4 py-2 lg:hidden"><div className="flex gap-1 overflow-x-auto">{template.modules.map(({ id, label }) => <button key={id} onClick={() => setSection(id)} className={`shrink-0 rounded-full px-3 py-2 text-xs font-semibold ${currentSection === id ? "bg-[#101828] text-white" : "bg-[#f2f4f7] text-[#667085]"}`}>{label}</button>)}{(bot.type==="delivery"||bot.type==="store")&&<button type="button" onClick={()=>setSection("miniapp_appearance")} className={`shrink-0 rounded-full px-3 py-2 text-xs font-semibold ${currentSection==="miniapp_appearance"?"bg-[#101828] text-white":"bg-[#f2f4f7] text-[#667085]"}`}>Оформление Mini App</button>}{(bot.type==="delivery"||bot.type==="store")&&<button type="button" onClick={()=>setSection("delivery_settings")} className="shrink-0 rounded-full bg-[#f2f4f7] px-3 py-2 text-xs font-semibold">Доставка</button>}</div></div>
         <div className="p-4 pb-24 sm:p-7 sm:pb-24 lg:p-9">
