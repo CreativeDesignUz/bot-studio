@@ -35,7 +35,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   let input: CategoryPayload;
-  try { input = await request.json() as CategoryPayload; } catch { return bad("Некорректные данные.", 400); }
+  try { const parsed: unknown = await request.json(); if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return bad("Некорректные данные.", 400); input = parsed as CategoryPayload; } catch { return bad("Некорректные данные.", 400); }
   if (!uuid(input.botId) || (input.id !== undefined && !uuid(input.id))) return bad("Укажите корректную категорию и бота.", 400);
   const name = typeof input.name === "string" ? input.name.trim() : "";
   if (!name || name.length > 80) return bad("Название категории должно содержать от 1 до 80 символов.", 400);
@@ -66,7 +66,7 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   let input: CategoryPayload;
-  try { input = await request.json() as CategoryPayload; } catch { return bad("Некорректные данные.", 400); }
+  try { const parsed: unknown = await request.json(); if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return bad("Некорректные данные.", 400); input = parsed as CategoryPayload; } catch { return bad("Некорректные данные.", 400); }
   if (!uuid(input.botId) || !uuid(input.id)) return bad("Укажите категорию.", 400);
   const result = await owner(request, input.botId, input.initData ?? "");
   if ("error" in result) return result.error;
