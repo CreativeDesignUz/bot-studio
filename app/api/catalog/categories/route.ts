@@ -39,7 +39,7 @@ export async function POST(request: Request) {
   if (!uuid(input.botId) || (input.id !== undefined && !uuid(input.id))) return bad("Укажите корректную категорию и бота.", 400);
   const name = typeof input.name === "string" ? input.name.trim() : "";
   if (!name || name.length > 80) return bad("Название категории должно содержать от 1 до 80 символов.", 400);
-  if (input.position !== undefined && (!Number.isSafeInteger(input.position) || input.position < 0 || input.position > 10000))
+  if (input.position !== undefined && (!Number.isSafeInteger(input.position) || input.position < -10000 || input.position > 10000))
     return bad("Некорректный порядок категории.", 400);
   if (input.isActive !== undefined && typeof input.isActive !== "boolean") return bad("Некорректная видимость.", 400);
   const result = await owner(request, input.botId, input.initData ?? "");
