@@ -31,8 +31,8 @@ export default function WorkspaceSidebar({botId,botType,bots,activeSection,onSec
   const controller=new AbortController();
   const telegram=(window as typeof window&{Telegram?:{WebApp?:{initData?:string}}}).Telegram?.WebApp;
   void fetch("/api/workspace",{headers:{"x-telegram-init-data":telegram?.initData??""},signal:controller.signal,cache:"no-store"})
-   .then(async response=>response.ok?response.json():null)
-   .then((data:{bots?:Array<{id:string;name:string;template_type:BotTemplateId}>}|null)=>{
+   .then(async response=>response.ok?await response.json() as {bots?:Array<{id:string;name:string;template_type:BotTemplateId}>}:null)
+   .then(data=>{
     if(controller.signal.aborted||!data?.bots)return;
     setAvailableBots(data.bots.filter(bot=>bot.template_type in productTemplates).map(bot=>({id:bot.id,name:bot.name,type:bot.template_type})));
    }).catch(()=>{});
