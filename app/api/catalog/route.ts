@@ -45,7 +45,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   let input: ItemPayload;
-  try { input = await request.json() as ItemPayload; } catch { return bad("Некорректные данные.", 400); }
+  try { const parsed: unknown = await request.json(); if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return bad("Некорректные данные.", 400); input = parsed as ItemPayload; } catch { return bad("Некорректные данные.", 400); }
   if (!validId(input.botId)) return bad("Укажите бота.", 400);
   const name = typeof input.name === "string" ? input.name.trim() : "";
   const description = typeof input.description === "string" ? input.description.trim() : "";
@@ -83,7 +83,7 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   let input: ItemPayload;
-  try { input = await request.json() as ItemPayload; } catch { return bad("Некорректные данные.", 400); }
+  try { const parsed: unknown = await request.json(); if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return bad("Некорректные данные.", 400); input = parsed as ItemPayload; } catch { return bad("Некорректные данные.", 400); }
   if (!validId(input.botId) || !validId(input.id)) return bad("Укажите элемент каталога.", 400);
   const auth = await authorize(request, input.botId!, input.initData ?? "");
   if ("error" in auth) return auth.error;
