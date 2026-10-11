@@ -44,6 +44,21 @@ export default function OnboardingPage(){
  const template=useMemo(()=>templates.find(item=>item.id===templateId)??templates[0],[templateId]);
  const SelectedIcon=template.Icon;
  useEffect(()=>{return()=>{if(avatarUrl.startsWith("blob:"))URL.revokeObjectURL(avatarUrl)}},[avatarUrl]);
+ // Browser-based bot creation requires a verified account. Telegram Mini Apps
+ // can instead use their server-verified Telegram initData in protected APIs.
+ useEffect(()=>{
+  if(telegramData())return;
+  const controller=new AbortController();
+  void fetch("/api/auth/account",{signal:controller.signal,cache:"no-store"})
+   .then(async response=>{
+    if(!response.ok)throw new Error("Could not verify account");
+    return response.json() as Promise<{authenticated?:boolean}>;
+   })
+   .then(account=>{if(!controller.signal.aborted&&!account.authenticated)router.replace("/auth")})
+   .catch(()=>{if(!controller.signal.aborted)router.replace("/auth")});
+  return()=>controller.abort();
+ },[router]);
+
  const resetMessage=()=>{setError("");setProgressNotice("")};
  const goBack=()=>{resetMessage();setStage(s=>Math.max(0,s-1) as Stage)};
  async function ensureBot():Promise<string|null>{
