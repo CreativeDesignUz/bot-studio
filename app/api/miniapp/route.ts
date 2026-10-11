@@ -15,18 +15,26 @@ export async function GET(request: Request) {
   try {
     const supabase = getSupabaseServer({ privileged: true });
     const { data: bot, error } = await supabase.from("bots")
-      .select("id,name,description,logo_url,primary_color,template_type,status,publish_status,published_snapshot,settings")
+      .select("id,name,description,logo_url,primary_color,template_type,status,publish_status,published_snapshot")
       .eq("id", botId).single();
     if (error || !bot || bot.status !== "active" || bot.publish_status !== "published")
       return jsonError("Магазин ещё не опубликован", 404);
-    const { data: items, error: itemsError } = await supabase.from("catalog_items")
-      .select("id,name,description,image_url,price_minor,currency,item_type,category_id")
-      .eq("bot_id", botId).eq("is_active", true).order("position", { ascending: true }).limit(200);
-    if (itemsError) throw itemsError;
-    const { data: categories, error: categoryError } = await supabase.from("catalog_categories").select("id,name,position").eq("bot_id",botId).eq("is_active",true).order("position");
-    if(categoryError)throw categoryError;
+    const [itemResult, categoryResult] = await Promise.all([
+      supabase.from("catalog_items")
+        .select("id,name,description,image_url,price_minor,currency,item_type,category_id")
+        .eq("bot_id", botId).eq("is_active", true).order("position", { ascending: true }).limit(200),
+      supabase.from("catalog_categories")
+        .select("id,name,position").eq("bot_id", botId).eq("is_active", true).order("position"),
+    ]);
+    if (itemResult.error) throw itemResult.error;
+    if (categoryResult.error) throw categoryResult.error;
+    const items = itemResult.data;
+    const categories = categoryResult.data;
     const published = (bot.published_snapshot ?? {}) as Record<string, unknown>;
-    const designSettings=((bot.settings??{}) as Record<string,unknown>).miniapp_design;
+    // Buyer-visible theme comes exclusively from the last successful publication,
+    // not the seller's still-editable draft settings.
+    const publishedSettings = (published.settings ?? {}) as Record<string, unknown>;
+    const designSettings = publishedSettings.miniapp_design;
     return Response.json({
       bot: {
         id: bot.id, name: published.name ?? bot.name, description: published.description ?? bot.description,
