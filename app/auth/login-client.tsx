@@ -54,7 +54,6 @@ export default function LoginPage({callback=false}:{callback?:boolean}){
  useEffect(()=>{
   if(!isCallback||!providers||exchangeStarted.current)return;
   exchangeStarted.current=true;
-  let cancelled=false;
   async function exchange(){
    setWorking(true);
    try{
@@ -68,13 +67,11 @@ export default function LoginPage({callback=false}:{callback?:boolean}){
     // PKCE verifier is verified by Supabase before issuing an access token.
     const {data,error:exchangeError}=await client.auth.exchangeCodeForSession(code);
     if(exchangeError||!data.session?.access_token)throw new Error("Сессия Google не подтверждена. Начните вход заново.");
-    if(cancelled)return;
     await finish({provider:"google",accessToken:data.session.access_token,mode:params.get("mode")==="link"?"link":"login"});
-   }catch(e){if(!cancelled)setError(e instanceof Error?e.message:"Не удалось подтвердить Google.");}
-   finally{if(!cancelled)setWorking(false)}
+   }catch(e){setError(e instanceof Error?e.message:"Не удалось подтвердить Google.");}
+   finally{setWorking(false)}
   }
   void exchange();
-  return()=>{cancelled=true};
  },[isCallback,providers,getClient,finish]);
 
  async function googleLogin(){
