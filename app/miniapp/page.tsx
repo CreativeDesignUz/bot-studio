@@ -77,9 +77,11 @@ export default function MiniAppPage() {
     if (!telegram?.initData) { setError("Для оформления заказа откройте магазин через Telegram"); return; }
     checkoutKey.current ??= crypto.randomUUID().replaceAll("-", "");
     setError(""); setSending(true);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
     try {
       const response = await fetch("/api/miniapp", {
-        method: "POST", headers: { "content-type": "application/json" },
+        method: "POST", headers: { "content-type": "application/json" }, signal: controller.signal,
         body: JSON.stringify({ botId: shop.bot.id, initData: telegram.initData, requestKey: checkoutKey.current, name, fulfillment, address,
           items: selected.map(item => ({ id: item.id, quantity: cart[item.id] })) }),
       });
@@ -87,8 +89,10 @@ export default function MiniAppPage() {
       if (!response.ok) throw new Error(body.error ?? "Не удалось оформить заказ");
       setSuccess(body.orderId ?? ""); setCart({}); checkoutKey.current = null; setTab("catalog");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка заказа");
-    } finally { setSending(false); }
+      setError(controller.signal.aborted
+        ? "Не удалось получить подтверждение заказа за 15 секунд. Проверьте заказы перед повтором: запрос мог быть принят рестораном."
+        : e instanceof Error ? e.message : "Ошибка заказа");
+    } finally { clearTimeout(timeout); setSending(false); }
   }
 
   if (loading) return <main className="grid min-h-dvh place-items-center text-[#667085]">Загружаем магазин…</main>;
@@ -123,7 +127,7 @@ export default function MiniAppPage() {
         {showFoodCategories?<>
           <div className="mt-6 grid grid-cols-2 gap-[10px]">{shop.categories?.map(c=><button key={c.id} onClick={()=>setCategory(c.id)} className="h-[46px] rounded-[13px] px-[14px] text-left text-[13px] font-semibold" style={{background:category===c.id?(dark?"#45302e":"#fff0e8"):paper,color:ink,border:category===c.id?`1px solid ${color}`:"1px solid transparent"}}>{c.name}</button>)}</div>
           <div className="mt-7 space-y-3">{visibleFood.map(item=><article key={item.id} className="flex min-h-[92px] items-center gap-3 overflow-hidden rounded-[14px] p-3" style={{background:dark?"#302623":"#fff0e8"}}>
-            {item.image_url?<img src={item.image_url} className="h-[68px] w-[68px] rounded-[11px] object-cover" alt={item.name}/>:<div className="grid h-[68px] w-[68px] rounded-[11px] place-items-center" style={{background:color}}><ShoppingBag className="text-white"/></div>}
+            {item.image_url?<img src={item.image_url} loading="lazy" decoding="async" className="h-[68px] w-[68px] rounded-[11px] object-cover" alt={item.name}/>:<div className="grid h-[68px] w-[68px] rounded-[11px] place-items-center" style={{background:color}}><ShoppingBag className="text-white"/></div>}
             <div className="min-w-0 flex-1"><h3 className="truncate text-[14px] font-semibold">{item.name}</h3><p className="mt-1 text-xs" style={{color:hint}}>{item.price_minor==null?"По запросу":money(Number(item.price_minor),item.currency)}</p></div>
             <button aria-label={`Добавить ${item.name}`} onClick={()=>adjust(item.id,1)} className="grid size-8 shrink-0 place-items-center rounded-full text-white" style={{background:color}}><Plus size={16}/></button>
           </article>)}</div>
@@ -136,7 +140,7 @@ export default function MiniAppPage() {
           <div className={foodStyle==="food01"?"mt-3 grid grid-cols-2 gap-2":"mt-3 flex gap-2 overflow-x-auto pb-2"}>{(shop.categories??[]).slice(0,6).map(c=><button key={c.id} onClick={()=>{setCategory(c.id);setShowFoodCategories(true)}} className={foodStyle==="food01"?"h-[46px] rounded-[13px] px-[14px] text-left text-[13px] font-semibold":"shrink-0 rounded-[13px] px-4 py-3 text-[13px] font-semibold"} style={{background:paper}}>{c.name}</button>)}</div>
           <h2 className="mb-3 mt-7 text-lg font-bold">Популярные блюда</h2>
           <div className={foodStyle==="food01"?"space-y-3":"grid grid-cols-2 gap-3"}>{visibleFood.length===0&&<p className="text-sm" style={{color:hint}}>Блюда не найдены</p>}{visibleFood.map(item=><article key={item.id} className={foodStyle==="food01"?"flex items-center gap-3 rounded-[14px] p-3":"overflow-hidden rounded-[16px] p-2"} style={{background:paper}}>
-           {item.image_url?<img src={item.image_url} alt={item.name} className={foodStyle==="food01"?"h-[78px] w-[92px] rounded-[11px] object-cover":"aspect-[4/3] w-full rounded-[12px] object-cover"}/>:<div className="grid h-[78px] w-[92px] place-items-center rounded-xl" style={{background:color}}><ShoppingBag className="text-white"/></div>}
+           {item.image_url?<img src={item.image_url} alt={item.name} loading="lazy" decoding="async" className={foodStyle==="food01"?"h-[78px] w-[92px] rounded-[11px] object-cover":"aspect-[4/3] w-full rounded-[12px] object-cover"}/>:<div className="grid h-[78px] w-[92px] place-items-center rounded-xl" style={{background:color}}><ShoppingBag className="text-white"/></div>}
            <div className="min-w-0 flex-1"><h3 className="mt-2 line-clamp-2 text-[14px] font-semibold">{item.name}</h3><p className="mt-1 text-xs" style={{color:hint}}>{item.price_minor==null?"По запросу":money(Number(item.price_minor),item.currency)}</p><button onClick={()=>adjust(item.id,1)} disabled={item.price_minor==null} className="mt-2 inline-flex h-8 items-center gap-1 rounded-full px-3 text-xs font-semibold text-white disabled:opacity-50" style={{background:color}}><Plus size={14}/> Добавить</button></div>
           </article>)}</div>
         </>}
@@ -151,7 +155,7 @@ export default function MiniAppPage() {
           {shop.bot.template==="delivery"&&!!shop.categories?.length&&<div className="mb-4 flex gap-2 overflow-x-auto pb-2"><button type="button" onClick={()=>setCategory("all")} className="shrink-0 rounded-full px-4 py-2 text-xs font-semibold" style={{background:category==="all"?color:"#fff",color:category==="all"?"#fff":"#667085"}}>Все блюда</button>{shop.categories.map(c=><button key={c.id} type="button" onClick={()=>setCategory(c.id)} className="shrink-0 rounded-full px-4 py-2 text-xs font-semibold" style={{background:category===c.id?color:"#fff",color:category===c.id?"#fff":"#667085"}}>{c.name}</button>)}</div>}
           {!shop.items.length ? <div className="rounded-2xl bg-white p-9 text-center text-sm text-[#667085]">В каталоге пока нет товаров</div> :
           <div className="grid grid-cols-2 gap-3">{shop.items.filter(item=>category==="all"||item.category_id===category).map(item => <article key={item.id} className="overflow-hidden rounded-[22px] border border-[#edf0f4] bg-white shadow-sm">
-            {item.image_url ? <img src={item.image_url} alt={item.name} className="aspect-[4/3] w-full object-cover"/> : <div className="grid aspect-[4/3] place-items-center bg-[#edf0f6]"><ShoppingBag size={29} color="#98a2b3"/></div>}
+            {item.image_url ? <img src={item.image_url} alt={item.name} loading="lazy" decoding="async" className="aspect-[4/3] w-full object-cover"/> : <div className="grid aspect-[4/3] place-items-center bg-[#edf0f6]"><ShoppingBag size={29} color="#98a2b3"/></div>}
             <div className="p-3"><h3 className="line-clamp-2 min-h-10 text-sm font-semibold">{item.name}</h3><p className="mb-3 line-clamp-2 min-h-8 text-xs text-[#98a2b3]">{item.description}</p>
               <div className="flex items-center justify-between gap-1"><span className="text-sm font-bold">{item.price_minor == null ? "По запросу" : money(Number(item.price_minor), item.currency)}</span></div>
               {item.price_minor != null && <div className="mt-3 flex justify-end">{cart[item.id] ? <div className="flex items-center gap-3"><button className="grid size-9 place-items-center rounded-full bg-[#f2f4f7]" onClick={()=>adjust(item.id,-1)} aria-label="Убрать"><Minus size={16}/></button><b>{cart[item.id]}</b><button className="grid size-9 place-items-center rounded-full text-white" style={{backgroundColor:color}} onClick={()=>adjust(item.id,1)} aria-label="Добавить"><Plus size={16}/></button></div> :
