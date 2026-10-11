@@ -39,13 +39,14 @@ export async function GET(request: Request) {
     // not the seller's still-editable draft settings.
     const publishedSettings = (published.settings ?? {}) as Record<string, unknown>;
     const designSettings = publishedSettings.miniapp_design;
+    const deliverySettings = publishedSettings.delivery_zone;
     return Response.json({
       bot: {
         id: bot.id, name: published.name ?? bot.name, description: published.description ?? bot.description,
         logoUrl: published.logo_url ?? bot.logo_url, color: published.primary_color ?? bot.primary_color,
         template: published.template_type ?? bot.template_type,
       },
-      items: items ?? [], categories: categories??[], design:designSettings??null,
+      items: items ?? [], categories: categories??[], design:designSettings??null, delivery:deliverySettings??null,
     }, { headers: { "cache-control": "no-store" } });
   } catch {
     return jsonError("Временная ошибка загрузки каталога", 503);
