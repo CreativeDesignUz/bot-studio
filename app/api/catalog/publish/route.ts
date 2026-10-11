@@ -1,6 +1,6 @@
 import {resolveAppUser,withSessionCookie} from "@/lib/auth/app-user";
 
-const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const fail=(error:string,status:number)=>Response.json({error},{status,headers:{"cache-control":"no-store"}});
 async function owner(request:Request,botId:string,initData:string){
  if(!uuid.test(botId))return {error:fail("Выберите корректного бота.",400)} as const;
