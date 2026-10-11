@@ -119,3 +119,13 @@ Environment: isolated Cloudflare Worker \`bot-studio-staging\`, Supabase testbas
 - Cloudflare does **not** expose a Git SHA for this uploaded version in the Worker metadata. The deployed source commit therefore **cannot be certified by time alone**. Treat successful post-deploy HTTP + browser QA as functional evidence, not SHA provenance.
 - Avoid running staging E2E immediately on GitHub push **before** deploying that commit: it creates misleading regression reports. Preferred sequence: CI → isolated staging deploy → verify deployed revision → Playwright + Telegram acceptance → journal status update.
 - Sign-in via actual Telegram approval, Google approval, mobile browser and real order processing remain separate acceptance gates. Mocked E2E does not verify provider callbacks or actual database writes.
+
+## QA-021 — Animated BotFather token verification (11.10.2026)
+
+- **Request:** on onboarding step “Настройте бота” → “Подключение через BotFather” make the Verify button visibly show progress and success.
+- **UI changes:** `app/onboarding/page.tsx` — `4befdaf`: idle **«Проверить»** → spinner **«Сохраняем…»** when creating draft → spinner **«Проверяем…»** during Telegram token inspection → green check **«Успешно»** only after confirmed API response. Verification success shows found bot name/username and retains separate `Подтвердить подключение` action. Network failures return to retryable state, never show false success. Token input clears after verification; concurrent/repeated clicks disabled. `9b72826`: explain why Verify is disabled until bot name is supplied.
+- **Safety:** no secret/token in repo, mock fixtures or QA logs; full token submission remains through pre-existing protected endpoint only. Tests do **not** call a real Telegram bot.
+- **Regression tests:** `e2e/staging.spec.ts` — `3f599bd`: deliberately delay BotFather inspect response and assert spinner/disabled controls, then success; separate rejected-token test asserts no fake success and retry. Desktop and mobile.
+- **Status:** **Verified on Cloudflare staging:** [Browser QA run 38158850924](https://github.com/CreativeDesignUz/bot-studio/actions/runs/38158850924) **45 passed, 0 failed, 1 skipped**. [CI run 38158850959](https://github.com/CreativeDesignUz/bot-studio/actions/runs/38158850959) **success** (typecheck, lint, unit tests, production build). Latest staging deployment observed from Wrangler at **2026-10-11 17:14:58 UTC**; Worker metadata does not expose exact Git commit; use the live QA result for functional verification.
+- **Not covered:** real Telegram BotFather token approval, actual publish/webhook or production rollout. Separate acceptance required.
+
