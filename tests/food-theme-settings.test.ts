@@ -8,14 +8,15 @@ test("food styling persists in the owning bot settings without altering another 
  assert.match(source,/miniapp_design/);
  assert.match(source,/food01/);
  assert.match(source,/food02/);
- assert.match(source,/template_type!=="delivery"/);
+ assert.match(source,/\["delivery","store"\]\.includes\(result\.bot\.template_type\)/);
  assert.match(source,/settings:\{\.\.\.settings,miniapp_design:design\}/);
 });
 test("builder lets delivery owners select food themes and a dark mode",async()=>{
  const source=await readFile(new URL("../app/workspace/builder/page.tsx",import.meta.url),"utf8");
  assert.match(source,/Food 01 · Minimal/);
  assert.match(source,/Food 02 · Expressive/);
- assert.match(source,/Тёмная тема/);
+ assert.match(source,/Тема для покупателей/);
+ assert.match(source,/setFoodThemeMode/);
  assert.match(source,/\/api\/miniapp\/design/);
  assert.match(source,/Сохранить оформление/);
 });
