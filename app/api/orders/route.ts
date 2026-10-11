@@ -20,3 +20,22 @@ export async function GET(request:Request){
  }
  return withSessionCookie({orders:(orders??[]).map(order=>({...order,items:items.filter(item=>item.order_id===order.id)}))},200,setCookie);
 }
+
+const transitions:Record<string,string>={new:"confirmed",confirmed:"in_progress",in_progress:"ready",ready:"completed"};
+export async function PATCH(request:Request){
+ let input:unknown;
+ try{input=await request.json();}catch{return Response.json({error:"Некорректный JSON"},{status:400});}
+ if(!input||typeof input!=="object"||Array.isArray(input))return Response.json({error:"Некорректный запрос"},{status:400});
+ const body=input as {botId?:unknown;orderId?:unknown;expectedStatus?:unknown;status?:unknown};
+ if(typeof body.botId!=="string"||!uuid.test(body.botId)||typeof body.orderId!=="string"||!uuid.test(body.orderId)||typeof body.expectedStatus!=="string"||typeof body.status!=="string"||transitions[body.expectedStatus]!==body.status)
+  return Response.json({error:"Недопустимый переход статуса"},{status:400});
+ const identity=await resolveAppUser(request,request.headers.get("x-telegram-init-data")??"");
+ if("error" in identity)return Response.json({error:identity.error},{status:identity.status});
+ const {supabase,user,setCookie}=identity;
+ const {data:bot,error:ownerError}=await supabase.from("bots").select("id").eq("id",body.botId).eq("owner_id",user.id).maybeSingle();
+ if(ownerError||!bot)return Response.json({error:"Нет доступа к заказу"},{status:403});
+ const {data,error}=await supabase.from("orders").update({status:body.status}).eq("bot_id",body.botId).eq("id",body.orderId).eq("status",body.expectedStatus).select("id,status").maybeSingle();
+ if(error)return Response.json({error:"Не удалось изменить статус"},{status:500});
+ if(!data)return Response.json({error:"Статус уже изменён другим сотрудником. Обновите список."},{status:409});
+ return withSessionCookie({order:data},200,setCookie);
+}
