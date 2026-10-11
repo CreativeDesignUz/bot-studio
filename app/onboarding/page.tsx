@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import MiniAppDesignStep from "./miniapp-design-step";
 import { useRouter } from "next/navigation";
@@ -20,11 +20,16 @@ const stages = ["Telegram","Шаблон","Настройка","Дизайн Min
 const card = "rounded-[18px] border border-[#e0e5ed] bg-white p-5";
 const primary = "inline-flex min-h-11 items-center justify-center gap-2 rounded-[10px] bg-[#4420e7] px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40";
 const secondary = "inline-flex min-h-11 items-center justify-center gap-2 rounded-[10px] border border-[#d7dce6] bg-white px-5 text-sm font-medium text-[#101828] disabled:opacity-50";
+// SSR buttons must not be clickable until their React handlers are hydrated.
+const hydratedSubscribe=()=>()=>{};
+const getHydrated=()=>true;
+const getServerHydrated=()=>false;
 function telegramData(){return (window as typeof window & {Telegram?:{WebApp?:{initData?:string}}}).Telegram?.WebApp?.initData??""}
 function getKey(){const key="botStudioOnboardingRequestKeyV2";let value=sessionStorage.getItem(key);if(!value){value=crypto.randomUUID().replaceAll("-","");sessionStorage.setItem(key,value)}return value}
 
 export default function OnboardingPage(){
  const router=useRouter();
+ const hydrated=useSyncExternalStore(hydratedSubscribe,getHydrated,getServerHydrated);
  const [stage,setStage]=useState<Stage>(0);
  const [choice,setChoice]=useState<ConnectionChoice>("new");
  const [templateId,setTemplateId]=useState<TemplateId>("store");
@@ -251,8 +256,8 @@ export default function OnboardingPage(){
     </section>}
     <div className="mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-[#e5e7eb] pt-6">
      {stage>0?<button type="button" onClick={goBack} className={secondary}><ArrowLeft size={16}/>Назад</button>:<span aria-hidden="true"/>}
-     {stage<2?<button type="button" onClick={()=>{resetMessage();setStage((stage+1) as Stage)}} className={primary}>Продолжить <ArrowRight size={16}/></button>:
-      stage===2?<button type="button" onClick={()=>void nextFromSetup()} disabled={busy||!name.trim()} className={primary}>{busy?"Сохраняем…":"К дизайну Mini App"} <ArrowRight size={16}/></button>:
+     {stage<2?<button type="button" onClick={()=>{resetMessage();setStage((stage+1) as Stage)}} disabled={!hydrated} className={primary}>Продолжить <ArrowRight size={16}/></button>:
+      stage===2?<button type="button" onClick={()=>void nextFromSetup()} disabled={!hydrated||busy||!name.trim()} className={primary}>{busy?"Сохраняем…":"К дизайну Mini App"} <ArrowRight size={16}/></button>:
       stage===3?<span aria-hidden="true"/>:
       <div className="flex flex-wrap gap-2">
        <Link href={botId?`/workspace/builder?bot=${encodeURIComponent(botId)}`:"/workspace"} className={secondary+" no-underline"}>Открыть редактор <ArrowRight size={16}/></Link>
