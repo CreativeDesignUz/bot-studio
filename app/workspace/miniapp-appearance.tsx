@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import MiniAppLivePreview from "./miniapp-live-preview";
 
 type Category={id:string;name:string};
 type Item={id:string;name:string};
@@ -52,7 +53,7 @@ export default function MiniAppAppearance({botId}:{botId:string}){
  const field="w-full rounded-xl border border-[#d0d5dd] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#6541f5]";
  const label="mb-1.5 block text-xs font-semibold text-[#475467]";
  if(loading)return <div className="rounded-2xl bg-white p-8 text-sm">Загрузка настроек Mini App…</div>;
- return <section className="space-y-5 rounded-2xl border border-[#e4e7ec] bg-white p-5">
+ return <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]"><section className="min-w-0 space-y-5 rounded-2xl border border-[#e4e7ec] bg-white p-5">
   <div><h2 className="text-xl font-semibold">Оформление Mini App</h2><p className="mt-1 text-sm text-[#667085]">Шаблон, тема и контент главного баннера. Изменения сохраняются в черновик.</p></div>
   {error&&<p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
   {message&&<p role="status" className="rounded-lg bg-green-50 p-3 text-sm text-green-700">{message}</p>}
@@ -83,5 +84,5 @@ export default function MiniAppAppearance({botId}:{botId:string}){
    </>}
   </div>
   <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4"><span className="text-xs text-[#667085]">Настройки попадут к покупателям после публикации.</span><button disabled={saving||!/#[0-9A-F]{6}/i.test(design.color)} onClick={()=>void save()} className="rounded-xl bg-[#6541f5] px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">{saving?"Сохранение…":"Сохранить черновик"}</button></div>
- </section>;
+ </section><MiniAppLivePreview botId={botId} design={design}/></div>;
 }
