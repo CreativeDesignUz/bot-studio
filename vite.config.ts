@@ -17,6 +17,8 @@ const localBindingConfig = {
   compatibility_flags: ["nodejs_compat"],
   d1_databases: [],
   r2_buckets: [],
+  // Public staging-only identity settings; secrets stay in Cloudflare.
+  vars: { TELEGRAM_OIDC_CLIENT_ID: "8948286248", TELEGRAM_LOGIN_BOT_USERNAME: "BotStudioManagerBot" },
 };
 
 export default defineConfig(async ({ command }) => {
