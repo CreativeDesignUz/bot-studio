@@ -45,7 +45,7 @@ export async function POST(request:Request){
  if(!["food01","food02"].includes(String(body.layout))||typeof body.color!=="string"||!hex.test(body.color)||typeof body.dark!=="boolean")return Response.json({error:"Проверьте тему, цвет и режим."},{status:400});
  const result=await owned(request,body.botId!,body.initData??"");
  if("error" in result)return Response.json({error:result.error},{status:result.status});
- if(result.bot.template_type!=="delivery")return Response.json({error:"Food-темы доступны только для доставки еды."},{status:400});
+ if(!["delivery","store"].includes(result.bot.template_type))return Response.json({error:"Оформление Mini App доступно для доставки и интернет-магазина."},{status:400});
  const settings=(result.bot.settings??{}) as Record<string,unknown>;
  const old=parse(settings.miniapp_design);
  const themeMode=body.themeMode===undefined?(body.dark?"dark":"light"):body.themeMode;
