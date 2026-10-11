@@ -6,20 +6,16 @@ import { CircleAlert, LoaderCircle } from "lucide-react";
 import Link from "next/link";
 
 type Providers={google:{supabaseUrl:string;publishableKey:string}|null;googleSetupRequired?:boolean;telegram:{username:string}|null};
-type TelegramUser={id:number;first_name:string;last_name?:string;username?:string;auth_date:number;hash:string;photo_url?:string};
-declare global{interface Window{onBotStudioTelegramAuth?:(user:TelegramUser)=>void}}
 const card="relative w-full max-w-[460px] overflow-hidden rounded-[20px] bg-[#f9fafb] px-6 py-8 shadow-[0_12px_40px_1px_rgba(0,0,0,.06)] sm:px-8";
 export default function LoginPage({callback=false}:{callback?:boolean}){
  const [mode,setMode]=useState<"login"|"signup">("login");
  const [providers,setProviders]=useState<Providers|null>(null);
  const [error,setError]=useState("");
  const [working,setWorking]=useState(false);
- const widgetRef=useRef<HTMLDivElement>(null);
  const clientRef=useRef<SupabaseClient|null>(null);
  const isCallback=callback;
  const [isPublicDomain,setIsPublicDomain]=useState(false);
  useEffect(()=>{void Promise.resolve().then(()=>setIsPublicDomain(window.location.protocol==="https:"&&!["localhost","127.0.0.1"].includes(window.location.hostname)))},[]);
- const telegramUsername=providers?.telegram?.username;
  const getClient=useCallback(async(config:Providers["google"])=>{
   if(!config)throw new Error("Google OAuth не настроен в Supabase.");
   if(!clientRef.current){
@@ -57,25 +53,6 @@ export default function LoginPage({callback=false}:{callback?:boolean}){
   }
   void exchange();return()=>{cancel=true}
  },[isCallback,providers,getClient,finish]);
- useEffect(()=>{
-  if(isCallback||!isPublicDomain||!telegramUsername||!widgetRef.current)return;
-  window.onBotStudioTelegramAuth=async(user)=>{
-   setWorking(true);setError("");
-   try{await finish({provider:"telegram",telegram:user})}
-   catch(e){setError(e instanceof Error?e.message:"Telegram не подтвердил вход.");setWorking(false)}
-  };
-  const mount=widgetRef.current;mount.innerHTML="";
-  const script=document.createElement("script");
-  script.src="https://telegram.org/js/telegram-widget.js?22";
-  script.async=true;
-  script.setAttribute("data-telegram-login",telegramUsername);
-  script.setAttribute("data-size","large");
-  script.setAttribute("data-radius","8");
-  script.setAttribute("data-request-access","write");
-  script.setAttribute("data-onauth","onBotStudioTelegramAuth(user)");
-  mount.appendChild(script);
-  return()=>{if(window.onBotStudioTelegramAuth)delete window.onBotStudioTelegramAuth;mount.innerHTML=""};
- },[telegramUsername,isCallback,isPublicDomain,finish]);
 
  async function googleLogin(){
   setWorking(true);setError("");
@@ -106,7 +83,7 @@ export default function LoginPage({callback=false}:{callback?:boolean}){
      {!providers?.google&&<p className="rounded-lg bg-[#fff7ed] p-3 text-left text-[12px] leading-5 text-[#9a3412]">Google пока не включён в тестовом Supabase. Включите Authentication → Sign In / Providers → Google и настройте Client ID / Secret. До этого вход через Google недоступен.</p>}
      <div className="flex items-center gap-3 text-[12px] text-[#8f909a]"><div className="h-px flex-1 bg-[#e5e7eb]"/>или<div className="h-px flex-1 bg-[#e5e7eb]"/></div>
      <div className="flex min-h-[44px] items-center justify-center rounded-[8px] border border-[#654be7] bg-white px-3">
-      {providers?.telegram&&isPublicDomain?<div ref={widgetRef} aria-label="Авторизация через Telegram" className="flex justify-center"/>:<span className="text-[12px] text-[#718096]">{!isPublicDomain?"Вход через Telegram доступен только на публичном HTTPS-домене": "Telegram Login не настроен"}</span>}
+      {providers?.telegram&&isPublicDomain?<a href="/api/auth/telegram/start" className="inline-flex h-10 items-center justify-center rounded-lg bg-[#54a9eb] px-6 text-sm font-semibold text-white">Войти через Telegram</a>:<span className="text-[12px] text-[#718096]">{!isPublicDomain?"Вход через Telegram доступен только на публичном HTTPS-домене":"Telegram OIDC не настроен"}</span>}
      </div>
      <p className="text-center text-[12px] leading-5 text-[#718096]">После входа ваши боты и настройки будут доступны в кабинете.</p>
      <div className="pt-2 text-center text-[14px]">{mode==="login"?"Ещё нет аккаунта?":"Уже есть аккаунт?"} <button type="button" onClick={()=>{setMode(mode==="login"?"signup":"login");setError("")}} className="ml-1 font-semibold text-[#3d1ddd]">{mode==="login"?"Регистрация":"Войти"}</button></div>
