@@ -29,3 +29,11 @@ test("picker allows map click and native geolocation without exposing keys",asyn
  assert.match(ui,/onClick={choose}/);
  assert.match(ui,/© OpenStreetMap contributors/);
 });
+
+test("buyer map starts from published store or restaurant delivery center",async()=>{
+ const picker=await readFile(new URL("../app/miniapp/delivery-location-picker.tsx",import.meta.url),"utf8");
+ const buyer=await readFile(new URL("../app/miniapp/page.tsx",import.meta.url),"utf8");
+ assert.match(picker,/initialCenter\?:Point/);
+ assert.match(picker,/value\?\?initialCenter/);
+ assert.match(buyer,/initialCenter=\{deliveryZone\?/);
+});
