@@ -68,3 +68,21 @@ TASK F-07 end-to-end acceptance, operational readiness and later hosting decisio
 Per-task done: source change; DB migrations only on testbase and after explicit permission; user-facing states; negative tests; green CI; test evidence; known risks.
 
 This is a source-level audit, NOT a claim that production or running Telegram is verified.
+
+## Explicit user confirmation (2026-10-11): maps and operator-controlled payment gateway are mandatory
+
+### Customer map / delivery zones
+- Buyer Mini App: geolocation permission, address autocomplete/search via licensed geocoder, map pin drag/select, map confirmation, house/entrance/floor/apartment/comment.
+- Restaurant operator: location/branch CRUD, working hours, service polygons/radii, delivery minimum amount, fee and estimated time; pickup selection.
+- Backend: validated zone membership and pricing quote before checkout, persisted geocoordinates, fail closed outside coverage, do not trust client fee or coordinates alone.
+- Maps: MapLibre-compatible UI; choose licensed tiles/geocoding/routing provider with production quotas, key proxying, attribution, and offline/error states. Do not assume public OSM tiles are unlimited.
+
+### Operator-controlled payment gateway (platform level)
+- Bot Studio PLATFORM OPERATOR manages provider connections, credentials, configuration, provider availability, and routing centrally. Individual restaurant managers must not see platform secrets.
+- Customer chooses Click or Payme in Mini App where enabled; server creates provider payment attempt for its order; signed callback verifies final status and updates payment/order atomically with idempotency.
+- Operator administration: ledger/transaction search, reconciliation, provider failures, payment disputes/refunds, payout accounting, platform fee policy, audit and restricted RBAC.
+- Crucial settlement decision: operator-managed integration is not the same as operator acting as merchant of record. Determine contractual merchant account, settlement destination, aggregation/split payouts, commissions and legally authorized refunds with the provider before accepting real money; do not assume blanket merchant-of-record permissions.
+- Keep provider credentials server-side and separate TESTBASE sandbox from future production. Orders always store merchant/restaurant IDs, amounts, currency, payment attempts and fee breakdown for audit.
+- Cash-on-delivery/pickup can exist as an explicit allowed method with proper order/payment state, but must not be represented as successful online payment.
+
+Acceptance: real location outside delivery area cannot checkout as delivery; operator can disable provider; duplicate provider callback never double-credits; cancellation and refund are audited; restaurant sees its own order/payment status but not platform credentials nor another restaurant transactions.
