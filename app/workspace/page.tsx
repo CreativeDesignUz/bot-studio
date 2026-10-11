@@ -5,10 +5,11 @@ import DeliverySettings from "./delivery-settings";
 import MiniAppAppearance from "./miniapp-appearance";
 import ServiceRequestManager from "./service-request-manager";
 import WorkspaceSidebar from "./workspace-sidebar";
+import DemoNotifications from "./demo-notifications";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Bell, Bot, ChevronDown, CircleCheck, Clock3, Plus, Search, Settings, TrendingUp, ArrowRight, Menu, X } from "lucide-react";
+import { Bot, ChevronDown, CircleCheck, Clock3, Plus, Search, Settings, TrendingUp, ArrowRight, Menu, X } from "lucide-react";
 import { BotTemplateId, productTemplates } from "@/lib/product/templates";
 
 const demoBots: { id: string; name: string; type: BotTemplateId; username: string }[] = [
@@ -17,8 +18,8 @@ const demoBots: { id: string; name: string; type: BotTemplateId; username: strin
   { id: "beauty", name: "Aura Beauty", type: "service", username: "aura_booking_bot" },
 ];
 type BotMetrics={ordersToday:number;revenueTodayMinor:number;catalogItems:number;customers:number;recentOrders:{id:string;customer_name:string;status:string;total_minor:number}[]};
-type WorkspaceBot=(typeof demoBots)[number]&{metrics?:BotMetrics};
-type WorkspaceResponse={bots:{id:string;name:string;username:string|null;template_type:BotTemplateId;metrics:BotMetrics}[]};
+type WorkspaceBot=(typeof demoBots)[number]&{metrics?:BotMetrics;demoImported?:boolean};
+type WorkspaceResponse={bots:{id:string;name:string;username:string|null;template_type:BotTemplateId;metrics:BotMetrics;demoImported?:boolean}[]};
 
 const content = {
   store: { kpis: [["18", "заказов сегодня", "+12%"], ["7 240 000 сум", "выручка", "+18%"], ["34", "товара заканчиваются", "Проверить"]], rows: [["#1048", "Сабина М.", "Кроссовки Mono", "690 000 сум", "Оплачен"], ["#1047", "Жасур Б.", "Худи Studio", "420 000 сум", "Новый"], ["#1046", "Лола Т.", "Сумка Mini", "530 000 сум", "Собран"]], goal: "Поднять средний чек", tip: "Добавьте комплект кроссовки + носки со скидкой 10%. Покажем его в корзине.", action: "Создать комплект" },
@@ -56,12 +57,19 @@ export default function WorkspacePage() {
         }
         if(!response.ok)throw new Error("Workspace request failed");
         const result=await response.json() as WorkspaceResponse;
-        const loaded=result.bots.map(item=>({id:item.id,name:item.name,type:item.template_type,username:item.username??`studio_${item.id.slice(0,8)}_bot`,metrics:item.metrics}));
+        const loaded=result.bots.map(item=>({id:item.id,name:item.name,type:item.template_type,username:item.username??`studio_${item.id.slice(0,8)}_bot`,metrics:item.metrics,demoImported:item.demoImported}));
         setBots(loaded);const requested=new URLSearchParams(location.search).get("bot");setBotId(loaded.some(item=>item.id===requested)?requested!:loaded[0]?.id??"");setSection(new URLSearchParams(location.search).get("section")??"overview");setLoadError(false);
       }catch{setLoadError(true)}finally{setLoading(false)}
     }
     void loadWorkspace();
-    return () => { delete document.documentElement.dataset.telegram; };
+    function refreshDemo(){
+     void fetch("/api/workspace",{headers:{"x-telegram-init-data":initData},cache:"no-store"})
+      .then(async response=>response.ok?await response.json() as WorkspaceResponse:null)
+      .then(result=>{if(result)setBots(result.bots.map(item=>({id:item.id,name:item.name,type:item.template_type,username:item.username??"studio_bot",metrics:item.metrics,demoImported:item.demoImported})));})
+      .catch(()=>{});
+    }
+    window.addEventListener("botstudio:demo-updated",refreshDemo);
+    return () => { delete document.documentElement.dataset.telegram;window.removeEventListener("botstudio:demo-updated",refreshDemo); };
   }, []);
 
   function switchBot(nextId: string) {
@@ -90,11 +98,12 @@ export default function WorkspacePage() {
           <label className="relative min-w-0 flex-1 lg:hidden"><select value={botId} onChange={(event) => switchBot(event.target.value)} className="h-11 w-full appearance-none rounded-xl border border-[#e4e7ec] bg-white px-3 pr-9 text-sm font-semibold">{bots.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2" /></label>
           <label className="relative hidden max-w-md flex-1 lg:block"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#98a2b3]" /><input className="h-11 w-full rounded-xl border border-[#e4e7ec] bg-[#f9fafb] pl-10 pr-4 text-sm outline-none focus:border-[#6d45f5]" placeholder="Поиск по кабинету" /></label>
           <Link href="/onboarding" aria-label="Создать ещё бота" title="Создать бота" className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#6541f5] text-white no-underline lg:hidden"><Plus className="size-[20px]" /></Link>
-          <button className="ml-auto grid size-11 shrink-0 place-items-center rounded-xl border border-[#e4e7ec] bg-white"><Bell className="size-[18px]" /></button><Link href="/workspace/account" aria-label="Настройки аккаунта и входа" className="grid size-10 place-items-center rounded-full bg-[#eee9ff] text-sm font-semibold text-[#5934dc] no-underline">A</Link>
+          <DemoNotifications botId={bot.id}/><Link href="/workspace/account" aria-label="Настройки аккаунта и входа" className="grid size-10 place-items-center rounded-full bg-[#eee9ff] text-sm font-semibold text-[#5934dc] no-underline">A</Link>
         </header>
         <div className="border-b border-[#e4e7ec] bg-white px-4 py-2 lg:hidden"><div className="flex gap-1 overflow-x-auto">{template.modules.map(({ id, label }) => <button key={id} onClick={() => setSection(id)} className={`shrink-0 rounded-full px-3 py-2 text-xs font-semibold ${currentSection === id ? "bg-[#101828] text-white" : "bg-[#f2f4f7] text-[#667085]"}`}>{label}</button>)}{(bot.type==="delivery"||bot.type==="store")&&<button type="button" onClick={()=>setSection("miniapp_appearance")} className={`shrink-0 rounded-full px-3 py-2 text-xs font-semibold ${currentSection==="miniapp_appearance"?"bg-[#101828] text-white":"bg-[#f2f4f7] text-[#667085]"}`}>Оформление Mini App</button>}{(bot.type==="delivery"||bot.type==="store")&&<button type="button" onClick={()=>setSection("delivery_settings")} className="shrink-0 rounded-full bg-[#f2f4f7] px-3 py-2 text-xs font-semibold">Доставка</button>}</div></div>
         <div className="p-4 pb-24 sm:p-7 sm:pb-24 lg:p-9">
           <div className="mb-7 flex flex-wrap items-end justify-between gap-4"><div><p className="mb-2 text-xs font-semibold text-[#6d45f5]">{template.label} · @{bot.username}</p><h1 className="text-2xl font-semibold tracking-[-.035em] sm:text-3xl">{sectionName}</h1><p className="mt-1.5 text-sm text-[#667085]">{currentSection === "overview" ? "Главное за сегодня и следующий шаг для роста." : `Управляйте разделом «${sectionName}» без перехода в другие сервисы.`}</p></div></div>
+          {bot.demoImported&&<div className="mb-5 flex flex-wrap items-center gap-2 rounded-xl border border-[#e9d5ff] bg-[#faf5ff] p-3 text-xs leading-5 text-[#6b21a8]"><strong className="rounded bg-[#ede9fe] px-2 py-1">ДЕМО-КОНТЕНТ</strong><span>Это тестовые товары и заказы. Удалите демо до публикации в разделе меню.</span></div>}
           {currentSection === "delivery_settings" ? <DeliverySettings key={bot.id} botId={bot.id} /> : currentSection === "miniapp_appearance" && (bot.type === "delivery"||bot.type === "store") ? <MiniAppAppearance key={bot.id} botId={bot.id} /> : currentSection === "orders" && (bot.type==="delivery"||bot.type==="store") ? <OrderManager key={bot.id} botId={bot.id}/> : currentSection === "catalog" ? <CatalogManager key={bot.id} botId={bot.id} type={bot.type} /> : bot.type === "service" && currentSection === "appointments" ? <ServiceRequestManager key={bot.id} botId={bot.id} /> : currentSection === "overview" ? <Overview page={page} botType={bot.type} botId={bot.id} /> : <ModuleView name={sectionName} itemLabel={template.itemLabel} botType={bot.type} />}
         </div>
       </section>
