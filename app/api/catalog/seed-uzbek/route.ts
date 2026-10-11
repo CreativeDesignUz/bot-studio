@@ -27,8 +27,11 @@ export async function POST(request:Request){
  if(!bot||bot.template_type!=="delivery")return Response.json({error:"Демо-меню можно добавить только своему боту доставки еды"},{status:403});
  const {data:existing,error:existingError}=await supabase.from("catalog_items").select("name").eq("bot_id",id).eq("item_type","dish");
  if(existingError)return Response.json({error:"Не удалось проверить меню"},{status:500});
- if((existing??[]).length)return Response.json({error:"Меню уже содержит блюда. Чтобы не перезаписать их, демо-меню загружается только в пустой каталог."},{status:409});
- const categoryNames=[...new Set(menu.map(x=>x.category))];
+ // Import only dishes absent from this bot, keeping every existing price and edit untouched.
+ const existingNames=new Set((existing??[]).map(x=>x.name.trim().toLocaleLowerCase("ru")));
+ const missing=menu.filter(item=>!existingNames.has(item.name.toLocaleLowerCase("ru")));
+ if(!missing.length)return withSessionCookie({created:0,categories:[],message:"Все демонстрационные блюда уже есть в каталоге."},200,setCookie);
+ const categoryNames=[...new Set(missing.map(x=>x.category))];
  const {data:old,error:oldError}=await supabase.from("catalog_categories").select("id,name").eq("bot_id",id);
  if(oldError)return Response.json({error:"Не удалось проверить категории"},{status:500});
  const categories=new Map((old??[]).map(x=>[x.name,x.id] as const));
@@ -38,8 +41,8 @@ export async function POST(request:Request){
   if(error||!category)return Response.json({error:"Не удалось сохранить категории. Повторите попытку."},{status:500});
   categories.set(name,category.id)
  }
- // Demo prices only. Items remain editable; seed is intentionally not automatic.
- const {data:added,error}=await supabase.from("catalog_items").insert(menu.map((item,i)=>({
+ // Add only missing example dishes; existing dishes remain untouched. Prices/photos are editable.
+ const {data:added,error}=await supabase.from("catalog_items").insert(missing.map((item,i)=>({
   bot_id:id,item_type:"dish",name:item.name,description:item.description,price_minor:item.price*100,
   currency:"UZS",is_active:true,image_url:item.image,category_id:categories.get(item.category),position:i
  }))).select("id");
