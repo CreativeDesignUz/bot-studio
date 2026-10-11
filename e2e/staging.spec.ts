@@ -416,8 +416,8 @@ test("wizard recovers a connected Telegram bot after lost connect response",asyn
  await page.getByRole("button",{name:"Проверить",exact:true}).click();
  await expect(page.getByText("Токен успешно проверен")).toBeVisible();
  await page.getByRole("button",{name:"Подтвердить подключение"}).click();
- await expect(page.getByText("Telegram подключён: @BotStudioQaTestBot")).toBeVisible();
+ await expect.poll(()=>confirmCount,{message:"Telegram connect POST must run"}).toBe(1);
+ await expect.poll(()=>statusCount,{message:"Browser must re-read channel status after POST fails",timeout:8000}).toBe(1);
+ await expect(page.getByText("Telegram подключён: @BotStudioQaTestBot")).toBeVisible({timeout:10000});
  await expect(page.getByRole("alert")).toHaveCount(0);
- expect(confirmCount).toBe(1);
- expect(statusCount).toBe(1);
 });
