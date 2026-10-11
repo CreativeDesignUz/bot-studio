@@ -80,6 +80,10 @@ for (const kind of ["Доставка еды", "Интернет-магазин"
     let inspected = false;
     let connected = false;
     let published = false;
+    // A verified account is required for the real onboarding page.
+    await page.route("**/api/auth/account",route=>route.fulfill({
+      status:200,contentType:"application/json",body:JSON.stringify({authenticated:true})
+    }));
     await page.route("**/api/onboarding", async (route) => {
       const payload = route.request().postDataJSON() as { botName?: string; templateType?: string };
       expect(payload.botName).toBe("QA E2E demo");
@@ -266,4 +270,28 @@ test("cabinet and design APIs reject unsigned requests", async ({ request }) => 
     const result=await request.get(path);
     expect([401,403],path+" must not expose an account to guests").toContain(result.status());
   }
+});
+
+
+test("onboarding requires login before creating a bot in the browser",async({page})=>{
+  await page.route("**/api/auth/account",route=>route.fulfill({
+    status:200,contentType:"application/json",body:JSON.stringify({authenticated:false})
+  }));
+  await page.goto("/onboarding");
+  await expect(page).toHaveURL(/\/auth$/);
+});
+
+test("onboarding API rejects unsigned bot creation",async({request})=>{
+  const response=await request.post("/api/onboarding",{data:{
+    botName:"Unauthorized QA",templateType:"delivery",requestKey:"a".repeat(32)
+  }});
+  expect([401,403]).toContain(response.status());
+});
+
+test("unsigned admin workspace redirects to login",async({page})=>{
+  await page.route("**/api/workspace",route=>route.fulfill({
+    status:401,contentType:"application/json",body:JSON.stringify({error:"Войдите в аккаунт."})
+  }));
+  await page.goto("/workspace");
+  await expect(page).toHaveURL(/\/auth$/);
 });
