@@ -198,3 +198,72 @@ test("linking Google without a verified session is rejected",async({request})=>{
  });
  expect([400,401]).toContain(response.status());
 });
+
+
+// QA 2026-10-11: actual admin UI and theme-picker regression
+test("admin cabinet renders the selected delivery bot and exposes creation", async ({ page }) => {
+  const id = "d071c20c-b54c-45cc-8033-982a09c945a1";
+  await page.route("**/api/workspace", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({bots:[{
+      id,name:"QA Delivery Cabinet",username:"qa_delivery_staging_bot",template_type:"delivery",
+      metrics:{ordersToday:2,revenueTodayMinor:5000000,catalogItems:3,customers:2,recentOrders:[]}
+    }]}),
+  }));
+  await page.goto("/workspace");
+  await expect(page.getByRole("heading",{name:"Обзор"})).toBeVisible();
+  await expect(page.getByText("QA Delivery Cabinet")).toBeVisible();
+  await expect(page.getByRole("link",{name:/Создать|создание|создать/i}).first()).toHaveAttribute("href","/onboarding");
+});
+
+test("admin theme and template picker saves customer choice and default dark mode", async ({ page }) => {
+  const id = "d071c20c-b54c-45cc-8033-982a09c945a1";
+  const banner = {enabled:true,title:"QA баннер",description:"Тест",imageUrl:"",buttonEnabled:false,buttonText:"",linkType:"page",target:"catalog"};
+  const initialDesign = {layout:"food01",color:"#E65D35",dark:false,themeMode:"light",defaultTheme:"system",banner};
+  let submitted:Record<string,unknown>|null=null;
+  await page.route("**/api/workspace",route=>route.fulfill({
+    status:200,contentType:"application/json",
+    body:JSON.stringify({bots:[{id,name:"QA Food",username:"qa_food_bot",template_type:"delivery",
+      metrics:{ordersToday:0,revenueTodayMinor:0,catalogItems:0,customers:0,recentOrders:[]}}]}),
+  }));
+  await page.route("**/api/miniapp/design**",async route=>{
+    if(route.request().method()==="POST"){
+      submitted=route.request().postDataJSON() as Record<string,unknown>;
+      return route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({ok:true})});
+    }
+    return route.fulfill({status:200,contentType:"application/json",
+      body:JSON.stringify({design:initialDesign,templateType:"delivery"})});
+  });
+  await page.route("**/api/catalog/categories?bot=*",route=>route.fulfill({
+    status:200,contentType:"application/json",body:JSON.stringify({categories:[]})
+  }));
+  await page.route("**/api/catalog?bot=*",route=>route.fulfill({
+    status:200,contentType:"application/json",body:JSON.stringify({items:[]})
+  }));
+  await page.route("**/api/miniapp/preview?bot=*",route=>route.fulfill({
+    status:200,contentType:"application/json",body:JSON.stringify({
+      bot:{id,name:"QA Food",description:"preview",logoUrl:null,color:"#E65D35",template:"delivery"},
+      design:initialDesign,items:[],categories:[]
+    })
+  }));
+  await page.goto("/workspace");
+  await expect(page.getByRole("heading",{name:"Обзор"})).toBeVisible();
+  await page.getByRole("button",{name:"Оформление Mini App"}).click();
+  await expect(page.locator("h2",{hasText:"Оформление Mini App"})).toBeVisible();
+  await page.getByLabel("Шаблон",{exact:true}).selectOption("food02");
+  await page.getByLabel("Тема для покупателей").selectOption("dark");
+  await expect(page.getByLabel("Тема для покупателей")).toHaveValue("dark");
+  await page.getByLabel("Тема для покупателей").selectOption("customer");
+  await page.getByLabel("Тема при первом открытии").selectOption("dark");
+  await page.getByRole("button",{name:"Сохранить черновик"}).click();
+  await expect(page.getByRole("status")).toContainText("Черновик оформления сохранён");
+  expect(submitted).toMatchObject({botId:id,layout:"food02",themeMode:"customer",defaultTheme:"dark"});
+});
+
+test("cabinet and design APIs reject unsigned requests", async ({ request }) => {
+  const id = "d071c20c-b54c-45cc-8033-982a09c945a1";
+  for (const path of ["/api/workspace","/api/bots/draft?bot="+id,"/api/miniapp/design?bot="+id]) {
+    const result=await request.get(path);
+    expect([401,403],path+" must not expose an account to guests").toContain(result.status());
+  }
+});
