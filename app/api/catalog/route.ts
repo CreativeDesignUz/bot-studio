@@ -7,7 +7,7 @@ type ItemPayload = {
   ingredients?: string[]; allergens?: string[]; preparationMinutes?: number | null;
 };
 const bad = (error: string, status: number) => Response.json({ error }, { status });
-const validId = (value: unknown) => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+const validId = (value: unknown) => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 function validatedLabels(value: unknown): string[] | null {
   if (!Array.isArray(value) || value.length > 20 || value.some(x=>typeof x!=="string"||!x.trim()||x.trim().length>80))return null;
   return [...new Set(value.map(x=>(x as string).trim()))];
