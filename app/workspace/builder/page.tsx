@@ -161,7 +161,7 @@ export default function BotBuilder(){
      <Link href={`/workspace?bot=${encodeURIComponent(botId??"")}`} className="flex items-center gap-3 text-sm font-semibold text-[#101828] no-underline"><ArrowLeft className="size-5 text-[#6541F5]"/>Назад в кабинет</Link>
      <div className="flex gap-2"><button onClick={save} disabled={!dirty} className="h-10 rounded-[8px] border border-[#cbd5e0] px-4 text-sm font-medium disabled:opacity-50">Сохранить</button><button onClick={publish} className="h-10 rounded-[8px] bg-[#4420e7] px-4 text-sm font-semibold !text-white">Опубликовать</button></div>
     </div>
-    <div className={`mt-7 min-h-0 flex-1 ${(activeSection==="profile"||activeSection==="message")?"grid max-w-[850px] items-start gap-6 lg:grid-cols-[minmax(0,460px)_minmax(0,370px)]":"grid max-w-[1150px] items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,370px)]"} xl:ml-[clamp(0px,7vw,120px)] xl:overflow-hidden`}>
+    <div className={`mt-7 min-h-0 flex-1 ${(activeSection==="profile"||activeSection==="message")?"grid max-w-[850px] items-start gap-6 lg:grid-cols-[minmax(0,460px)_minmax(0,370px)]":"grid max-w-[1150px] items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,370px)]"} xl:ml-[clamp(0px,7vw,120px)]`}>
     <section className="min-h-0 min-w-0 space-y-5 xl:h-full xl:overflow-y-auto xl:pr-1">
     {(activeSection==="profile"||activeSection==="message") && <div className="rounded-[10px] border border-[#dadadd] bg-white px-4 py-5">
       <div className="space-y-4 text-[14px]">
@@ -248,7 +248,7 @@ export default function BotBuilder(){
       <p className="mt-4 text-xs text-[#98a2b3]">Предпросмотр справа не отправляет сообщения в Telegram, пока бот не подключён и не опубликован.</p>
     </div>}
     </section>
-    <aside className="min-h-0 min-w-0 xl:h-full xl:overflow-hidden">
+    <aside className="min-h-0 min-w-0 xl:sticky xl:top-4 xl:self-start">
      <div className="mb-3 text-xs font-semibold text-[#080b2b]">Предпросмотр · {activeSection==="profile"?"Профиль":activeSection==="miniapp"?"Mini App":"Чат Telegram"}</div>
      {previewMode==="telegram"?<FigmaTelegramPreview name={name} description={figmaPreview==="chat"?welcome:description} buttons={buttons} color={color} view={figmaPreview} avatar={avatar} bio={bio}/>:
       botId?<MiniAppLivePreview botId={botId} design={{layout:foodTemplate,color:foodAccent,dark:foodThemeMode==="dark",themeMode:foodThemeMode,defaultTheme:foodDefaultTheme}}/>:null}
