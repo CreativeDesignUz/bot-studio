@@ -14,7 +14,7 @@ export default function DeliveryLocationPicker({value,onChange}:{value:Point|nul
  const max=2**zoom;
  for(let y=-2;y<=2;y++)for(let x=-2;x<=2;x++){const tx=baseX+x,ty=baseY+y;if(ty<0||ty>=max)continue;tiles.push({key:tx+":"+ty,url:"https://tile.openstreetmap.org/"+zoom+"/"+((tx%max+max)%max)+"/"+ty+".png",x:tx*256-at.x,y:ty*256-at.y});}
  function choose(e:React.MouseEvent<HTMLDivElement>){const rect=e.currentTarget.getBoundingClientRect();const p=position(at.x+e.clientX-rect.left-rect.width/2,at.y+e.clientY-rect.top-rect.height/2,zoom);if(valid(p)){setCenter(p);onChange(p);setError("");}}
- function locate(){if(!navigator.geolocation){setError("Геолокация недоступна");return;}navigator.geolocation.getCurrentPosition(({coords})=>{const p={lat:coords.latitude,lng:coords.longitude};if(valid(p)){setCenter(p);onChange(p);setError("");}},{enableHighAccuracy:true,timeout:10000},); }
+ function locate(){if(!navigator.geolocation){setError("Геолокация недоступна");return;}navigator.geolocation.getCurrentPosition(({coords})=>{const p={lat:coords.latitude,lng:coords.longitude};if(valid(p)){setCenter(p);onChange(p);setError("");}},()=>setError("Не удалось получить геолокацию. Разрешите доступ или выберите точку вручную."),{enableHighAccuracy:true,timeout:10000}); }
  return <div className="space-y-2">
   <div className="relative h-[280px] overflow-hidden rounded-2xl border border-[#d0d5dd] bg-[#e7ebea]" role="group" aria-label="Карта выбора точки доставки">
    <div onClick={choose} className="absolute inset-0 cursor-crosshair overflow-hidden" aria-label="Нажмите на карте, чтобы выбрать точку">
