@@ -8,7 +8,7 @@ create or replace function public.create_miniapp_order(
 )
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
-  item jsonb; entry record; order_row public.orders; expected_count integer; published_item jsonb; snapshot_items jsonb; request_fingerprint text;
+  item jsonb; order_row public.orders; expected_count integer; published_item jsonb; snapshot_items jsonb; request_fingerprint text;
   total_amount bigint := 0; order_currency text; item_ids uuid[]; requested_ids uuid[]; item_quantity integer;
 begin
   if p_request_key !~ '^[A-Za-z0-9_-]{16,128}$' then raise exception 'INVALID_REQUEST_KEY' using errcode='22023'; end if;
@@ -30,14 +30,15 @@ begin
     or (p_fulfillment='delivery' and nullif(trim(p_delivery_address),'') is null)
     or jsonb_typeof(p_items) is distinct from 'array' or jsonb_array_length(p_items) not between 1 and 50
     then raise exception 'INVALID_ORDER' using errcode='22023'; end if;
-  select count(*),array_agg(distinct (entry->>'id')::uuid) into expected_count,requested_ids from jsonb_array_elements(p_items) entry;
+  select count(*),array_agg(distinct (element.value->>'id')::uuid) into expected_count,requested_ids
+  from jsonb_array_elements(p_items) as element(value);
   if expected_count<>cardinality(requested_ids) then raise exception 'DUPLICATE_ITEMS' using errcode='22023'; end if;
   select array_agg((p.value->>'id')::uuid),count(distinct p.value->>'currency') into item_ids,expected_count from jsonb_array_elements(snapshot_items) p(value)
     where (p.value->>'id')::uuid=any(requested_ids) and (p.value->>'price_minor')::bigint>=0;
   if cardinality(item_ids) is distinct from cardinality(requested_ids) or expected_count<>1
     then raise exception 'ITEM_UNAVAILABLE' using errcode='22023'; end if;
   for item in select value from jsonb_array_elements(p_items) as t(value) loop
-    if jsonb_typeof(item->'quantity')<>'number' or (item->>'quantity')!~'^[0-9]{1,2}$'
+    if jsonb_typeof(item->'quantity') is distinct from 'number' or (item->>'quantity')!~'^[0-9]{1,2}$'
       or (item->>'quantity')::integer not between 1 and 99 then raise exception 'INVALID_QUANTITY' using errcode='22023'; end if;
     select value into published_item from jsonb_array_elements(snapshot_items) t(value) where value->>'id'=item->>'id' limit 1;
     if published_item is null then raise exception 'ITEM_UNAVAILABLE' using errcode='22023'; end if;

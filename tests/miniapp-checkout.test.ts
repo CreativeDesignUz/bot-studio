@@ -16,6 +16,8 @@ test("checkout migration makes repeated customer requests idempotent", async () 
   assert.match(sql, /orders_customer_request_key_idx/);
   assert.match(sql, /p_request_key text/);
   assert.match(sql, /'replayed',true/);
+  assert.match(sql, /drop function public\.create_miniapp_order\(uuid,text,text,text,text,jsonb\)/);
+  assert.doesNotMatch(sql, /array_agg\(distinct \(entry->>/);
   assert.match(sql, /revoke all on function public\.create_miniapp_order\(uuid,text,text,text,text,jsonb,text\) from public,anon,authenticated/);
   assert.match(sql, /grant execute on function public\.create_miniapp_order\(uuid,text,text,text,text,jsonb,text\) to service_role/);
 });

@@ -21,6 +21,8 @@ test("direct Telegram migration isolates owners and prevents bot reuse", async (
   assert.match(sql, /TELEGRAM_BOT_ALREADY_CONNECTED/);
   assert.match(sql, /telegram_credentials_active_account_idx/);
   assert.match(sql, /status = 'pending' and expires_at > now\(\)/);
+  assert.match(sql, /declare\s+channel_row public\.bot_channels/);
+  assert.doesNotMatch(sql, /declare\s+channel public\.bot_channels/);
   assert.match(sql, /revoke all on table public\.telegram_bot_credentials/);
   assert.match(sql, /grant execute on function public\.stage_direct_telegram_credential.*to service_role/);
 });

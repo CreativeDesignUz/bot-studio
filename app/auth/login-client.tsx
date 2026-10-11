@@ -1,15 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { ArrowRight, CheckCircle2, CircleAlert, LoaderCircle } from "lucide-react";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { CircleAlert, LoaderCircle } from "lucide-react";
 import Link from "next/link";
 
 type Providers={google:{supabaseUrl:string;publishableKey:string}|null;googleSetupRequired?:boolean;telegram:{username:string}|null};
 type TelegramUser={id:number;first_name:string;last_name?:string;username?:string;auth_date:number;hash:string;photo_url?:string};
 declare global{interface Window{onBotStudioTelegramAuth?:(user:TelegramUser)=>void}}
 const card="relative w-full max-w-[460px] overflow-hidden rounded-[20px] bg-[#f9fafb] px-6 py-8 shadow-[0_12px_40px_1px_rgba(0,0,0,.06)] sm:px-8";
-const accent="#3d1ddd";
 export default function LoginPage({callback=false}:{callback?:boolean}){
  const [mode,setMode]=useState<"login"|"signup">("login");
  const [providers,setProviders]=useState<Providers|null>(null);
@@ -20,9 +19,13 @@ export default function LoginPage({callback=false}:{callback?:boolean}){
  const isCallback=callback;
  const [isPublicDomain,setIsPublicDomain]=useState(false);
  useEffect(()=>{void Promise.resolve().then(()=>setIsPublicDomain(window.location.protocol==="https:"&&!["localhost","127.0.0.1"].includes(window.location.hostname)))},[]);
- const getClient=useCallback((config:Providers["google"])=>{
+ const telegramUsername=providers?.telegram?.username;
+ const getClient=useCallback(async(config:Providers["google"])=>{
   if(!config)throw new Error("Google OAuth не настроен в Supabase.");
-  if(!clientRef.current)clientRef.current=createClient(config.supabaseUrl,config.publishableKey,{auth:{persistSession:true,detectSessionInUrl:true,flowType:"implicit",storageKey:"bot-studio-supabase-google"}});
+  if(!clientRef.current){
+   const {createClient}=await import("@supabase/supabase-js");
+   clientRef.current=createClient(config.supabaseUrl,config.publishableKey,{auth:{persistSession:true,detectSessionInUrl:true,flowType:"implicit",storageKey:"bot-studio-supabase-google"}});
+  }
   return clientRef.current;
  },[]);
  const finish=useCallback(async(payload:object)=>{
@@ -44,7 +47,7 @@ export default function LoginPage({callback=false}:{callback?:boolean}){
    if(!providers?.google){setError("Google ещё не настроен.");return}
    setWorking(true);
    try{
-    const client=getClient(providers.google);
+    const client=await getClient(providers.google);
     const {data,error:sessionError}=await client.auth.getSession();
     if(sessionError||!data.session?.access_token)throw new Error("Google не вернул сессию. Попробуйте войти ещё раз.");
     if(cancel)return;
@@ -55,7 +58,7 @@ export default function LoginPage({callback=false}:{callback?:boolean}){
   void exchange();return()=>{cancel=true}
  },[isCallback,providers,getClient,finish]);
  useEffect(()=>{
-  if(isCallback||!isPublicDomain||!providers?.telegram||!widgetRef.current)return;
+  if(isCallback||!isPublicDomain||!telegramUsername||!widgetRef.current)return;
   window.onBotStudioTelegramAuth=async(user)=>{
    setWorking(true);setError("");
    try{await finish({provider:"telegram",telegram:user})}
@@ -65,19 +68,19 @@ export default function LoginPage({callback=false}:{callback?:boolean}){
   const script=document.createElement("script");
   script.src="https://telegram.org/js/telegram-widget.js?22";
   script.async=true;
-  script.setAttribute("data-telegram-login",providers.telegram.username);
+  script.setAttribute("data-telegram-login",telegramUsername);
   script.setAttribute("data-size","large");
   script.setAttribute("data-radius","8");
   script.setAttribute("data-request-access","write");
   script.setAttribute("data-onauth","onBotStudioTelegramAuth(user)");
   mount.appendChild(script);
   return()=>{if(window.onBotStudioTelegramAuth)delete window.onBotStudioTelegramAuth;mount.innerHTML=""};
- },[providers?.telegram?.username,isCallback,isPublicDomain,finish]);
+ },[telegramUsername,isCallback,isPublicDomain,finish]);
 
  async function googleLogin(){
   setWorking(true);setError("");
   try{
-   const client=getClient(providers?.google??null);
+   const client=await getClient(providers?.google??null);
    const {error:oauthError}=await client.auth.signInWithOAuth({provider:"google",options:{redirectTo:window.location.origin+"/auth/callback"}});
    if(oauthError)throw oauthError;
   }catch(e){setError(e instanceof Error?e.message:"Не удалось подключить Google.");setWorking(false)}
