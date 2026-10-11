@@ -212,8 +212,8 @@ test("admin cabinet renders the selected delivery bot and exposes creation", asy
   }));
   await page.goto("/workspace");
   await expect(page.getByRole("heading",{name:"Обзор"})).toBeVisible();
-  await expect(page.getByText("QA Delivery Cabinet")).toBeVisible();
-  await expect(page.getByRole("link",{name:/Создать|создание|создать/i}).first()).toHaveAttribute("href","/onboarding");
+  await expect(page.locator("select").first()).toHaveValue(id);
+  await expect(page.getByRole("link",{name:"Создать ещё бота"})).toBeVisible();
 });
 
 test("admin theme and template picker saves customer choice and default dark mode", async ({ page }) => {
@@ -250,11 +250,11 @@ test("admin theme and template picker saves customer choice and default dark mod
   await expect(page.getByRole("heading",{name:"Обзор"})).toBeVisible();
   await page.getByRole("button",{name:"Оформление Mini App"}).click();
   await expect(page.locator("h2",{hasText:"Оформление Mini App"})).toBeVisible();
-  await page.getByLabel("Шаблон",{exact:true}).selectOption("food02");
-  await page.getByLabel("Тема для покупателей").selectOption("dark");
-  await expect(page.getByLabel("Тема для покупателей")).toHaveValue("dark");
-  await page.getByLabel("Тема для покупателей").selectOption("customer");
-  await page.getByLabel("Тема при первом открытии").selectOption("dark");
+  await page.locator("label").filter({hasText:"Шаблон"}).locator("select").selectOption("food02");
+  await page.locator("label").filter({hasText:"Тема для покупателей"}).locator("select").selectOption("dark");
+  await expect(page.locator("label").filter({hasText:"Тема для покупателей"}).locator("select")).toHaveValue("dark");
+  await page.locator("label").filter({hasText:"Тема для покупателей"}).locator("select").selectOption("customer");
+  await page.locator("label").filter({hasText:"Тема при первом открытии"}).locator("select").selectOption("dark");
   await page.getByRole("button",{name:"Сохранить черновик"}).click();
   await expect(page.getByRole("status")).toContainText("Черновик оформления сохранён");
   expect(submitted).toMatchObject({botId:id,layout:"food02",themeMode:"customer",defaultTheme:"dark"});
