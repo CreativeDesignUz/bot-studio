@@ -59,7 +59,7 @@ export default function MiniAppPage() {
   },[]);
   useEffect(()=>{
     if(!shop)return;
-    try{const saved=localStorage.getItem("miniapp-theme:"+shop.bot.id);setCustomerTheme(saved==="light"||saved==="dark"?saved:null);}catch{setCustomerTheme(null);}
+    queueMicrotask(()=>{try{const saved=localStorage.getItem("miniapp-theme:"+shop.bot.id);setCustomerTheme(saved==="light"||saved==="dark"?saved:null);}catch{setCustomerTheme(null);}});
   },[shop?.bot.id]);
   function setBuyerTheme(next:"light"|"dark"){
     setCustomerTheme(next);
