@@ -4,7 +4,7 @@ import { getProjectBotToken } from "@/lib/channels/project-bot-token";
 import { verifyTelegramInitData } from "@/lib/telegram/init-data";
 
 type OrderItem = { id: string; quantity: number };
-type Checkout = { botId?: string; initData?: string; requestKey?: string; name?: string; items?: OrderItem[]; fulfillment?: "pickup" | "delivery"; address?: string };
+type Checkout = { botId?: string; initData?: string; requestKey?: string; name?: string; items?: OrderItem[]; fulfillment?: "pickup" | "delivery"; address?: string; latitude?:number;longitude?:number };
 
 const jsonError = (message: string, status: number) => Response.json({ error: message }, { status });
 const isUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -81,6 +81,7 @@ export async function POST(request: Request) {
   if (input.address != null && typeof input.address !== "string") return jsonError("Некорректный адрес", 400);
   const address = (input.address ?? "").trim().slice(0, 500);
   if (input.fulfillment === "delivery" && !address) return jsonError("Укажите адрес доставки", 400);
+  if(input.fulfillment==="delivery"&&(!Number.isFinite(input.latitude)||!Number.isFinite(input.longitude)||typeof input.latitude!=="number"||typeof input.longitude!=="number"||Math.abs(input.latitude)>85||Math.abs(input.longitude)>180))return jsonError("Укажите точку доставки на карте",400);
 
   try {
     const supabase = getSupabaseServer({ privileged: true });
@@ -108,6 +109,8 @@ export async function POST(request: Request) {
       p_customer_name: name,
       p_fulfillment: input.fulfillment,
       p_delivery_address: address,
+      p_lat: input.fulfillment==="delivery"?input.latitude:null,
+      p_lng: input.fulfillment==="delivery"?input.longitude:null,
       p_items: [...quantities].map(([id, quantity]) => ({ id, quantity })),
       p_request_key: input.requestKey,
     });
