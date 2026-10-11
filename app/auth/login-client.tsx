@@ -11,6 +11,20 @@ export default function LoginPage({callback=false}:{callback?:boolean}){
  const [mode,setMode]=useState<"login"|"signup">("login");
  const [providers,setProviders]=useState<Providers|null>(null);
  const [error,setError]=useState("");
+ useEffect(()=>{
+  const code=new URLSearchParams(window.location.search).get("error");
+  if(!code)return;
+  const messages:Record<string,string>={
+   telegram_session_expired:"Сессия входа Telegram истекла или не сохранилась. Попробуйте войти ещё раз в том же браузере.",
+   telegram_state_invalid:"Telegram вернул неверное подтверждение запроса. Попробуйте снова.",
+   telegram_exchange_failed:"Telegram не выдал токен авторизации. Проверьте Client Secret и Redirect URI.",
+   telegram_missing_identity:"Telegram не вернул подтверждённую личность.",
+   telegram_account_failed:"Telegram подтвердил вход, но сервер не смог создать кабинет. Требуется проверка Supabase.",
+   telegram_login_failed:"Ошибка проверки ответа Telegram. Повторите попытку или сообщите код ошибки.",
+   telegram_not_configured:"Telegram OIDC не настроен на сервере."
+  };
+  setError(messages[code]??"Не удалось завершить вход. Код: "+code);
+ },[]);
  const [working,setWorking]=useState(false);
  const clientRef=useRef<SupabaseClient|null>(null);
  const isCallback=callback;
