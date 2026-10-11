@@ -359,3 +359,65 @@ test("BotFather token rejection never reports success and permits retry",async({
   await expect(page.getByRole("button",{name:"Успешно"})).toHaveCount(0);
   await expect(page.getByText("Токен успешно проверен")).toHaveCount(0);
 });
+
+
+test("wizard navigation has one back button and header cabinet link",async({page})=>{
+ await page.route("**/api/auth/account",route=>route.fulfill({
+  status:200,contentType:"application/json",body:JSON.stringify({authenticated:true})
+ }));
+ await page.goto("/onboarding");
+ await expect(page.locator("header").getByRole("link",{name:"В кабинет"})).toHaveAttribute("href","/workspace");
+ await expect(page.getByRole("button",{name:"Назад",exact:true})).toHaveCount(0);
+ await expect(page.getByRole("button",{name:"Назад к предыдущему шагу"})).toHaveCount(0);
+ await page.getByRole("button",{name:/Продолжить/}).click();
+ await expect(page.getByRole("heading",{name:"Выберите шаблон"})).toBeVisible();
+ await expect(page.getByRole("button",{name:"Назад",exact:true})).toHaveCount(1);
+ await expect(page.getByRole("button",{name:"Назад к предыдущему шагу"})).toHaveCount(0);
+ await expect(page.locator("header").getByRole("link",{name:"В кабинет"})).toBeVisible();
+ await page.getByRole("button",{name:"Назад",exact:true}).click();
+ await expect(page.getByRole("heading",{name:"Подключите Telegram"})).toBeVisible();
+});
+
+test("wizard recovers a connected Telegram bot after lost connect response",async({page})=>{
+ const id="c86fd579-1498-462f-8980-83a52aa42e1f";
+ let confirmCount=0, statusCount=0;
+ await page.route("**/api/auth/account",route=>route.fulfill({
+  status:200,contentType:"application/json",body:JSON.stringify({authenticated:true})
+ }));
+ await page.route("**/api/onboarding",route=>route.fulfill({
+  status:200,contentType:"application/json",body:JSON.stringify({bot:{id}})
+ }));
+ await page.route("**/api/channels/telegram/token**",async route=>{
+  if(route.request().method()==="GET"){
+   statusCount++;
+   return route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({
+    connection:{status:"connected",username:"BotStudioQaTestBot",mode:"botfather"}
+   })});
+  }
+  const payload=route.request().postDataJSON() as {action?:string};
+  if(payload.action==="inspect")return route.fulfill({
+   status:200,contentType:"application/json",body:JSON.stringify({
+    credentialId:"c3d21650-e18c-4f9a-83a9-9a2663df04ee",
+    bot:{id:123456789,name:"QA Bot",username:"BotStudioQaTestBot"}
+   })
+  });
+  if(payload.action==="connect"){
+   confirmCount++;
+   return route.fulfill({status:502,contentType:"application/json",
+    body:JSON.stringify({error:"Gateway timed out after Telegram finished"})});
+  }
+  throw new Error("Unexpected Telegram QA action");
+ });
+ await page.goto("/onboarding");
+ await page.getByRole("button",{name:/Продолжить/}).click();
+ await page.getByRole("button",{name:/Продолжить/}).click();
+ await page.getByRole("textbox",{name:/Название бота/}).fill("QA E2E demo");
+ await page.getByPlaceholder("Telegram Bot API token").fill("123456789:"+"A".repeat(46));
+ await page.getByRole("button",{name:"Проверить",exact:true}).click();
+ await expect(page.getByText("Токен успешно проверен")).toBeVisible();
+ await page.getByRole("button",{name:"Подтвердить подключение"}).click();
+ await expect(page.getByText("Telegram подключён: @BotStudioQaTestBot")).toBeVisible();
+ await expect(page.getByRole("alert")).toHaveCount(0);
+ expect(confirmCount).toBe(1);
+ expect(statusCount).toBe(1);
+});
