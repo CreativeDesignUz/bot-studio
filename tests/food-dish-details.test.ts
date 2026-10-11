@@ -20,7 +20,11 @@ test("food editor has optional ingredients allergens cooking time and image prev
 test("buyer food detail reads published catalog fields with no fake modifiers",async()=>{
  const api=await readFile(new URL("../app/api/miniapp/route.ts",import.meta.url),"utf8");
  const ui=await readFile(new URL("../app/miniapp/page.tsx",import.meta.url),"utf8");
- assert.match(api,/ingredients,allergens,preparation_minutes/);
+ const migration=await readFile(new URL("../supabase/migrations/202610100009_published_catalog_snapshot.sql",import.meta.url),"utf8");
+ assert.match(migration,/\x27ingredients\x27,ci\.ingredients/);
+ assert.match(migration,/\x27allergens\x27,ci\.allergens/);
+ assert.match(migration,/\x27preparation_minutes\x27,ci\.preparation_minutes/);
+ assert.match(api,/published\.catalog/);
  assert.match(ui,/role="dialog"/);
  assert.match(ui,/detailItem\.ingredients/);
  assert.match(ui,/detailItem\.allergens/);
