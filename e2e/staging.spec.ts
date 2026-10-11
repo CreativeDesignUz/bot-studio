@@ -75,11 +75,12 @@ test("Telegram token encryption round-trip works on deployed Worker", async ({ r
  * Real Telegram getMe/webhook/publishing still require a dedicated QA bot fixture.
  */
 for (const kind of ["Доставка еды", "Интернет-магазин"] as const) {
-  test(`Four-stage onboarding UI with simulated APIs — ${kind}`, async ({ page }) => {
+  test(`Five-stage onboarding with saved interactive Mini App design — ${kind}`, async ({ page }) => {
     const mockId = "c86fd579-1498-462f-8980-83a52aa42e1f";
     let inspected = false;
     let connected = false;
     let published = false;
+    let savedDesign:Record<string,unknown>|null=null;
     // A verified account is required for the real onboarding page.
     await page.route("**/api/auth/account",route=>route.fulfill({
       status:200,contentType:"application/json",body:JSON.stringify({authenticated:true})
@@ -100,6 +101,24 @@ for (const kind of ["Доставка еды", "Интернет-магазин"
         await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({connected:true,bot:{name:"QA bot",username:"BotStudioQaTestBot"}})});
       } else throw Error(`Unexpected mocked Telegram action: ${payload.action}`);
     });
+    await page.route("**/api/miniapp/design**",async route=>{
+      if(route.request().method()==="POST"){
+        savedDesign=route.request().postDataJSON() as Record<string,unknown>;
+        return route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({ok:true})});
+      }
+      return route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({
+        design:{layout:"food02",color:"#00CD69",dark:true,themeMode:"dark",defaultTheme:"system"},templateType:"delivery"
+      })});
+    });
+    await page.route("**/api/miniapp/preview?bot=*",route=>route.fulfill({
+      status:200,contentType:"application/json",body:JSON.stringify({
+       bot:{id:mockId,name:"QA E2E demo",description:"QA Food",logoUrl:null,color:"#6541F5",
+        template:kind==="Доставка еды"?"delivery":"store"},
+       design:{layout:"food01",color:"#6541F5",themeMode:"light",defaultTheme:"system",
+        banner:{enabled:true,title:"Вкусная еда рядом",description:"Выбирайте",imageUrl:"",buttonEnabled:false,buttonText:"",linkType:"page",target:"catalog"}},
+       items:[{id:"33333333-3333-4333-8333-333333333333",name:"QA блюдо",description:"Вкусно",image_url:null,price_minor:2500000,currency:"UZS"}],categories:[]
+      })
+    }));
     await page.route("**/api/publish", async (route) => {
       const payload=route.request().postDataJSON() as {botId?:string};
       expect(payload.botId).toBe(mockId);
@@ -123,8 +142,17 @@ for (const kind of ["Доставка еды", "Интернет-магазин"
     await expect(page.getByText(/QA bot · @BotStudioQaTestBot/)).toBeVisible();
     await page.getByRole("button",{name:"Подтвердить подключение"}).click();
     await expect(page.getByText("Telegram подключён: @BotStudioQaTestBot")).toBeVisible();
-    await page.getByRole("button",{name:/К проверке/}).click();
+    await page.getByRole("button",{name:/К дизайну Mini App/}).click();
+    await expect(page.getByRole("heading",{name:"Дизайн Mini App"})).toBeVisible();
+    await expect(page.getByText("Шаг 4 из 5")).toBeVisible();
+    await expect(page.getByRole("heading",{name:"Живой Mini App"})).toBeVisible();
+    await page.getByRole("group",{name:"Стиль Mini App"}).getByRole("button",{name:/Food 02/}).click();
+    await page.getByRole("group",{name:"Готовые цвета Mini App"}).getByRole("button",{name:"Зелёный"}).click();
+    await page.getByRole("group",{name:"Тема Mini App"}).getByRole("button",{name:"Тёмная"}).click();
+    await page.getByRole("button",{name:/Сохранить и продолжить/}).click();
     await expect(page.getByRole("heading",{name:"Проверка и запуск"})).toBeVisible();
+    await expect(page.getByText("Шаг 5 из 5")).toBeVisible();
+    expect(savedDesign).toMatchObject({botId:mockId,layout:"food02",color:"#00CD69",dark:true,themeMode:"dark",defaultTheme:"system"});
     await expect(page.getByText("Проект «QA E2E demo» создан")).toBeVisible();
     await page.getByRole("button",{name:/Опубликовать бота/}).click();
     await expect(page.getByRole("heading",{name:"Бот опубликован!"})).toBeVisible();
