@@ -125,8 +125,8 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
       <div className="flex flex-wrap gap-2">{categories.map(c=><div key={c.id} className="flex items-center gap-1 rounded-lg border border-[#e4e7ec] px-2 py-1 text-xs">
         <span className={c.is_active?"text-[#344054]":"text-[#98a2b3]"}>{c.name}{!c.is_active?" (скрыта)":""}</span>
         <button type="button" aria-label={"Редактировать категорию "+c.name} onClick={()=>{setEditingCategory(c);setCategoryName(c.name)}} className="p-1"><Pencil className="size-3.5"/></button>
-        <button type="button" disabled={saving} onClick={()=>void categoryRequest("POST",{id:c.id,name:c.name,position:Math.max(0,c.position-1),isActive:c.is_active})} className="p-1 disabled:opacity-30" aria-label={"Поднять "+c.name}>↑</button>
-        <button type="button" disabled={saving} onClick={()=>void categoryRequest("POST",{id:c.id,name:c.name,position:c.position+1,isActive:c.is_active})} className="p-1 disabled:opacity-30" aria-label={"Опустить "+c.name}>↓</button>
+        <button type="button" disabled={saving} onClick={()=>void categoryRequest("POST",{id:c.id,name:c.name,position:Math.min(0,...categories.map(x=>x.position))-1,isActive:c.is_active})} className="p-1 disabled:opacity-30" aria-label={"Переместить в начало "+c.name}>⇤</button>
+        <button type="button" disabled={saving} onClick={()=>void categoryRequest("POST",{id:c.id,name:c.name,position:Math.max(0,...categories.map(x=>x.position))+1,isActive:c.is_active})} className="p-1 disabled:opacity-30" aria-label={"Переместить в конец "+c.name}>⇥</button>
         <button type="button" disabled={saving} onClick={()=>void categoryRequest("POST",{id:c.id,name:c.name,position:c.position,isActive:!c.is_active})} className="p-1">{c.is_active?"Скрыть":"Показать"}</button>
         <button type="button" disabled={saving} onClick={()=>{if(window.confirm("Удалить категорию? Сначала перенесите все блюда."))void categoryRequest("DELETE",{id:c.id})}} className="p-1 text-[#b42318]" aria-label={"Удалить "+c.name}><Trash2 className="size-3.5"/></button>
       </div>)}</div>
