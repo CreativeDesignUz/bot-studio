@@ -15,7 +15,9 @@ async function sha256(value: string) {
   return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export async function resolveAppUser(request: Request, initData = "", allowGuest = true) {
+// Admin and editor endpoints require an authenticated Google/Telegram session by default.
+// Legacy guest mode is opt-in only; never create guest accounts implicitly for admin API calls.
+export async function resolveAppUser(request: Request, initData = "", allowGuest = false) {
   if (!env.SUPABASE_SECRET_KEY) throw new Error("Supabase server access is not configured");
   const supabase = getSupabaseServer({ privileged: true });
   if (initData && env.TELEGRAM_MANAGER_TOKEN) {
