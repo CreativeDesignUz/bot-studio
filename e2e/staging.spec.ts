@@ -534,3 +534,78 @@ test("delivery settings allow manual numbers with right-side units and save vali
  await expect(page.getByRole("status")).toContainText("Черновик доставки сохранён");
  await expect.poll(()=>submitted).toMatchObject({botId:id,delivery:{radiusKm:7.5,feeMinor:1500000}});
 });
+
+
+test("demo catalog import requires modal confirmation and cannot create data on cancel",async({page})=>{
+ const id="d071c20c-b54c-45cc-8033-982a09c945a1";
+ let imports=0,deletes=0,imported=false;
+ await page.route("**/api/workspace",route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({
+  bots:[{id,name:"QA Restaurant",username:"qa_food_bot",template_type:"delivery",
+   metrics:{ordersToday:0,revenueTodayMinor:0,catalogItems:0,customers:0,recentOrders:[]}}]
+ })}));
+ await page.route("**/api/catalog?bot=*",route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({
+  items:imported?[{id:"f0e5da33-8459-4c49-885e-cdd0693e0401",name:"Классический бургер",description:"Демо",price_minor:4900000,currency:"UZS",is_active:true,image_url:"https://images.unsplash.com/photo-1568901346375-23c9450c58cd"}]:[]
+ })}));
+ await page.route("**/api/catalog/categories?bot=*",route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({
+  categories:imported?[{id:"c0e5da33-8459-4c49-885e-cdd0693e0401",name:"Бургеры",position:0,is_active:true}]:[]
+ })}));
+ await page.route("**/api/demo-content**",async route=>{
+  if(route.request().method()==="GET"){
+   await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({
+    imported,canImport:true,notifications:imported?[{id:"d0e5da33-8459-4c49-885e-cdd0693e0401",title:"Новый демо-заказ",body:"Это тест",created_at:new Date().toISOString()}]:[]
+   })});return;
+  }
+  if(route.request().method()==="POST"){
+   const b=route.request().postDataJSON() as {botId:string;confirm:string};
+   expect(b).toMatchObject({botId:id,confirm:"IMPORT_DEMO_CONTENT"});
+   imports++;imported=true;
+   await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({ok:true,imported:true,items:8,orders:3,notifications:3})});return;
+  }
+  if(route.request().method()==="DELETE"){
+   const b=route.request().postDataJSON() as {botId:string;confirm:string};
+   expect(b).toMatchObject({botId:id,confirm:"REMOVE_DEMO_CONTENT"});
+   deletes++;imported=false;
+   await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({ok:true,removed:true})});return;
+  }
+  await route.abort();
+ });
+ await page.goto("/workspace?bot="+id+"&section=catalog");
+ await expect(page.getByRole("button",{name:"Загрузить демо-данные"})).toBeVisible();
+ expect(imports).toBe(0);
+ await page.getByRole("button",{name:"Загрузить демо-данные"}).click();
+ const modal=page.getByRole("dialog",{name:"Подтверждение загрузки демо-данных"});
+ await expect(modal).toBeVisible();
+ await expect(modal).toContainText("3 тестовых заказа");
+ await expect(modal.getByRole("button",{name:"Да, загрузить демо"})).toBeDisabled();
+ await modal.getByRole("button",{name:"Отмена"}).click();
+ expect(imports).toBe(0);
+ await page.getByRole("button",{name:"Загрузить демо-данные"}).click();
+ await modal.getByRole("checkbox").check();
+ await modal.getByRole("button",{name:"Да, загрузить демо"}).click();
+ await expect(page.getByRole("button",{name:"Убрать демо"})).toBeVisible();
+ await expect(page.getByText("Классический бургер")).toBeVisible();
+ await expect(page.getByText("ДЕМО-КОНТЕНТ")).toBeVisible();
+ expect(imports).toBe(1);
+ await page.getByRole("button",{name:"Уведомления"}).click();
+ await expect(page.getByText("Новый демо-заказ")).toBeVisible();
+ await page.getByRole("button",{name:"Убрать демо"}).click();
+ const remove=page.getByRole("dialog",{name:"Подтверждение удаления демо-данных"});
+ await expect(remove.getByRole("button",{name:"Удалить демо"})).toBeDisabled();
+ await remove.getByRole("checkbox").check();
+ await remove.getByRole("button",{name:"Удалить демо"}).click();
+ await expect(page.getByRole("button",{name:"Загрузить демо-данные"})).toBeVisible();
+ expect(deletes).toBe(1);
+ expect(imports).toBe(1);
+});
+
+test("demo import refuses anonymous and unconfirmed requests",async({request})=>{
+ const id="d071c20c-b54c-45cc-8033-982a09c945a1";
+ const noConfirm=await request.post("/api/demo-content",{data:{botId:id}});
+ expect(noConfirm.status()).toBe(400);
+ const anonymous=await request.post("/api/demo-content",{
+  data:{botId:id,confirm:"IMPORT_DEMO_CONTENT"}
+ });
+ expect([401,403]).toContain(anonymous.status());
+ const read=await request.get("/api/demo-content?bot="+id);
+ expect([401,403]).toContain(read.status());
+});
