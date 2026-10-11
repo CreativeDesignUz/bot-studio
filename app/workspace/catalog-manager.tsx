@@ -64,7 +64,7 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
     finally{setSaving(false)}
   }
   function open(item?: Item) {
-    setEditing(item ?? "new"); setName(item?.name ?? ""); setDescription(item?.description ?? "");setCategoryId(item?.category_id??"");setImageUrl(item?.image_url??"");setIngredients((item?.ingredients??[]).join(", "));setAllergens((item?.allergens??[]).join(", "));setPreparationMinutes(item?.preparation_minutes==null?"":String(item.preparation_minutes));
+    setEditing(item ?? "new"); setName(item?.name ?? ""); setDescription(item?.description ?? "");setCategoryId(item?.category_id ?? (chosenCategory === "all" ? "" : chosenCategory));setImageUrl(item?.image_url??"");setIngredients((item?.ingredients??[]).join(", "));setAllergens((item?.allergens??[]).join(", "));setPreparationMinutes(item?.preparation_minutes==null?"":String(item.preparation_minutes));
     const nextCurrency: CatalogCurrency = item?.currency === "USD" ? "USD" : "UZS";
     setCurrency(nextCurrency);
     setPrice(item?.price_minor == null ? "" : formatStoredPrice(item.price_minor, nextCurrency)); setActive(item?.is_active ?? true); setError("");
