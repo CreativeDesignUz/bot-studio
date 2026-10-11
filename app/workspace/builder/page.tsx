@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import FigmaTelegramPreview from "./figma-telegram-preview";
 import MiniAppLivePreview from "../miniapp-live-preview";
+import WorkspaceSidebar from "../workspace-sidebar";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Bot, Check, ChevronRight, Eye, GripVertical, LoaderCircle, Plus, Save, Send, Trash2, MessageCircle, Smartphone, ExternalLink, KeyRound, ShieldCheck, Unplug, Settings } from "lucide-react";
 
@@ -22,7 +23,7 @@ export default function BotBuilder(){
  const [buttons,setButtons]=useState<ActionButton[]>([]);
  const [bio,setBio]=useState(""),[welcome,setWelcome]=useState(""),[avatar,setAvatar]=useState<string|null>(null),[avatarBusy,setAvatarBusy]=useState(false);
  const [activeSection,setActiveSection]=useState<"profile"|"message"|"buttons"|"miniapp"|"publish">("profile");
- const [searchQuery,setSearchQuery]=useState("");
+ const [botType,setBotType]=useState<"delivery"|"store"|"service">("delivery");
  const previewMode=activeSection==="miniapp"?"miniapp":"telegram";
  const figmaPreview=activeSection==="profile"?"profile":"chat";
  const [foodTemplate,setFoodTemplate]=useState<"food01"|"food02">("food01");
@@ -53,6 +54,7 @@ export default function BotBuilder(){
     if(designResponse.ok){
       const theme=await designResponse.json() as {design?:{layout?:"food01"|"food02";color?:string;dark?:boolean;themeMode?:"light"|"dark"|"customer";defaultTheme?:"system"|"light"|"dark"};templateType?:string};
       setFoodBot(theme.templateType==="delivery"||theme.templateType==="store");
+      setBotType(theme.templateType==="store"?"store":theme.templateType==="service"?"service":"delivery");
       setFoodTemplate(theme.design?.layout==="food02"?"food02":"food01");
       setFoodThemeMode(theme.design?.themeMode??(theme.design?.dark?"dark":"light"));
       setFoodDefaultTheme(theme.design?.defaultTheme??"system");
@@ -135,27 +137,7 @@ export default function BotBuilder(){
  if(loadState==="error")return <main className="grid min-h-screen place-items-center bg-[#f4f6f8] p-5 text-[#101828]"><section className="w-full max-w-lg rounded-[24px] border border-[#e4e7ec] bg-white p-8 text-center"><span className="mx-auto grid size-14 place-items-center rounded-2xl bg-[#fff1f3] text-[#c01048]"><Bot/></span><h1 className="mt-5 text-2xl font-semibold">Не удалось открыть редактор</h1><p className="mt-2 text-sm leading-6 text-[#667085]">{loadError}</p><div className="mt-6 flex justify-center gap-3"><Link href="/workspace" className="inline-flex h-11 items-center rounded-xl border border-[#d0d5dd] px-4 text-sm font-semibold no-underline">В кабинет</Link><button onClick={()=>location.reload()} className="h-11 rounded-xl bg-[#101828] px-5 text-sm font-semibold text-white">Повторить</button></div></section></main>;
  return <main className="min-h-dvh bg-[#f4f6f8] text-[#101828] xl:h-dvh xl:overflow-hidden">
   <div className="mx-auto grid min-h-dvh max-w-[1600px] xl:h-full xl:min-h-0 xl:grid-cols-[248px_minmax(0,1fr)]">
-   <aside className="flex min-h-0 flex-col border-r border-[#e4e7ec] bg-white px-4 py-5 xl:h-full xl:overflow-y-auto">
-    <Link href="/workspace" className="flex items-center gap-2 rounded-lg px-1 no-underline"><span className="grid size-9 place-items-center rounded-[9px] bg-[#4420e7] text-white"><Bot className="size-5"/></span><strong className="text-[18px] tracking-[-.02em] text-[#080b2b]">BotStudio</strong></Link>
-    <div className="relative mt-5">
-    <label className="flex h-10 items-center gap-2 rounded-lg border border-[#cbd5e0] bg-[#f8f9fb] px-3 text-[#718096]"><Eye className="size-4"/><input aria-label="Поиск настроек" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Поиск настроек" className="min-w-0 flex-1 bg-transparent text-xs text-[#080b2b] outline-none placeholder:text-[#718096]"/><span className="rounded border px-1 text-[10px]">⌘K</span></label>
-    {searchQuery.trim()&&<div className="absolute left-0 right-0 top-11 z-40 overflow-hidden rounded-lg border border-[#cbd5e0] bg-white shadow-lg">{([["profile","Профиль бота"],["message","Приветствие"],["buttons","Кнопки и сценарии"],["miniapp","Мини-приложение"],["publish","Подключение и запуск"]] as const).filter(([,label])=>label.toLowerCase().includes(searchQuery.toLowerCase())).map(([id,label])=><button type="button" key={id} className="block w-full px-3 py-3 text-left text-xs hover:bg-[#f0ecff]" onClick={()=>{setActiveSection(id);setSearchQuery("")}}>{label}</button>)}{!["Профиль бота","Приветствие","Кнопки и сценарии","Мини-приложение","Подключение и запуск"].some(label=>label.toLowerCase().includes(searchQuery.toLowerCase()))&&<p className="px-3 py-3 text-xs text-[#718096]">Настройки не найдены</p>}</div>}
-   </div>
-    <nav className="mt-7 space-y-1 text-sm">
-     <Link href={`/workspace?bot=${encodeURIComponent(botId??"")}`} className="flex h-11 items-center gap-3 rounded-xl px-3 text-[#667085] no-underline hover:bg-[#f9fafb]"><Bot size={18}/>Обзор</Link>
-     <Link href={`/workspace?bot=${encodeURIComponent(botId??"")}`} className="flex h-11 items-center gap-3 rounded-xl px-3 text-[#667085] no-underline hover:bg-[#f9fafb]"><Save size={18}/>Заказы и заявки</Link>
-    </nav>
-    <p className="mt-7 px-3 text-[11px] font-semibold uppercase tracking-[.06em]">Интеграция</p>
-    <div className="mt-3 rounded-[10px] bg-[#6541F5] px-3 py-3 text-[14px] font-medium text-white"><span className="flex items-center gap-2"><Send size={17}/>Телеграм бот <ChevronRight className="ml-auto size-4 rotate-90"/></span></div>
-    <nav className="ml-4 border-l border-[#ddd6fe] pl-2 text-sm">
-     <button type="button" onClick={()=>setActiveSection("message")} className={`mt-1 flex h-10 w-full items-center justify-between rounded-[8px] px-3 text-left ${activeSection==="message"?"bg-[#f0ecff] text-[#5934dc]":"text-[#080b2b]"}`}>Приветствие<ChevronRight size={14}/></button>
-     <button type="button" onClick={()=>setActiveSection("profile")} className={`mt-1 flex h-10 w-full items-center justify-between rounded-[8px] px-3 text-left ${activeSection==="profile"?"bg-[#e8e2ff] text-[#4420e7]":"text-[#080b2b]"}`}>Профиль бота<ChevronRight size={14}/></button>
-     <button type="button" onClick={()=>setActiveSection("buttons")} className={`mt-1 flex h-10 w-full items-center justify-between rounded-[8px] px-3 text-left ${activeSection==="buttons"?"bg-[#e8e2ff] text-[#4420e7]":"text-[#080b2b]"}`}>Все WorkFlow<ChevronRight size={14}/></button>
-     <button type="button" onClick={()=>setActiveSection("miniapp")} className={`mt-1 flex h-10 w-full items-center justify-between rounded-[8px] px-3 text-left ${activeSection==="miniapp"?"bg-[#e8e2ff] text-[#4420e7]":"text-[#080b2b]"}`}>Мини-приложение<ChevronRight size={14}/></button>
-     <button type="button" onClick={()=>setActiveSection("publish")} className={`mt-1 flex h-10 w-full items-center justify-between rounded-[8px] px-3 text-left ${activeSection==="publish"?"bg-[#e8e2ff] text-[#4420e7]":"text-[#080b2b]"}`}>Подключение<ChevronRight size={14}/></button>
-    </nav>
-    <div className="mt-auto border-t border-[#eaecf0] pt-4 text-sm text-[#667085]"><span className="flex h-11 items-center gap-3 rounded-xl bg-[#f0ecff] px-3 font-medium text-[#5934dc]"><Settings size={18}/>Настройки бота</span><Link href="/onboarding" className="mt-1 flex h-11 items-center gap-3 rounded-xl px-3 font-semibold text-[#5934dc] no-underline"><Plus size={18}/>Создать ещё бота</Link></div>
-   </aside>
+   <WorkspaceSidebar botId={botId??""} botType={botType} bots={[{id:botId??"",name:name||"Текущий бот",type:botType}]} editorSection={activeSection} onEditorSectionChange={setActiveSection}/>
    <div className="flex min-h-0 min-w-0 flex-col px-5 py-5 sm:px-8 xl:h-full xl:overflow-hidden xl:px-9">
     <div className="flex flex-wrap items-center justify-between gap-3">
      <Link href={`/workspace?bot=${encodeURIComponent(botId??"")}`} className="flex items-center gap-3 text-sm font-semibold text-[#101828] no-underline"><ArrowLeft className="size-5 text-[#6541F5]"/>Назад в кабинет</Link>
