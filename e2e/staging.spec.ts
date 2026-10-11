@@ -525,6 +525,7 @@ test("delivery settings allow manual numbers with right-side units and save vali
  await expect(fee.locator("..").getByText("сум",{exact:true})).toBeVisible();
  await expect(page.locator('input[type="number"]')).toHaveCount(0);
  await radius.fill("");
+ await expect(radius).toHaveValue("");
  await expect(page.getByRole("button",{name:"Сохранить черновик"})).toBeDisabled();
  await radius.fill("7,5");
  await fee.fill("15 000");
