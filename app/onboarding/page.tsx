@@ -203,6 +203,7 @@ export default function OnboardingPage(){
            :<><KeyRound aria-hidden="true" className="size-4"/>Проверить</>}
          </button>
         </div>
+        {!name.trim()&&token.trim()&&<p role="note" className="mt-2 text-xs text-[#875a1a]">Сначала укажите название бота выше — тогда можно будет проверить токен.</p>}
         {verified&&<div role="status" aria-live="polite" className="mt-3 rounded-xl border border-[#a6e9c1] bg-[#f0fdf4] p-4 text-sm">
          <p className="flex items-center gap-2 font-semibold text-[#067647]"><CheckCircle2 size={18} aria-hidden="true"/>Токен успешно проверен</p>
          <p className="mt-1 text-[#475467]">Найден бот: <strong>{verified.name} · @{verified.username}</strong></p>
