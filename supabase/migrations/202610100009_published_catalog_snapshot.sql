@@ -205,8 +205,9 @@ $$; then raise exception 'INVALID_REQUEST_KEY' using errcode='22023'; end if;
     return jsonb_build_object('orderId',order_row.id,'totalMinor',order_row.total_minor,'currency',order_row.currency,'replayed',true);
   end;
   insert into public.order_items(order_id,catalog_item_id,item_name,quantity,unit_price_minor)
-  select order_row.id,ci.id,ci.name,(items.value->>'quantity')::integer,ci.price_minor
-  from jsonb_array_elements(p_items) items join public.catalog_items ci on ci.id=(items.value->>'id')::uuid and ci.bot_id=p_bot_id;
+  select order_row.id,(items.value->>'id')::uuid,p.value->>'name',(items.value->>'quantity')::integer,(p.value->>'price_minor')::bigint
+  from jsonb_array_elements(p_items) items
+  join jsonb_array_elements(snapshot_items) p on p.value->>'id'=items.value->>'id';
   return jsonb_build_object('orderId',order_row.id,'totalMinor',total_amount,'currency',order_currency,'replayed',false);
 end;
 $$;
