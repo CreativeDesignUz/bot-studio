@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Bot, BookOpen, Check, CheckCircle2, ChevronRight, Clock3, ExternalLink, ImagePlus, KeyRound, Package, Rocket, Send, ShoppingBag, Sparkles, UtensilsCrossed } from "lucide-react";
+import { ArrowLeft, ArrowRight, Bot, BookOpen, Check, CheckCircle2, ChevronRight, Clock3, ExternalLink, ImagePlus, KeyRound, LoaderCircle, Package, Rocket, Send, ShoppingBag, Sparkles, UtensilsCrossed } from "lucide-react";
 
 type Stage = 0 | 1 | 2 | 3;
 type TemplateId = "delivery" | "store" | "service" | "course";
@@ -34,6 +34,7 @@ export default function OnboardingPage(){
  const [avatarUrl,setAvatarUrl]=useState("");
  const [botId,setBotId]=useState<string|null>(null);
  const [token,setToken]=useState("");
+ const [tokenCheckState,setTokenCheckState]=useState<"idle"|"saving"|"checking"|"verified">("idle");
  const [credentialId,setCredentialId]=useState("");
  const [verified,setVerified]=useState<TelegramIdentity|null>(null);
  const [connected,setConnected]=useState<TelegramIdentity|null>(null);
@@ -84,16 +85,24 @@ export default function OnboardingPage(){
   if(id){resetMessage();setStage(3)}
  }
  async function inspectToken(){
-  const id=await ensureBot();if(!id)return;
+  if(busy||tokenCheckState!=="idle")return;
   if(!token.trim()){setError("Вставьте токен, полученный в BotFather.");return}
-  setBusy(true);resetMessage();
+  setTokenCheckState(botId?"checking":"saving");
+  resetMessage();
   try{
+   // Keep loading visible through draft creation and Telegram token inspection.
+   // Never announce success without a verified bot and credential.
+   const id=await ensureBot();
+   if(!id)return;
+   setTokenCheckState("checking");
+   setBusy(true);
    const response=await fetch("/api/channels/telegram/token",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"inspect",botId:id,token:token.trim(),initData:telegramData()})});
    const result=await response.json() as {bot?:TelegramIdentity;credentialId?:string;error?:string};
    if(!response.ok||!result.bot||!result.credentialId)throw new Error(result.error??"Telegram не подтвердил токен.");
    setCredentialId(result.credentialId);setVerified(result.bot);setToken("");
+   setTokenCheckState("verified");
   }catch(e){setError(e instanceof Error?e.message:"Не удалось проверить токен.")}
-  finally{setBusy(false)}
+  finally{setBusy(false);setTokenCheckState(current=>current==="verified"?"verified":"idle")}
  }
  async function connect(){
   if(!botId||!credentialId)return;
@@ -102,7 +111,7 @@ export default function OnboardingPage(){
    const response=await fetch("/api/channels/telegram/token",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"connect",botId,credentialId,initData:telegramData()})});
    const result=await response.json() as {connected?:boolean;bot?:TelegramIdentity;error?:string};
    if(!response.ok||!result.connected)throw new Error(result.error??"Не удалось подключить Telegram.");
-   setConnected(result.bot??verified);setCredentialId("");setVerified(null);
+   setConnected(result.bot??verified);setCredentialId("");setVerified(null);setTokenCheckState("idle");
    setProgressNotice("Telegram-бот подключён. Можно перейти к запуску.");
   }catch(e){setError(e instanceof Error?e.message:"Ошибка подключения.")}
   finally{setBusy(false)}
@@ -175,8 +184,34 @@ export default function OnboardingPage(){
       {choice!=="later"&&!connected&&<div className="border-t border-[#e5e7eb] pt-5">
        <p className="text-sm font-semibold">Подключение через BotFather</p>
        <p className="mt-1 text-xs text-[#667085]">Сначала сохраните проект, затем проверьте токен. Не отправляйте токен в чат или другим людям.</p>
-       {!verified?<div className="mt-3 flex gap-2"><input type="password" autoComplete="off" value={token} onChange={event=>setToken(event.target.value)} placeholder="Telegram Bot API token" className="h-11 min-w-0 flex-1 rounded-lg border border-[#d7dce6] px-3 text-sm"/><button type="button" onClick={()=>void inspectToken()} disabled={busy||!name.trim()||!token.trim()} className={secondary}>Проверить</button></div>:
-       <div className="mt-3 rounded-xl bg-[#f3f0ff] p-4 text-sm"><strong>{verified.name} · @{verified.username}</strong><div className="mt-3 flex gap-2"><button className={primary} disabled={busy} onClick={()=>void connect()}>Подтвердить подключение</button><button className={secondary} onClick={()=>{setVerified(null);setCredentialId("")}}>Другой токен</button></div></div>}
+       <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+         <input type="password" autoComplete="off" value={verified?"":token}
+          onChange={event=>{setToken(event.target.value);if(error)setError("")}}
+          disabled={busy||tokenCheckState!=="idle"} placeholder={verified?"Токен проверен":"Telegram Bot API token"}
+          aria-label="Telegram Bot API token"
+          className="h-11 min-w-0 flex-1 rounded-lg border border-[#d7dce6] px-3 text-sm outline-[#6541F5] disabled:bg-[#f9fafb]"/>
+         <button type="button" onClick={()=>void inspectToken()}
+          disabled={busy||tokenCheckState!=="idle"||!name.trim()||!token.trim()}
+          aria-busy={tokenCheckState==="saving"||tokenCheckState==="checking"}
+          className={tokenCheckState==="verified"
+            ?"inline-flex h-11 min-w-[140px] shrink-0 items-center justify-center gap-2 rounded-lg border border-[#a6e9c1] bg-[#ecfdf3] px-4 text-sm font-semibold text-[#067647] transition-colors"
+            :"inline-flex h-11 min-w-[140px] shrink-0 items-center justify-center gap-2 rounded-lg border border-[#4420e7] bg-[#4420e7] px-4 text-sm font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:border-[#e4e7ec] disabled:bg-[#f9fafb] disabled:text-[#98a2b3]"}>
+          {tokenCheckState==="saving"||tokenCheckState==="checking"
+           ?<><LoaderCircle aria-hidden="true" className="size-4 animate-spin"/>{tokenCheckState==="saving"?"Сохраняем…":"Проверяем…"}</>
+           :tokenCheckState==="verified"
+           ?<><CheckCircle2 aria-hidden="true" className="size-4"/>Успешно</>
+           :<><KeyRound aria-hidden="true" className="size-4"/>Проверить</>}
+         </button>
+        </div>
+        {verified&&<div role="status" aria-live="polite" className="mt-3 rounded-xl border border-[#a6e9c1] bg-[#f0fdf4] p-4 text-sm">
+         <p className="flex items-center gap-2 font-semibold text-[#067647]"><CheckCircle2 size={18} aria-hidden="true"/>Токен успешно проверен</p>
+         <p className="mt-1 text-[#475467]">Найден бот: <strong>{verified.name} · @{verified.username}</strong></p>
+         <p className="mt-2 text-xs text-[#667085]">Подтвердите подключение, чтобы привязать этого бота к проекту.</p>
+         <div className="mt-3 flex flex-wrap gap-2">
+          <button type="button" className={primary} disabled={busy} onClick={()=>void connect()}>{busy?<LoaderCircle className="size-4 animate-spin" aria-hidden="true"/>:<CheckCircle2 className="size-4" aria-hidden="true"/>}{busy?"Подключаем…":"Подтвердить подключение"}</button>
+          <button type="button" className={secondary} disabled={busy} onClick={()=>{setVerified(null);setCredentialId("");setTokenCheckState("idle");setToken("");resetMessage()}}>Другой токен</button>
+         </div>
+        </div>}
       </div>}
       {connected&&<p className="flex items-center gap-2 rounded-lg bg-[#f0fdf4] p-3 text-sm text-[#166534]"><CheckCircle2 size={18}/>Telegram подключён: @{connected.username}</p>}
      </div>
