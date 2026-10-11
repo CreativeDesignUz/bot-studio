@@ -233,7 +233,7 @@ test("linking Google without a verified session is rejected",async({request})=>{
 
 
 // QA 2026-10-11: actual admin UI and theme-picker regression
-test("admin cabinet renders the selected delivery bot and exposes creation", async ({ page }) => {
+test("admin cabinet renders the selected delivery bot and exposes creation", async ({ page },testInfo) => {
   const id = "d071c20c-b54c-45cc-8033-982a09c945a1";
   await page.route("**/api/workspace", route => route.fulfill({
     status: 200, contentType: "application/json",
@@ -246,6 +246,7 @@ test("admin cabinet renders the selected delivery bot and exposes creation", asy
   await expect(page.getByRole("heading",{name:"Обзор"})).toBeVisible();
   await expect(page.locator("select").first()).toHaveValue(id);
   await expect(page.getByRole("link",{name:/Создать (ещё )?бота/})).toBeVisible();
+   if(testInfo.project.name==="mobile")await page.getByRole("button",{name:"Открыть все разделы"}).click();
    for(const title of ["Меню","Заказы","Доставка","Клиенты","Акции","Поддержка","Отчёты","Оформление Mini App","Настройки доставки","Настройки бота","Настройки доступа"])await expect(page.getByRole("link",{name:title}).or(page.getByRole("button",{name:title})).first()).toBeVisible();
 });
 
