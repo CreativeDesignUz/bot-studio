@@ -2,7 +2,7 @@ import {resolveAppUser,withSessionCookie} from "@/lib/auth/app-user";
 
 const idPattern=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const types:Record<string,string>={"image/jpeg":"jpg","image/png":"png","image/webp":"webp"};
-const maxBytes=5*1024*1024;
+const maxBytes=2*1024*1024;
 
 export async function POST(request:Request){
  let form:FormData;
@@ -12,7 +12,7 @@ export async function POST(request:Request){
  const image=form.get("image");
  if(!idPattern.test(botId))return Response.json({error:"Некорректный бот."},{status:400});
  if(!(image instanceof File)||!types[image.type]||image.size===0||image.size>maxBytes)
-  return Response.json({error:"Загрузите JPG, PNG или WebP до 5 МБ."},{status:400});
+  return Response.json({error:"Загрузите JPG, PNG или WebP до 2 МБ."},{status:400});
  // Validate signature/MIME bytes, not just browser-supplied file.type.
  const bytes=new Uint8Array(await image.arrayBuffer());
  const jpg=bytes.length>=3&&bytes[0]===0xff&&bytes[1]===0xd8&&bytes[2]===0xff;
