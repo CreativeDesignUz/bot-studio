@@ -21,8 +21,26 @@ export async function POST(request: Request) {
   if (channel?.status !== "connected" || !channel.external_account_id || !secret || request.headers.get("x-telegram-bot-api-secret-token") !== secret)
     return new Response("Forbidden", { status: 403 });
 
-  const update = await request.json() as RuntimeUpdate;
-  if (!Number.isSafeInteger(update.update_id)) return new Response("Invalid update", { status: 400 });
+  // Telegram updates are small JSON objects. Reject oversized or malformed payloads
+  // before claiming an update, so invalid deliveries cannot poison replay state.
+  const MAX_UPDATE_BYTES = 256 * 1024;
+  const declaredLength = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_UPDATE_BYTES)
+    return new Response("Update too large", { status: 413 });
+  let update: RuntimeUpdate;
+  try {
+    const raw = await request.text();
+    if (new TextEncoder().encode(raw).byteLength > MAX_UPDATE_BYTES)
+      return new Response("Update too large", { status: 413 });
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+      return new Response("Invalid update", { status: 400 });
+    update = parsed as RuntimeUpdate;
+  } catch {
+    return new Response("Invalid JSON", { status: 400 });
+  }
+  if (!Number.isSafeInteger(update.update_id) || update.update_id! < 0)
+    return new Response("Invalid update", { status: 400 });
   const updateId = update.update_id!;
   const { data: claimed, error: claimError } = await supabase.rpc("claim_telegram_update", { p_channel_id: channel.id, p_update_id: updateId });
   if (claimError) return new Response("Replay protection unavailable", { status: 503 });
