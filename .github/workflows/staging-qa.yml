@@ -1,5 +1,8 @@
 name: Bot Studio Staging QA
 on:
+  push:
+    branches:
+      - fix/telegram-oidc-login-20261011
   workflow_dispatch:
   schedule:
     - cron: '15 */6 * * *'
