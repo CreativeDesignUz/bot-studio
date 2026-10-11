@@ -540,7 +540,7 @@ test("demo catalog import requires modal confirmation and cannot create data on 
  const id="d071c20c-b54c-45cc-8033-982a09c945a1";
  let imports=0,deletes=0,imported=false;
  await page.route("**/api/workspace",route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({
-  bots:[{id,name:"QA Restaurant",username:"qa_food_bot",template_type:"delivery",
+  bots:[{id,name:"QA Restaurant",username:"qa_food_bot",template_type:"delivery",demoImported:imported,
    metrics:{ordersToday:0,revenueTodayMinor:0,catalogItems:0,customers:0,recentOrders:[]}}]
  })}));
  await page.route("**/api/catalog?bot=*",route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({
