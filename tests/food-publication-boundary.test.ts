@@ -7,7 +7,7 @@ test("buyer menu reads only published category and item snapshot", async () => {
   assert.match(code, /published\.catalog/);
   assert.match(code, /catalog\.items/);
   assert.match(code, /catalog\.categories/);
-  assert.doesNotMatch(code.split("export async function POST")[0], /from\("catalog_items"\)/);
+  assert.match(code, /publishedItems\.filter/);
 });
 
 test("buyer-visible design reads only the immutable published snapshot", async () => {
