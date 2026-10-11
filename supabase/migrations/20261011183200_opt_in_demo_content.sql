@@ -49,13 +49,11 @@ begin
   return jsonb_build_object('imported',true,'alreadyImported',true);
  end if;
  -- Preserve actual orders and catalog; never replace, edit or delete them.
- foreach v_i in array array[1] loop
-  for v_count in 1..array_length(v_cat_names,1) loop
+ for v_count in 1..array_length(v_cat_names,1) loop
    insert into public.catalog_categories(bot_id,name,description,position,is_active)
    values(p_bot_id,v_cat_names[v_count],'Демонстрационная категория Bot Studio',100+v_count,true)
    returning id into v_cat_id;
    v_cat_ids:=array_append(v_cat_ids,v_cat_id);
-  end loop;
  end loop;
  v_item_type:=case when v_bot.template_type='delivery' then 'dish' else 'product' end;
  v_count:=0;
@@ -111,7 +109,7 @@ begin
    (array['Новый демо-заказ','Демо: заказ готовится','Демо-каталог заполнен'])[v_i],
    (array['Поступил тестовый заказ на бургер. Это не реальный покупатель.',
           'В тестовом заказе обновился статус приготовления.',
-          'Добавлены категории и блюда с фотографиями.'][v_i]),
+          'Добавлены категории и блюда с фотографиями.'])[v_i],
    v_stamp-(v_i-1)*interval '9 minutes')
   returning id into v_id;
   v_notification_ids:=array_append(v_notification_ids,v_id);
