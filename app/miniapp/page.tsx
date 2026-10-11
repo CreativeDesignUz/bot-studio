@@ -61,12 +61,6 @@ export default function MiniAppPage() {
     if(!shop)return;
     try{const saved=localStorage.getItem("miniapp-theme:"+shop.bot.id);setCustomerTheme(saved==="light"||saved==="dark"?saved:null);}catch{setCustomerTheme(null);}
   },[shop?.bot.id]);
-  useEffect(()=>{
-    if(!shop||shop.bot.template!=="delivery")return;
-    const webApp=(window as typeof window & {Telegram?:{WebApp?:{setHeaderColor?:(color:string)=>void;setBackgroundColor?:(color:string)=>void}}}).Telegram?.WebApp;
-    webApp?.setHeaderColor?.(dark?"#20242A":"#edf0f2");
-    webApp?.setBackgroundColor?.(dark?"#111418":"#f7f8fa");
-  },[dark,shop?.bot.id]);
   function setBuyerTheme(next:"light"|"dark"){
     setCustomerTheme(next);
     if(shop)try{localStorage.setItem("miniapp-theme:"+shop.bot.id,next);}catch{}
@@ -99,6 +93,12 @@ export default function MiniAppPage() {
   const foodStyle=shop?.design?.layout==="food02"?"food02":"food01";
   const color = isFood&&/^#[\da-f]{6}$/i.test(shop?.design?.color??"")?shop!.design!.color!: /^#[\da-f]{6}$/i.test(shop?.bot.color ?? "") ? shop!.bot.color : "#6541F5";
   const paper=dark?"#20242A":"#fff";const pageBg=dark?"#111418":"#f7f8fa";const ink=dark?"#f9fafb":"#18212b";const hint=dark?"#abb3c1":"#687281";
+  useEffect(()=>{
+    if(!shop||shop.bot.template!=="delivery")return;
+    const webApp=(window as typeof window & {Telegram?:{WebApp?:{setHeaderColor?:(color:string)=>void;setBackgroundColor?:(color:string)=>void}}}).Telegram?.WebApp;
+    webApp?.setHeaderColor?.(dark?"#20242A":"#edf0f2");
+    webApp?.setBackgroundColor?.(dark?"#111418":"#f7f8fa");
+  },[dark,shop?.bot.id]);
   const detailItem=(shop?.items??[]).find(item=>item.id===detailId);
   const visibleFood=(shop?.items??[]).filter(x=>(category==="all"||x.category_id===category)&&[x.name,x.description].join(" ").toLowerCase().includes(foodSearch.trim().toLowerCase()));
 
