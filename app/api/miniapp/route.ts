@@ -21,7 +21,7 @@ export async function GET(request: Request) {
       return jsonError("Магазин ещё не опубликован", 404);
     const [itemResult, categoryResult] = await Promise.all([
       supabase.from("catalog_items")
-        .select("id,name,description,image_url,price_minor,currency,item_type,category_id")
+        .select("id,name,description,image_url,price_minor,currency,item_type,category_id,ingredients,allergens,preparation_minutes")
         .eq("bot_id", botId).eq("is_active", true).order("position", { ascending: true }).limit(200),
       supabase.from("catalog_categories")
         .select("id,name,position").eq("bot_id", botId).eq("is_active", true).order("position"),
