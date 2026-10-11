@@ -115,7 +115,8 @@ declare
   item jsonb; entry record; order_row public.orders; expected_count integer; published_item jsonb; snapshot_items jsonb; request_fingerprint text;
   total_amount bigint := 0; order_currency text; item_ids uuid[]; requested_ids uuid[]; item_quantity integer;
 begin
-  if p_request_key !~ '^[A-Za-z0-9_-]{16,128}
+  if p_request_key !~ '^[A-Za-z0-9_-]{16,128}$' then raise exception 'INVALID_REQUEST_KEY' using errcode='22023'; end if;
+  request_fingerprint := md5(jsonb_build_object('fulfillment',p_fulfillment,'address',p_delivery_address,'items',p_items,'name',p_customer_name)::text);
   select * into order_row from public.orders where bot_id=p_bot_id
     and customer_external_id=p_customer_external_id and request_key=p_request_key;
   if order_row.id is not null then
