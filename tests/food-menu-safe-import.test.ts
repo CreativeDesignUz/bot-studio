@@ -10,6 +10,8 @@ test("demo food import keeps existing restaurant dishes instead of blocking or o
   assert.doesNotMatch(code,/Меню уже содержит блюда/);
   assert.match(code,/eq\("owner_id",user\.id\)/);
   assert.match(code,/if\(!missing\.length\)/);
+  assert.match(code,/bot\.publish_status==="published"/);
+  assert.match(code,/bot\.status==="active"/);
 });
 test("live delivery workspace does not offer inserting demonstration dishes",async()=>{
   const code=await readFile(new URL("../app/workspace/catalog-manager.tsx",import.meta.url),"utf8");
