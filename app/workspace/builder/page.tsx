@@ -86,7 +86,7 @@ export default function BotBuilder(){
     const response=await fetch("/api/miniapp/design",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({botId,initData:telegramInitData(),...design})});
     const body=await response.json() as {error?:string};
     if(!response.ok)throw new Error(body.error??"Не удалось сохранить оформление");
-    setFoodNotice("Оформление сохранено для этого бота.");
+    setFoodNotice("Черновик дизайна сохранён. Чтобы покупатели увидели изменения, нажмите «Опубликовать».");
   }catch(e){setFoodNotice(e instanceof Error?e.message:"Ошибка сохранения")}
   finally{setFoodSaving(false)}
  }
@@ -222,7 +222,7 @@ export default function BotBuilder(){
        <button type="button" disabled={foodSaving} onClick={()=>void saveFoodDesign()} className="h-11 w-full rounded-xl bg-[#6541F5] px-4 text-sm font-semibold text-white disabled:opacity-50">{foodSaving?"Сохраняем…":"Сохранить оформление"}</button>
        {foodNotice&&<p role="status" className="text-sm text-[#475467]">{foodNotice}</p>}
        <a href={botId?`/miniapp?bot=${encodeURIComponent(botId)}`:"/miniapp"} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm font-semibold text-[#6541F5]">Открыть клиентский Mini App <ExternalLink size={16}/></a>
-       <p className="text-xs text-[#667085]">Здесь отображается выбранный стиль. Для сохранения нажмите кнопку. Клиентская версия обновится после повторного открытия Mini App.</p>
+       <p className="text-xs text-[#667085]">Здесь отображается выбранный стиль. Для сохранения нажмите кнопку. Покупатели увидят сохранённый дизайн только после успешной публикации бота и повторного открытия Mini App.</p>
       </div>:<div className="mt-6 space-y-4"><Field label="Основной цвет"><input type="color" value={color} onChange={e=>change(()=>setColor(e.target.value))}/></Field><p className="text-sm text-[#667085]">Food-темы доступны для ботов доставки еды. Каталог настраивается в кабинете.</p></div>}
     </div>}
     {activeSection==="publish" && <div className="rounded-[22px] border border-[#e4e7ec] bg-white p-5 sm:p-7">
