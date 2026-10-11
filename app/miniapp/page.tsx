@@ -146,7 +146,7 @@ export default function MiniAppPage() {
     <div className="mx-auto max-w-[550px]">
       {isFood&&themeMode==="customer"&&<div className="flex justify-end gap-2 px-5 pt-2 text-xs"><button type="button" aria-pressed={!dark} onClick={()=>setBuyerTheme("light")} className="rounded-full px-3 py-1" style={{background:!dark?color:paper,color:!dark?"white":ink}}>Светлая</button><button type="button" aria-pressed={!!dark} onClick={()=>setBuyerTheme("dark")} className="rounded-full px-3 py-1" style={{background:dark?color:paper,color:dark?"white":ink}}>Тёмная</button></div>}
 
-      {isFood?<header className="sticky top-0 z-20 flex h-[54px] items-center justify-between border-b px-5 text-sm" style={{background:dark?"#20242A":"#edf0f2",borderColor:dark?"#333941":"#e9edf0"}}><button onClick={()=>{setTab("catalog");setShowFoodCategories(false);setCategory("all")}} aria-label="На главную" className="text-[26px] leading-none">‹</button><strong className="text-[15px]">{shop.bot.name}</strong><span className="text-lg">•••</span></header>:
+      {isFood?<div className="px-5 pt-4"><p className="text-sm font-semibold" style={{color:ink}}>{shop.bot.name}</p></div>:
       <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-[#e9edf2] bg-white/95 px-5 py-4 backdrop-blur">
         {shop.bot.logoUrl ? <img src={shop.bot.logoUrl} alt="" className="size-12 rounded-2xl object-cover"/> :
           <span className="grid size-12 place-items-center rounded-2xl text-white" style={{ backgroundColor: color }}><Store className="size-6"/></span>}
