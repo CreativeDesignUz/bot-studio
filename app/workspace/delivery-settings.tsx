@@ -10,12 +10,12 @@ export default function DeliverySettings({botId}:{botId:string}){
  const [radiusText,setRadiusText]=useState(String(initial.radiusKm));
  const [feeText,setFeeText]=useState(String(initial.feeMinor/100));
  const radius=radiusText.trim()?Number(radiusText.replace(",",".")):NaN;
- const fee=feeText.trim()?Number(feeText.replace(/\\s/g,"")):NaN;
+ const fee=feeText.trim()?Number(feeText.replace(/\s/g,"")):NaN;
  const radiusValid=Number.isFinite(radius)&&radius>=0.1&&radius<=100;
  const feeValid=Number.isSafeInteger(fee)&&fee>=0&&fee<=1000000;
  const inputsValid=radiusValid&&feeValid;
- function changeRadius(value:string){if(/^\\d{0,3}(?:[.,]\\d{0,3})?$/.test(value)){setRadiusText(value);setNotice("");}}
- function changeFee(value:string){if(/^[\\d\\s]{0,13}$/.test(value)){setFeeText(value);setNotice("");}}
+ function changeRadius(value:string){if(/^\d{0,3}(?:[.,]\d{0,3})?$/.test(value)){setRadiusText(value);setNotice("");}}
+ function changeFee(value:string){if(/^[\d\s]{0,13}$/.test(value)){setFeeText(value);setNotice("");}}
 
  useEffect(()=>{const c=new AbortController();async function load(){try{const r=await fetch("/api/delivery/settings?bot="+encodeURIComponent(botId),{headers:{"x-telegram-init-data":initData()},signal:c.signal});const body=await r.json() as {delivery?:Zone;error?:string};if(!r.ok)throw Error(body.error??"Не удалось загрузить настройки");if(!c.signal.aborted){const next=body.delivery??initial;setZone(next);setRadiusText(String(next.radiusKm));setFeeText(String(next.feeMinor/100));}}catch(e){if(!c.signal.aborted)setError(e instanceof Error?e.message:"Ошибка загрузки");}finally{if(!c.signal.aborted)setLoading(false);}}void load();return()=>c.abort();},[botId]);
  async function save(){
