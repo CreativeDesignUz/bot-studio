@@ -44,3 +44,10 @@ Updated 2026-10-11. This is source-based analysis; changes are in draft PR #3, n
 
 ## Exit criteria
 Release requires green CI, staging migration verified, E2E owner → publish → buyer → order, tenant isolation and documented production rollout. Do not merge or deploy without explicit approval.
+
+## ARCH-006 — Inventory and seller-facing order lines [P1]
+- **Root cause:** catalog lacked tracked quantity; published menus and checkout had no live availability invariant. Seller workspace displayed order summary without detailed order lines.
+- **Invariant:** NULL stock means unlimited; zero-stock published items do not appear to buyers. Checkout serializes stock updates per bot, checks available units, subtracts only on successfully committed order. Same idempotency key replays without a second deduction. Seller sees ordered items and exact quantities.
+- **Prepared code:** migration `202610100010_inventory_checkout.sql` adds nonnegative stock_quantity and replaces checkout RPC; `app/api/catalog/route.ts` and `app/workspace/catalog-manager.tsx` allow stock management; `app/api/miniapp/route.ts` filters live out-of-stock published items; `app/api/orders/route.ts` + `app/workspace/order-manager.tsx` show owner-scoped orders and item lines.
+- **Release dependency:** run DB migrations 0009 and 0010 before API/frontend. Verify stock under concurrent checkouts, old orders, unlimited and sold-out items, cancellation/restocking policy, two-tenant security and completed browser E2E on staging.
+- **Remaining work:** update notifications, map coordinates and scheduled delivery, order status changes, stock restock on cancellation/refund policy. Current code is not deployed.
