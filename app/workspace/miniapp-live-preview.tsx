@@ -22,15 +22,15 @@ export default function MiniAppLivePreview({
   botId:string;design?:MiniAppPreviewDesign;className?:string;
 }) {
   const frame=useRef<HTMLIFrameElement>(null);
-  const [frameLoaded,setFrameLoaded]=useState(false);
+  const [frameEpoch,setFrameEpoch]=useState(0);
   const link="/miniapp?bot="+encodeURIComponent(botId)+"&preview=1";
 
   useEffect(()=>{
-    if(!frameLoaded||!design)return;
+    if(!frameEpoch||!design)return;
     frame.current?.contentWindow?.postMessage(
       {type:"bot-studio:preview-design",botId,design},window.location.origin
     );
-  },[botId,design,frameLoaded]);
+  },[botId,design,frameEpoch]);
 
   return <section aria-label="Живой предпросмотр Mini App" className={"min-w-0 "+className}>
     <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -44,7 +44,7 @@ export default function MiniAppLivePreview({
         <span>9:41</span><span className="inline-flex items-center gap-1"><MousePointerClick size={13}/> Интерактивный режим</span>
       </div>
       <iframe key={botId} ref={frame} src={link} title="Интерактивный предпросмотр Mini App"
-        onLoad={()=>setFrameLoaded(true)}
+        onLoad={()=>setFrameEpoch(value=>value+1)}
         className="block h-[630px] w-full border-0 bg-[#f7f8fa]" loading="lazy"
       />
     </div>
