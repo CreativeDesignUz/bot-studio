@@ -115,8 +115,7 @@ declare
   item jsonb; entry record; order_row public.orders; expected_count integer; published_item jsonb; snapshot_items jsonb;
   total_amount bigint := 0; order_currency text; item_ids uuid[]; requested_ids uuid[]; item_quantity integer; request_fingerprint text;
 begin
-  if p_request_key !~ '^[A-Za-z0-9_-]{16,128}
-  select * into order_row from public.orders where bot_id=p_bot_id
+  if p_request_key !~ '^[A-Za-z0-9_-]{16,128}  select * into order_row from public.orders where bot_id=p_bot_id
     and customer_external_id=p_customer_external_id and request_key=p_request_key;
   if order_row.id is not null then
     if order_row.request_payload_hash is not null and order_row.request_payload_hash<>request_fingerprint then
@@ -181,6 +180,9 @@ grant execute on function public.create_miniapp_order(uuid,text,text,text,text,j
   select * into order_row from public.orders where bot_id=p_bot_id
     and customer_external_id=p_customer_external_id and request_key=p_request_key;
   if order_row.id is not null then
+    if order_row.request_payload_hash is not null and order_row.request_payload_hash<>request_fingerprint then
+      raise exception 'REQUEST_KEY_REUSED_WITH_DIFFERENT_ORDER' using errcode='22023';
+    end if;
     return jsonb_build_object('orderId',order_row.id,'totalMinor',order_row.total_minor,'currency',order_row.currency,'replayed',true);
   end if;
   if not exists(select 1 from public.bots b where b.id=p_bot_id and b.status='active' and b.publish_status='published')
@@ -210,14 +212,17 @@ grant execute on function public.create_miniapp_order(uuid,text,text,text,text,j
     order_currency:=published_item->>'currency';
   end loop;
   begin
-    insert into public.orders(bot_id,customer_external_id,customer_name,status,subtotal_minor,total_minor,delivery_minor,currency,fulfillment_type,delivery_address,payload,request_key)
+    insert into public.orders(bot_id,customer_external_id,customer_name,status,subtotal_minor,total_minor,delivery_minor,currency,fulfillment_type,delivery_address,payload,request_key,request_payload_hash)
     values(p_bot_id,left(trim(p_customer_external_id),100),left(trim(p_customer_name),100),'new',total_amount,total_amount,0,order_currency,p_fulfillment,
       case when p_fulfillment='delivery' then jsonb_build_object('address',left(trim(p_delivery_address),500)) else null end,
-      jsonb_build_object('source','telegram_miniapp','payment_method','on_delivery'),p_request_key)
+      jsonb_build_object('source','telegram_miniapp','payment_method','on_delivery'),p_request_key,request_fingerprint)
     returning * into order_row;
   exception when unique_violation then
     select * into order_row from public.orders where bot_id=p_bot_id and customer_external_id=p_customer_external_id and request_key=p_request_key;
     if order_row.id is null then raise; end if;
+    if order_row.request_payload_hash is not null and order_row.request_payload_hash<>request_fingerprint then
+      raise exception 'REQUEST_KEY_REUSED_WITH_DIFFERENT_ORDER' using errcode='22023';
+    end if;
     return jsonb_build_object('orderId',order_row.id,'totalMinor',order_row.total_minor,'currency',order_row.currency,'replayed',true);
   end;
   insert into public.order_items(order_id,catalog_item_id,item_name,quantity,unit_price_minor)
