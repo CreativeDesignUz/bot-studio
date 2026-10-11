@@ -493,3 +493,43 @@ test("catalog photo upload rejects anonymous requests",async({request})=>{
  }});
  expect([401,403]).toContain(response.status());
 });
+
+
+test("delivery settings allow manual numbers with right-side units and save valid UZS amounts",async({page})=>{
+ const id="d071c20c-b54c-45cc-8033-982a09c945a1";
+ let submitted:Record<string,unknown>|null=null;
+ await page.route("https://tile.openstreetmap.org/**",route=>route.abort());
+ await page.route("**/api/workspace",route=>route.fulfill({
+  status:200,contentType:"application/json",body:JSON.stringify({bots:[{
+   id,name:"QA Delivery",username:"qa_bot",template_type:"delivery",
+   metrics:{ordersToday:0,revenueTodayMinor:0,catalogItems:0,customers:0,recentOrders:[]}
+  }]})
+ }));
+ await page.route("**/api/delivery/settings**",async route=>{
+  if(route.request().method()==="POST"){
+   submitted=route.request().postDataJSON() as Record<string,unknown>;
+   await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({ok:true})});
+  }else await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({
+   delivery:{enabled:true,centerLat:41.2995,centerLng:69.2401,radiusKm:60,feeMinor:0}
+  })});
+ });
+ await page.goto("/workspace?bot="+id+"&section=delivery_settings");
+ await expect(page.getByRole("heading",{name:"Зона и стоимость доставки"})).toBeVisible();
+ const radius=page.getByRole("textbox",{name:"Радиус доставки"});
+ const fee=page.getByRole("textbox",{name:"Стоимость доставки"});
+ await expect(radius).toHaveAttribute("type","text");
+ await expect(fee).toHaveAttribute("type","text");
+ await expect(radius).toHaveAttribute("inputmode","decimal");
+ await expect(fee).toHaveAttribute("inputmode","numeric");
+ await expect(radius.locator("..").getByText("км",{exact:true})).toBeVisible();
+ await expect(fee.locator("..").getByText("сум",{exact:true})).toBeVisible();
+ await expect(page.locator('input[type="number"]')).toHaveCount(0);
+ await radius.fill("");
+ await expect(page.getByRole("button",{name:"Сохранить черновик"})).toBeDisabled();
+ await radius.fill("7,5");
+ await fee.fill("15 000");
+ await expect(page.getByRole("button",{name:"Сохранить черновик"})).toBeEnabled();
+ await page.getByRole("button",{name:"Сохранить черновик"}).click();
+ await expect(page.getByRole("status")).toContainText("Черновик доставки сохранён");
+ await expect.poll(()=>submitted).toMatchObject({botId:id,delivery:{radiusKm:7.5,feeMinor:1500000}});
+});
