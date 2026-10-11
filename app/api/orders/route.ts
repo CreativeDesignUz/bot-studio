@@ -9,7 +9,7 @@ export async function GET(request:Request){
  const {supabase,user,setCookie}=identity;
  const {data:bot,error:ownershipError}=await supabase.from("bots").select("id").eq("id",botId).eq("owner_id",user.id).maybeSingle();
  if(ownershipError||!bot)return Response.json({error:"Нет доступа к заказам"},{status:403});
- const {data:orders,error}=await supabase.from("orders").select("id,customer_name,customer_external_id,status,subtotal_minor,delivery_minor,total_minor,currency,fulfillment_type,delivery_address,created_at").eq("bot_id",botId).order("created_at",{ascending:false}).limit(100);
+ const {data:orders,error}=await supabase.from("orders").select("id,customer_name,customer_external_id,status,subtotal_minor,delivery_minor,total_minor,currency,fulfillment_type,delivery_address,created_at,payload").eq("bot_id",botId).order("created_at",{ascending:false}).limit(100);
  if(error)return Response.json({error:"Не удалось загрузить заказы"},{status:500});
  const ids=(orders??[]).map(order=>order.id);
  let items:Array<{order_id:string;item_name:string;quantity:number;unit_price_minor:number}>=[];
@@ -34,6 +34,11 @@ export async function PATCH(request:Request){
  const {supabase,user,setCookie}=identity;
  const {data:bot,error:ownerError}=await supabase.from("bots").select("id").eq("id",body.botId).eq("owner_id",user.id).maybeSingle();
  if(ownerError||!bot)return Response.json({error:"Нет доступа к заказу"},{status:403});
+ const {data:current,error:readError}=await supabase.from("orders").select("id,payload").eq("bot_id",body.botId).eq("id",body.orderId).maybeSingle();
+ if(readError)return Response.json({error:"Не удалось проверить заказ."},{status:503});
+ if(!current)return Response.json({error:"Заказ не найден."},{status:404});
+ if(current.payload&&typeof current.payload==="object"&&(current.payload as Record<string,unknown>).is_demo===true)
+  return Response.json({error:"Демо-заказ нельзя обрабатывать как настоящий."},{status:409});
  const {data,error}=await supabase.from("orders").update({status:body.status}).eq("bot_id",body.botId).eq("id",body.orderId).eq("status",body.expectedStatus).select("id,status").maybeSingle();
  if(error)return Response.json({error:"Не удалось изменить статус"},{status:500});
  if(!data)return Response.json({error:"Статус уже изменён другим сотрудником. Обновите список."},{status:409});
