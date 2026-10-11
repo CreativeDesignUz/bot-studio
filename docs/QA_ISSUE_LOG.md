@@ -43,7 +43,7 @@ GitHub Actions run [38133282051](https://github.com/CreativeDesignUz/bot-studio/
 
 | ID | Этап | Точное место | Наблюдение | Приоритет | Итог |
 |---|---|---|---|---|---|
-| QA-008 | Создание бота | `app/api/onboarding/route.ts`, POST, начальный разбор JSON | Некорректный JSON/null приводил к необработанному исключению; исправлена проверка тела запроса | P1 | Исправлено в ветке `9b5c089`, CI ожидается |
+| QA-008 | Создание бота | `app/api/onboarding/route.ts`, POST, начальный разбор JSON | Некорректный JSON/null приводил к необработанному исключению; исправлена проверка тела запроса | P1 | Исправлено в ветке `9b5c089`, CI/E2E ещё не подтверждены |
 | QA-009 | Категории | `app/api/catalog/categories/route.ts`, POST и DELETE, разбор JSON | `null` JSON приводил к ошибке доступа к полю; добавлена проверка объекта | P1 | Исправлено в ветке `e4f03eb`, CI ожидается |
 | QA-010 | Связь админки с Mini App | `app/api/miniapp/route.ts`, GET, запросы `catalog_items` / `catalog_categories` | Каталог читается из живых таблиц, в отличие от дизайна из `published_snapshot` — нарушает семантику черновик/публикация | P0 | Открыта; см. QA-006 |
 | QA-011 | Карта доставки | `app/miniapp/page.tsx`, форма checkout; `app/api/miniapp/route.ts`, POST | В клиентском оформлении адрес вводится текстом, координаты/карта и серверная проверка зоны не реализованы в этом пути | P1 | Открыта, гео-E2E не проводился |
@@ -65,3 +65,5 @@ GitHub Actions run [38133282051](https://github.com/CreativeDesignUz/bot-studio/
 11. Сохранить trace, screenshots и результаты в GitHub Actions. При сбое создать Issue по `QA Bug Report`, Telegram-уведомление подключать только после задания безопасного chat_id/token для staging.
 
 **Отдельно:** проверка compile/lint/test/build означает только целостность сборки, не реальную работоспособность пользовательской цепочки.
+
+| QA-014 | Создание/изменение товара | `app/api/catalog/route.ts`, POST и DELETE, разбор JSON | `null` или JSON-массив приводил к ошибке доступа к полям | P1 | Исправлено в `a89ff44`, source regression в `tests/api-invalid-payloads.test.ts`; CI/E2E ожидаются |
