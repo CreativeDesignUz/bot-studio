@@ -3,7 +3,7 @@ import { syncTelegramBotProfile } from "@/lib/telegram/profile";
 import { env } from "cloudflare:workers";
 import { resolveAppUser, withSessionCookie } from "@/lib/auth/app-user";
 import { telegramCall } from "@/lib/channels/telegram-api";
-import { getProjectBotToken } from "@/lib/channels/project-bot-token";
+import { resolveTelegramChannelToken } from "@/features/telegram/server/credentials";
 import { PublicationError, publicationRequestKey, publicPublicationError, runTelegramPublication } from "@/lib/bots/publication";
 import { buildBindingStartParameter, createBindingToken, hashBindingToken } from "@/lib/telegram/managed-binding";
 import { resolvePublicAppOrigin } from "@/lib/http/public-origin";
@@ -84,11 +84,7 @@ export async function POST(request: Request) {
   const miniAppUrl = new URL(`/miniapp?bot=${botId}`, origin).toString();
   const webhookUrl = new URL(`/api/channels/telegram/project-runtime?channel=${channel.id}`, origin).toString();
   try {
-    const token = await getProjectBotToken(supabase, channel, {
-      managerToken: env.TELEGRAM_MANAGER_TOKEN,
-      encryptionKey: env.TELEGRAM_TOKEN_ENCRYPTION_KEY,
-      encryptionKeyV2: env.TELEGRAM_TOKEN_ENCRYPTION_KEY_V2,
-    });
+    const token = await resolveTelegramChannelToken(supabase, channel);
     await syncTelegramBotProfile(token,{
       bio:profileSettings.telegram_bio??"",
       avatarUrl:profileBot.logo_url,
