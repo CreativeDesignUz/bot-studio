@@ -42,6 +42,9 @@ export async function resolveAppUser(request: Request, initData = "", _allowGues
         const {data,error}=await supabase.from("app_users").select("id,telegram_id,first_name").eq("telegram_id",match[1]).maybeSingle();
         if(error)throw error;
         if(data)return {user:data,supabase,setCookie:null};
+        const {data:oidcUser,error:oidcError}=await supabase.from("app_users").select("id,telegram_id,first_name").eq("telegram_oidc_sub",match[1]).maybeSingle();
+        if(oidcError)throw oidcError;
+        if(oidcUser)return {user:oidcUser,supabase,setCookie:null};
       }
     }
   }
