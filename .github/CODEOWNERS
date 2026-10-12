@@ -1,0 +1,9 @@
+* @CreativeDesignUz
+
+# Security- and deployment-sensitive areas always notify the repository owner.
+/.github/ @CreativeDesignUz
+/supabase/migrations/ @CreativeDesignUz
+/app/api/auth/ @CreativeDesignUz
+/app/api/channels/telegram/ @CreativeDesignUz
+/app/api/checkout/ @CreativeDesignUz
+/vite.config.ts @CreativeDesignUz
