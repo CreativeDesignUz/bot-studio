@@ -22,6 +22,7 @@ export default function MiniAppAppearance({botId}:{botId:string}){
   async function load(){
    setLoading(true);setError("");setMessage("");
    try{
+    if(!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(botId))throw new Error("Не удалось определить выбранного бота. Обновите кабинет.");
     const headers={"x-telegram-init-data":telegramData()};
     const [dr,cr,ir]=await Promise.all([
      fetch("/api/miniapp/design?bot="+encodeURIComponent(botId),{headers,signal:abort.signal,cache:"no-store"}),
@@ -29,7 +30,9 @@ export default function MiniAppAppearance({botId}:{botId:string}){
      fetch("/api/catalog?bot="+encodeURIComponent(botId),{headers,signal:abort.signal,cache:"no-store"})
     ]);
     const [db,cb,ib]=await Promise.all([dr.json(),cr.json(),ir.json()]) as [{error?:string;design?:Partial<Design>},{error?:string;categories?:Category[]},{error?:string;items?:Item[]}];
-    if(!dr.ok||!cr.ok||!ir.ok)throw new Error(db.error??cb.error??ib.error??"Не удалось загрузить настройки");
+    if(!dr.ok)throw new Error(db.error??"Не удалось загрузить оформление Mini App");
+    if(!cr.ok)console.warn("Catalog categories unavailable in Mini App appearance",{status:cr.status});
+    if(!ir.ok)console.warn("Catalog items unavailable in Mini App appearance",{status:ir.status});
     if(!abort.signal.aborted){
      setDesign({...initial,...db.design,banner:{...initial.banner,...db.design?.banner}});
      setCategories(cb.categories??[]);setItems(ib.items??[]);
