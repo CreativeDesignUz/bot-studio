@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bot, Send, Chrome } from "lucide-react";
+import { Bot, Send, ShieldCheck } from "lucide-react";
 
 declare global { interface Window { Telegram?: { WebApp?: { initData?: string } }; onBotStudioTelegramAuth?: (user: Record<string, unknown>) => void } }
 
@@ -11,7 +11,7 @@ export default function LoginPage() {
   const [busy,setBusy]=useState(false);
   const [telegramUsername,setTelegramUsername]=useState("");
   useEffect(()=>{
-    fetch("/api/auth/providers").then(r=>r.json()).then((data:{telegramBotUsername?:string})=>setTelegramUsername(data.telegramBotUsername??"")).catch(()=>{});
+    fetch("/api/auth/providers").then(r=>r.json() as Promise<{telegramBotUsername?:string}>).then(data=>setTelegramUsername(data.telegramBotUsername??"")).catch(()=>{});
     const initData=window.Telegram?.WebApp?.initData;
     if(initData) {
       setBusy(true);
@@ -46,7 +46,7 @@ export default function LoginPage() {
       <h1 className="text-2xl font-semibold">Добро пожаловать</h1>
       <p className="mt-2 text-sm text-[#667085]">Войдите, чтобы создавать ботов и управлять ими</p>
       <div className="mt-8 space-y-3">
-        <a href="/api/auth/google" aria-disabled={busy} className="flex h-12 items-center justify-center gap-3 rounded-xl border border-[#d0d5dd] font-semibold hover:bg-[#f9fafb]"><Chrome size={20}/> Продолжить с Google</a>
+        <a href="/api/auth/google" aria-disabled={busy} className="flex h-12 items-center justify-center gap-3 rounded-xl border border-[#d0d5dd] font-semibold hover:bg-[#f9fafb]"><ShieldCheck size={20}/> Продолжить с Google</a>
         <div className="relative py-2 text-center text-xs text-[#98a2b3]">или</div>
         {telegramUsername ? <div id="telegram-login-widget" className="flex min-h-12 items-center justify-center"/> :
           <div className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#e9eef5] px-4 text-sm text-[#667085]"><Send size={18}/> Telegram временно недоступен: бот не настроен</div>}
