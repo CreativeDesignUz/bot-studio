@@ -2,7 +2,7 @@ import { normalizeBotButtons, resolveReplyPath, telegramInlineKeyboard } from "@
 import { env } from "cloudflare:workers";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { telegramCall } from "@/lib/channels/telegram-api";
-import { getProjectBotToken } from "@/lib/channels/project-bot-token";
+import { resolveTelegramChannelToken } from "@/features/telegram/server/credentials";
 import { resolvePublicAppOrigin } from "@/lib/http/public-origin";
 
 type RuntimeUpdate = {
@@ -71,7 +71,7 @@ export async function POST(request: Request) {
     const configuredButtons = ((published.settings ?? bot.settings as { home_buttons?: { label?: string; action?: string }[] } | null)?.home_buttons ?? []).slice(0, 8);
     const buttons = normalizeBotButtons(configuredButtons);
     const origin = resolvePublicAppOrigin(request.url, env.PUBLIC_APP_URL);
-    const token = await getProjectBotToken(supabase, channel, { managerToken: env.TELEGRAM_MANAGER_TOKEN, encryptionKey: env.TELEGRAM_TOKEN_ENCRYPTION_KEY, encryptionKeyV2: env.TELEGRAM_TOKEN_ENCRYPTION_KEY_V2 });
+    const token = await resolveTelegramChannelToken(supabase, channel);
     if (update.callback_query) {
       const query = update.callback_query;
       const selected = resolveReplyPath(buttons, query.data ?? "");
