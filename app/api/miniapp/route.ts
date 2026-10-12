@@ -94,7 +94,7 @@ export async function POST(request: Request) {
       .eq("bot_id", input.botId).eq("channel", "telegram").single();
     if (!channel || channel.status !== "connected" || !channel.external_account_id)
       return jsonError("Telegram-подключение недоступно", 503);
-    const token = await getProjectBotToken(supabase, channel, { managerToken: env.TELEGRAM_MANAGER_TOKEN, encryptionKey: env.TELEGRAM_TOKEN_ENCRYPTION_KEY });
+    const token = await getProjectBotToken(supabase, channel, { managerToken: env.TELEGRAM_MANAGER_TOKEN, encryptionKey: env.TELEGRAM_TOKEN_ENCRYPTION_KEY, encryptionKeyV2: env.TELEGRAM_TOKEN_ENCRYPTION_KEY_V2 });
     const telegramUser = await verifyTelegramInitData(input.initData, token);
     if (!telegramUser) return jsonError("Откройте магазин через Telegram", 401);
 
