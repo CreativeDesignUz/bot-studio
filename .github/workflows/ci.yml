@@ -70,6 +70,20 @@ jobs:
           path: qa-results/
           if-no-files-found: error
 
+  staging-live-smoke:
+    name: Live Staging smoke (read-only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.13.1'
+      - name: Verify deployed login, OIDC, shop, and API access
+        run: node scripts/staging-smoke.mjs
+
   deploy-staging:
     name: Deploy Cloudflare staging
     needs: quality
