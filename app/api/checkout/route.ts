@@ -1,3 +1,4 @@
+import { logServerError } from "@/lib/observability/error-log";
 import { env } from "cloudflare:workers";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { getManagedBotToken } from "@/lib/channels/telegram-api";
@@ -58,12 +59,12 @@ export async function POST(request: Request) {
       if (error.code === "22023" || /INVALID_|UNAVAILABLE|ORDER_LIMIT|ITEMS_CHANGED/.test(error.message)) {
         return reply("Some items are unavailable. Refresh your cart.", 409);
       }
-      console.error("checkout insert failed", { code: error.code });
-      return reply("Unable to create order", 500);
+      const errorId = logServerError("checkout.create_order", error, error.code ?? "DB_ERROR");
+      return Response.json({error:"Unable to create order",errorId},{status:500,headers:{"cache-control":"no-store"}});
     }
     return Response.json({ ok: true, orderId }, { status: 201, headers: { "cache-control": "no-store" } });
   } catch (error) {
-    console.error("checkout unavailable", { name: error instanceof Error ? error.name : "unknown" });
-    return reply("Checkout temporarily unavailable", 503);
+    const errorId = logServerError("checkout.unavailable", error);
+    return Response.json({error:"Checkout temporarily unavailable",errorId},{status:503,headers:{"cache-control":"no-store"}});
   }
 }
