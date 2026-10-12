@@ -35,6 +35,15 @@ test("workspace exposes real bot and Mini App settings instead of decorative con
  assert.match(builder,/section=miniapp_appearance/);
  assert.doesNotMatch(builder,/\["Основное","Меню","Кнопки","Доставка","Оплата","Уведомления"\]/);
 });
+test("critical bot settings links bypass broken Vinext client navigation",()=>{
+ const workspace=src("app/workspace/page.tsx");
+ const onboarding=src("app/onboarding/page.tsx");
+ const builder=src("app/workspace/builder/page.tsx");
+ assert.match(workspace,/<a href=\{`\/workspace\/builder\?bot=\$\{bot\.id\}`\}/);
+ assert.doesNotMatch(workspace,/<Link href=\{`\/workspace\/builder\?bot=/);
+ assert.match(onboarding,/<a className="flow-primary" href=\{botId\?`\/workspace\/builder\?bot=/);
+ assert.match(builder,/<a href=\{`\/workspace\?bot=\$\{encodeURIComponent\(botId\)\}&section=miniapp_appearance`\}/);
+});
 test("seller can preview current Mini App draft without exposing it publicly",()=>{
  const api=src("app/api/miniapp/route.ts");
  const builder=src("app/workspace/builder/page.tsx");

@@ -102,7 +102,7 @@ export default function WorkspacePage() {
           {(bot.type==="delivery"||bot.type==="store")&&<button type="button" onClick={()=>setSection("delivery_settings")} className={`flex min-h-12 w-full items-center gap-4 rounded-2xl px-4 text-left text-[15px] font-medium ${currentSection==="delivery_settings"?"bg-[#f0eaff] text-[#623cf2]":"text-[#101828] hover:bg-[#f8f7ff]"}`}><Settings className="size-5"/>Настройки доставки</button>}
         </nav>
         <div className="shrink-0 space-y-1 border-t border-[#e4e7ec] pt-5">
-          <Link href={`/workspace/builder?bot=${bot.id}`} className="flex min-h-12 items-center gap-4 rounded-2xl px-4 text-[15px] font-medium text-[#667085] no-underline hover:bg-[#f8f7ff]"><Settings className="size-5 shrink-0" strokeWidth={1.8}/>Настройки бота</Link>
+          <a href={`/workspace/builder?bot=${bot.id}`} className="flex min-h-12 items-center gap-4 rounded-2xl px-4 text-[15px] font-medium text-[#667085] no-underline hover:bg-[#f8f7ff]"><Settings className="size-5 shrink-0" strokeWidth={1.8}/>Настройки бота</a>
         </div>
       </aside>
 
@@ -129,7 +129,7 @@ export default function WorkspacePage() {
     </div>
     <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-[#e4e7ec] bg-white/95 px-2 pb-[max(.4rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur-xl lg:hidden" aria-label="Навигация Mini App">
       {template.modules.slice(0,3).map(({id,label,icon:Icon})=><button key={id} onClick={()=>setSection(id)} className={`flex min-w-0 flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-medium ${currentSection===id?"text-[#5934dc]":"text-[#98a2b3]"}`}><Icon className="size-5"/><span className="max-w-full truncate">{label}</span></button>)}
-      <Link href={`/workspace/builder?bot=${bot.id}`} className="flex min-w-0 flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-medium text-[#98a2b3] no-underline"><Settings className="size-5"/><span>Настроить</span></Link>
+      <a href={`/workspace/builder?bot=${bot.id}`} className="flex min-w-0 flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-medium text-[#98a2b3] no-underline"><Settings className="size-5"/><span>Настроить</span></a>
     </nav>
   </main>;
 }
