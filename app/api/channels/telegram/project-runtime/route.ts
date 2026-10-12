@@ -21,7 +21,8 @@ export async function POST(request:Request){
   await supabase.from("customers").upsert({bot_id:channel.bot_id,external_id:String(from.id),full_name:from.first_name??"",telegram_username:from.username??null,last_activity_at:new Date().toISOString()},{onConflict:"bot_id,external_id"});
   await supabase.from("bot_events").insert({bot_id:channel.bot_id,event_type:"telegram_message",actor_external_id:String(from.id),payload:{text:text.slice(0,200)}});
  }
- const buttons=((bot.settings as {home_buttons?:{label?:string;action?:string}[]}|null)?.home_buttons??[]).slice(0,8);
+ const configured=((bot.settings as {home_buttons?:{label?:string;action?:string}[]}|null)?.home_buttons??[]).slice(0,8);
+ const buttons=configured.length?configured:[{label:"Открыть магазин",action:"home"}];
  const origin=new URL(request.url).origin;
  const bindings=env as typeof env & {TELEGRAM_MANAGER_TOKEN?:string;TELEGRAM_TOKEN_ENCRYPTION_KEY?:string};
  const token=await getProjectBotToken(supabase,channel,{managerToken:bindings.TELEGRAM_MANAGER_TOKEN,encryptionKey:bindings.TELEGRAM_TOKEN_ENCRYPTION_KEY});
