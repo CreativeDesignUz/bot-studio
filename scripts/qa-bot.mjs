@@ -33,7 +33,14 @@ const extra=[
  {name:"Активные акции применяются на сервере при оформлении заказа",codeFilesPresent:source("app/api/checkout/route.ts").includes("p_promo_code")&&source("supabase/migrations/202610120002_atomic_campaign_checkout.sql").includes("discount_amount")&&source("app/workspace/campaign-manager.tsx").includes('toggle(row'),missing:[],liveE2E:"NOT_RUN_MIGRATION_REQUIRED"},
  {name:"Фото товара: поддержка HTTPS ссылки",codeFilesPresent:source("app/api/catalog/route.ts").includes("imageUrl"),missing:[],liveE2E:"NOT_RUN"}
 ];
-const all=[...results,...extra];
+const buyer=source("app/miniapp/page.tsx");
+const picker=source("app/miniapp/delivery-location-picker.tsx");
+const buyerExperience=[
+ {name:"Mini App: профиль доступен из нижнего таб-бара",codeFilesPresent:buyer.includes('id:"profile",label:"Профиль"')&&buyer.includes('tab === "profile"'),missing:[],liveE2E:"NOT_RUN"},
+ {name:"Mini App: детали блюда и товара открываются по нажатию",codeFilesPresent:buyer.includes('aria-label={"Подробнее о товаре "+item.name}')&&buyer.includes('onClick={()=>setDetailId(item.id)}')&&buyer.includes('{detailItem&&<div')&&buyer.includes('role="dialog"'),missing:[],liveE2E:"NOT_RUN"},
+ {name:"Mini App: карта доступна при выборе доставки",codeFilesPresent:buyer.includes('<DeliveryLocationPicker')&&picker.includes('tile.openstreetmap.org/')&&picker.includes('onChange('),missing:[],liveE2E:"NOT_RUN"},
+];
+const all=[...results,...extra,...buyerExperience];
 const failures=all.filter(c=>!c.codeFilesPresent);
 const report={generatedAt:new Date().toISOString(),commit:process.env.GITHUB_SHA??"local",warning:"Static code audit only. No Google/Telegram signed-in browsing, data mutation, or real checkout performed. Even zero code blockers is NOT a release approval.",total:all.length,blockers:failures.length,checks:all};
 mkdirSync(join(root,"qa-results"),{recursive:true});
