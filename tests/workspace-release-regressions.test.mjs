@@ -19,6 +19,40 @@ test("product image upload checks ownership, file type and size",()=>{
  assert.match(api,/owner_id/);assert.match(api,/photo\.size>3\*1024\*1024/);assert.match(api,/new Uint8Array/);assert.match(api,/storage\.from\("bot-assets"\)/);
  assert.match(src("app/workspace/catalog-manager.tsx"),/\/api\/catalog\/image-upload/);
 });
+test("catalog editor remains usable on small screens and includes direct image upload",()=>{
+ const catalog=src("app/workspace/catalog-manager.tsx");
+ assert.match(catalog,/max-h-\[calc\(100dvh-1\.5rem\)\]/);
+ assert.match(catalog,/overflow-y-auto/);
+ assert.match(catalog,/accept="image\/jpeg,image\/png,image\/webp"/);
+ assert.match(catalog,/Фото блюда/);
+});
+test("workspace exposes real bot and Mini App settings instead of decorative controls",()=>{
+ const workspace=src("app/workspace/page.tsx");
+ const builder=src("app/workspace/builder/page.tsx");
+ assert.ok(workspace.indexOf('href="/onboarding"')<workspace.indexOf('aria-label="Выбрать рабочего бота"'));
+ assert.match(workspace,/templateType=\{bot\.type\}/);
+ assert.match(builder,/scrollToSection/);
+ assert.match(builder,/section=miniapp_appearance/);
+ assert.doesNotMatch(builder,/\["Основное","Меню","Кнопки","Доставка","Оплата","Уведомления"\]/);
+});
+test("seller can preview current Mini App draft without exposing it publicly",()=>{
+ const api=src("app/api/miniapp/route.ts");
+ const builder=src("app/workspace/builder/page.tsx");
+ assert.match(api,/searchParams\.get\("preview"\)===\s*"1"/);
+ assert.match(api,/resolveAppUser/);
+ assert.match(api,/\.eq\("owner_id",identity\.user\.id\)/);
+ assert.match(builder,/preview=1/);
+});
+test("Mini App appearance supports every MVP business template and light-dark modes",()=>{
+ const designApi=src("app/api/miniapp/design/route.ts");
+ const appearance=src("app/workspace/miniapp-appearance.tsx");
+ const buyer=src("app/miniapp/page.tsx");
+ assert.doesNotMatch(designApi,/Food-темы доступны только/);
+ assert.match(appearance,/templateType:TemplateType/);
+ assert.match(appearance,/Светлая тема/);
+ assert.match(appearance,/Тёмная тема/);
+ assert.match(buyer,/const dark=themeMode===/);
+});
 test("catalog accepts standard UUID bot and item identifiers",()=>{
  const catalog=src("app/api/catalog/route.ts");
  assert.match(catalog,/\(\?:\[0-9a-f\]\{4\}-\)\{3\}/);

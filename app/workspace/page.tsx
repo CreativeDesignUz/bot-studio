@@ -39,7 +39,7 @@ export default function WorkspacePage() {
   const basePage = content[bot.type];
   const metrics = bot.metrics ?? {ordersToday:0,revenueTodayMinor:0,catalogItems:0,customers:0,recentOrders:[]};
   const page = { ...basePage, kpis: [[String(metrics.ordersToday), "заказов сегодня", "Сегодня"], [`${Math.round(metrics.revenueTodayMinor/100).toLocaleString("ru-RU")} сум`, "выручка сегодня", "Факт"], [String(metrics.catalogItems), bot.type==="delivery"?"блюд в меню":bot.type==="store"?"товаров в каталоге":"активных услуг", "Каталог"]], rows: metrics.recentOrders.map(order=>[`#${order.id.slice(0,6)}`,order.customer_name||"Клиент","Заказ",`${Math.round(order.total_minor/100).toLocaleString("ru-RU")} сум`,order.status]) };
-  const currentSection = useMemo(() => ((section==="delivery_settings" && (bot.type==="delivery"||bot.type==="store")) || (section==="miniapp_appearance" && bot.type==="delivery") || template.modules.some((item) => item.id===section)) ? section : "overview", [section, template, bot.type]);
+  const currentSection = useMemo(() => ((section==="delivery_settings" && (bot.type==="delivery"||bot.type==="store")) || section==="miniapp_appearance" || template.modules.some((item) => item.id===section)) ? section : "overview", [section, template, bot.type]);
   const sectionName = currentSection==="delivery_settings" ? "Настройки доставки" : currentSection==="miniapp_appearance" ? "Оформление Mini App" : template.modules.find((item) => item.id === currentSection)?.label ?? "Обзор";
 
   useEffect(() => {
@@ -54,7 +54,8 @@ export default function WorkspacePage() {
         if(!response.ok)throw new Error("Workspace request failed");
         const result=await response.json() as WorkspaceResponse;
         const loaded=result.bots.map(item=>({id:item.id,name:item.name,type:item.template_type,username:item.username??`studio_${item.id.slice(0,8)}_bot`,metrics:item.metrics}));
-        setBots(loaded);const requested=new URLSearchParams(location.search).get("bot");setBotId(loaded.some(item=>item.id===requested)?requested!:loaded[0]?.id??"");setLoadError(false);
+        const params=new URLSearchParams(location.search);const requested=params.get("bot");const requestedSection=params.get("section");
+        setBots(loaded);setBotId(loaded.some(item=>item.id===requested)?requested!:loaded[0]?.id??"");if(requestedSection)setSection(requestedSection);setLoadError(false);
       }catch{setLoadError(true)}finally{setLoading(false)}
     }
     void loadWorkspace();
@@ -64,7 +65,7 @@ export default function WorkspacePage() {
   function switchBot(nextId: string) {
     const next = bots.find((item) => item.id === nextId);
     setBotId(nextId);
-    if (next && !productTemplates[next.type].modules.some((item) => item.id === section) && !(section==="delivery_settings" && (next.type==="delivery"||next.type==="store")) && !(section==="miniapp_appearance" && next.type==="delivery")) setSection("overview");
+    if (next && !productTemplates[next.type].modules.some((item) => item.id === section) && !(section==="delivery_settings" && (next.type==="delivery"||next.type==="store")) && section!=="miniapp_appearance") setSection("overview");
   }
 
   function addPrimaryItem() {
@@ -82,6 +83,7 @@ export default function WorkspacePage() {
           <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#6d45f5] text-white"><Bot className="size-6"/></span>
           Bot Studio
         </Link>
+        <Link href="/onboarding" className="mb-5 flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#101828] px-4 text-[14px] font-semibold text-white no-underline shadow-sm transition hover:bg-[#1d2939]"><Plus className="size-5 shrink-0" strokeWidth={1.8}/>Создать бота</Link>
         <label className="mb-6 block">
           <span className="mb-3 block px-2 text-[11px] font-bold uppercase tracking-[.18em] text-[#98a2b3]">Рабочий бот</span>
           <span className="relative block">
@@ -96,12 +98,11 @@ export default function WorkspacePage() {
             <Icon className="size-5 shrink-0" strokeWidth={1.8}/>
             <span>{label}</span>
           </button>)}
-          {bot.type==="delivery"&&<button type="button" onClick={()=>setSection("miniapp_appearance")} className={`flex min-h-12 w-full items-center gap-4 rounded-2xl px-4 text-left text-[15px] font-medium ${currentSection==="miniapp_appearance"?"bg-[#f0eaff] text-[#623cf2]":"text-[#101828] hover:bg-[#f8f7ff]"}`}><Settings className="size-5"/>Оформление Mini App</button>}
+          <button type="button" onClick={()=>setSection("miniapp_appearance")} className={`flex min-h-12 w-full items-center gap-4 rounded-2xl px-4 text-left text-[15px] font-medium ${currentSection==="miniapp_appearance"?"bg-[#f0eaff] text-[#623cf2]":"text-[#101828] hover:bg-[#f8f7ff]"}`}><Settings className="size-5"/>Оформление Mini App</button>
           {(bot.type==="delivery"||bot.type==="store")&&<button type="button" onClick={()=>setSection("delivery_settings")} className={`flex min-h-12 w-full items-center gap-4 rounded-2xl px-4 text-left text-[15px] font-medium ${currentSection==="delivery_settings"?"bg-[#f0eaff] text-[#623cf2]":"text-[#101828] hover:bg-[#f8f7ff]"}`}><Settings className="size-5"/>Настройки доставки</button>}
         </nav>
         <div className="shrink-0 space-y-1 border-t border-[#e4e7ec] pt-5">
           <Link href={`/workspace/builder?bot=${bot.id}`} className="flex min-h-12 items-center gap-4 rounded-2xl px-4 text-[15px] font-medium text-[#667085] no-underline hover:bg-[#f8f7ff]"><Settings className="size-5 shrink-0" strokeWidth={1.8}/>Настройки бота</Link>
-          <Link href="/onboarding" className="flex min-h-12 items-center gap-4 rounded-2xl px-4 text-[15px] font-semibold text-[#623cf2] no-underline hover:bg-[#f0eaff]"><Plus className="size-5 shrink-0" strokeWidth={1.8}/>Создать ещё бота</Link>
         </div>
       </aside>
 
@@ -113,9 +114,9 @@ export default function WorkspacePage() {
         </header>
         <div className="border-b border-[#e4e7ec] bg-white px-4 py-2 lg:hidden"><div className="flex gap-1 overflow-x-auto">{template.modules.map(({ id, label }) => <button key={id} onClick={() => setSection(id)} className={`shrink-0 rounded-full px-3 py-2 text-xs font-semibold ${currentSection === id ? "bg-[#101828] text-white" : "bg-[#f2f4f7] text-[#667085]"}`}>{label}</button>)}</div></div>
         <div className="p-4 pb-24 sm:p-7 sm:pb-24 lg:p-9">
-          <div className="mb-7 flex flex-wrap items-end justify-between gap-4"><div><p className="mb-2 text-xs font-semibold text-[#6d45f5]">{template.label} · @{bot.username}</p><h1 className="text-2xl font-semibold tracking-[-.035em] sm:text-3xl">{sectionName}</h1><p className="mt-1.5 text-sm text-[#667085]">{currentSection === "overview" ? "Главное за сегодня и следующий шаг для роста." : `Управляйте разделом «${sectionName}» без перехода в другие сервисы.`}</p></div><button type="button" onClick={addPrimaryItem} className="flex h-11 items-center gap-2 rounded-xl bg-[#101828] px-4 text-sm font-semibold text-white"><Plus className="size-4" />Добавить {template.itemLabel}</button></div>
+          <div className="mb-7 flex flex-wrap items-end justify-between gap-4"><div><p className="mb-2 text-xs font-semibold text-[#6d45f5]">{template.label} · @{bot.username}</p><h1 className="text-2xl font-semibold tracking-[-.035em] sm:text-3xl">{sectionName}</h1><p className="mt-1.5 text-sm text-[#667085]">{currentSection === "overview" ? "Главное за сегодня и следующий шаг для роста." : `Управляйте разделом «${sectionName}» без перехода в другие сервисы.`}</p></div>{(currentSection==="overview"||currentSection==="catalog")&&<button type="button" onClick={addPrimaryItem} className="flex h-11 items-center gap-2 rounded-xl bg-[#101828] px-4 text-sm font-semibold text-white"><Plus className="size-4" />Добавить {template.itemLabel}</button>}</div>
           {currentSection==="delivery_settings" ? <DeliverySettings key={bot.id} botId={bot.id}/>
-            : currentSection==="miniapp_appearance" && bot.type==="delivery" ? <MiniAppAppearance key={bot.id} botId={bot.id}/>
+            : currentSection==="miniapp_appearance" ? <MiniAppAppearance key={bot.id} botId={bot.id} templateType={bot.type}/>
             : currentSection==="orders" && (bot.type==="delivery"||bot.type==="store") ? <OrderManager key={bot.id} botId={bot.id}/>
             : currentSection==="catalog" ? <CatalogManager key={`${bot.id}:${catalogCreateRequest}`} botId={bot.id} type={bot.type} startCreating={catalogCreateRequest>0}/>
             : bot.type==="service" && currentSection==="appointments" ? <ServiceRequestManager key={bot.id} botId={bot.id}/>

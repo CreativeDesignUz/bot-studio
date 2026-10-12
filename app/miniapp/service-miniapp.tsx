@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, BriefcaseBusiness, CheckCircle2, ClipboardList, UserRound, X } from "lucide-react";
 
 type Item={id:string;name:string;description:string;image_url:string|null;price_minor:number|null;currency:string};
-type Shop={bot:{id:string;name:string;description:string;logoUrl:string|null;color:string;template:string};items:Item[]};
+type Shop={bot:{id:string;name:string;description:string;logoUrl:string|null;color:string;template:string};items:Item[];design?:{color?:string;dark?:boolean;themeMode?:"light"|"dark"|"customer";defaultTheme?:"system"|"light"|"dark"}|null};
 type Request={id:string;status:string;payment_status:string;total_minor:number;currency:string;created_at:string;payload:{service_name?:string;brief?:string};order_items?:{item_name:string}[]};
 const money=(amount:number,currency:string)=>new Intl.NumberFormat("ru-RU",{style:"currency",currency,maximumFractionDigits:currency==="UZS"?0:2}).format(amount/100);
 const statusText:Record<string,string>={new:"На рассмотрении",confirmed:"Подтверждена · ожидает оплаты",in_progress:"В работе",completed:"Завершена",cancelled:"Отменена"};
@@ -21,8 +21,14 @@ export default function ServiceMiniApp({shop}:{shop:Shop}){
   const [requestId,setRequestId]=useState("");
   const [requests,setRequests]=useState<Request[]>([]);
   const [requestsLoading,setRequestsLoading]=useState(false);
+  const [buyerTheme,setBuyerTheme]=useState<"light"|"dark"|null>(null);
+  const [telegramTheme,setTelegramTheme]=useState<"light"|"dark">("light");
   const requestKey=useRef<string|null>(null);
-  const color=/^#[\da-f]{6}$/i.test(shop.bot.color)?shop.bot.color:"#6541F5";
+  const color=/^#[\da-f]{6}$/i.test(shop.design?.color??"")?shop.design!.color!:/^#[\da-f]{6}$/i.test(shop.bot.color)?shop.bot.color:"#6541F5";
+  const themeMode=shop.design?.themeMode??(shop.design?.dark?"dark":"light");
+  const defaultTheme=shop.design?.defaultTheme??"system";
+  const dark=themeMode==="dark"||(themeMode==="customer"&&(buyerTheme??(defaultTheme==="system"?telegramTheme:defaultTheme))==="dark");
+  const paper=dark?"#20242a":"#fff",page=dark?"#111418":"#f7f8fa",ink=dark?"#f9fafb":"#101828",hint=dark?"#aeb6c2":"#667085";
   const initData=()=>(window as typeof window&{Telegram?:{WebApp?:{initData?:string;initDataUnsafe?:{user?:{first_name?:string}}}}}).Telegram?.WebApp?.initData??"";
 
   useEffect(()=>{
@@ -30,6 +36,14 @@ export default function ServiceMiniApp({shop}:{shop:Shop}){
     const first=telegram?.initDataUnsafe?.user?.first_name;
     if(first) Promise.resolve().then(()=>setName(first));
   },[]);
+  useEffect(()=>{
+    const telegram=(window as typeof window&{Telegram?:{WebApp?:{colorScheme?:string;onEvent?:(name:string,cb:()=>void)=>void;offEvent?:(name:string,cb:()=>void)=>void;setHeaderColor?:(color:string)=>void;setBackgroundColor?:(color:string)=>void}}}).Telegram?.WebApp;
+    const sync=()=>setTelegramTheme(telegram?.colorScheme==="dark"?"dark":"light");telegram?.onEvent?.("themeChanged",sync);
+    queueMicrotask(()=>{sync();try{const saved=localStorage.getItem("miniapp-theme:"+shop.bot.id);if(saved==="light"||saved==="dark")setBuyerTheme(saved)}catch{}});
+    return()=>telegram?.offEvent?.("themeChanged",sync);
+  },[shop.bot.id]);
+  useEffect(()=>{const telegram=(window as typeof window&{Telegram?:{WebApp?:{setHeaderColor?:(color:string)=>void;setBackgroundColor?:(color:string)=>void}}}).Telegram?.WebApp;telegram?.setHeaderColor?.(paper);telegram?.setBackgroundColor?.(page)},[page,paper]);
+  function chooseTheme(next:"light"|"dark"){setBuyerTheme(next);try{localStorage.setItem("miniapp-theme:"+shop.bot.id,next)}catch{}}
 
   async function loadRequests(){
     setRequestsLoading(true);setError("");
@@ -62,16 +76,17 @@ export default function ServiceMiniApp({shop}:{shop:Shop}){
     finally{setSending(false)}
   }
   const action="w-full rounded-xl px-5 py-3.5 text-sm font-semibold text-white disabled:opacity-50";
-  return <main className="min-h-dvh bg-[#f7f8fa] pb-28 text-[#101828]">
+  return <main className="min-h-dvh pb-28" style={{background:page,color:ink}}>
     <div className="mx-auto max-w-[550px]">
-      <header className="sticky top-0 z-20 flex items-center gap-3 border-b bg-white px-5 py-4">
+      {themeMode==="customer"&&<div className="flex justify-end gap-2 px-5 pt-2 text-xs"><button type="button" onClick={()=>chooseTheme("light")} className="rounded-full px-3 py-1" style={{background:!dark?color:paper,color:!dark?"white":ink}}>Светлая</button><button type="button" onClick={()=>chooseTheme("dark")} className="rounded-full px-3 py-1" style={{background:dark?color:paper,color:dark?"white":ink}}>Тёмная</button></div>}
+      <header className="sticky top-0 z-20 flex items-center gap-3 border-b px-5 py-4" style={{background:paper,borderColor:dark?"#344054":"#e4e7ec"}}>
         {shop.bot.logoUrl?<img src={shop.bot.logoUrl} className="size-12 shrink-0 rounded-xl object-cover" alt=""/>:<span className="grid size-12 place-items-center rounded-xl text-white" style={{background:color}}><BriefcaseBusiness/></span>}
-        <div className="min-w-0 flex-1"><h1 className="truncate text-lg font-semibold">{shop.bot.name}</h1><p className="truncate text-xs text-[#667085]">Онлайн-услуги · по заявке</p></div>
+        <div className="min-w-0 flex-1"><h1 className="truncate text-lg font-semibold">{shop.bot.name}</h1><p className="truncate text-xs" style={{color:hint}}>Онлайн-услуги · по заявке</p></div>
       </header>
       {error&&<div role="alert" className="m-4 flex justify-between rounded-xl bg-[#fff1f2] p-3 text-sm text-[#be123c]">{error}<button onClick={()=>setError("")} aria-label="Закрыть"><X size={16}/></button></div>}
       {tab==="catalog"&&!selected&&<section className="px-5 pt-7">
-        <h2 className="text-2xl font-bold">Услуги</h2><p className="mt-2 text-sm text-[#667085]">Выберите услугу и отправьте заявку. Оплата только после подтверждения.</p>
-        {!shop.items.length?<div className="mt-6 rounded-2xl bg-white p-8 text-center text-[#667085]">Услуг пока нет</div>:<div className="mt-6 space-y-3">{shop.items.map(item=><article key={item.id} className="rounded-2xl border border-[#e4e7ec] bg-white p-4">
+        <h2 className="text-2xl font-bold">Услуги</h2><p className="mt-2 text-sm" style={{color:hint}}>Выберите услугу и отправьте заявку. Оплата только после подтверждения.</p>
+        {!shop.items.length?<div className="mt-6 rounded-2xl p-8 text-center" style={{background:paper,color:hint}}>Услуг пока нет</div>:<div className="mt-6 space-y-3">{shop.items.map(item=><article key={item.id} className="rounded-2xl border p-4" style={{background:paper,borderColor:dark?"#344054":"#e4e7ec"}}>
           <div className="flex gap-3">{item.image_url?<img src={item.image_url} className="size-20 rounded-xl object-cover" alt=""/>:<div className="grid size-20 shrink-0 place-items-center rounded-xl bg-[#f2f4f7]"><BriefcaseBusiness className="text-[#98a2b3]"/></div>}
             <div className="min-w-0 flex-1"><h3 className="font-semibold">{item.name}</h3><p className="mt-1 line-clamp-2 text-xs text-[#667085]">{item.description}</p><p className="mt-2 font-bold">{item.price_minor==null?"Цена по запросу":money(item.price_minor,item.currency)}</p></div></div>
           <button onClick={()=>openService(item)} className="mt-4 w-full rounded-xl border border-[#d0d5dd] py-3 text-sm font-semibold">Подробнее</button>
@@ -113,7 +128,7 @@ export default function ServiceMiniApp({shop}:{shop:Shop}){
       </section>}
       {tab==="profile"&&<section className="px-5 pt-7"><UserRound className="size-9" style={{color}}/><h2 className="mt-3 text-2xl font-bold">Профиль</h2><p className="mt-3 text-sm text-[#667085]">Ваши обращения доступны во вкладке «Мои заявки».</p></section>}
     </div>
-    <nav className="fixed bottom-0 inset-x-0 z-30 border-t bg-white pb-[max(8px,env(safe-area-inset-bottom))]"><div className="mx-auto flex max-w-[550px] justify-around p-2">
+    <nav className="fixed bottom-0 inset-x-0 z-30 border-t pb-[max(8px,env(safe-area-inset-bottom))]" style={{background:paper,borderColor:dark?"#344054":"#e4e7ec"}}><div className="mx-auto flex max-w-[550px] justify-around p-2">
       {([{id:"catalog",label:"Услуги",icon:BriefcaseBusiness},{id:"requests",label:"Мои заявки",icon:ClipboardList},{id:"profile",label:"Профиль",icon:UserRound}] as const).map(item=><button key={item.id} onClick={()=>switchTab(item.id)} className="flex flex-col items-center gap-1 rounded-xl px-3 py-2 text-xs" style={{color:tab===item.id?color:"#98a2b3"}}><item.icon size={22}/>{item.label}</button>)}
     </div></nav>
   </main>;
