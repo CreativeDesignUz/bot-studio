@@ -18,6 +18,7 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
   const [categoryName,setCategoryName]=useState("");
   const [editingCategory,setEditingCategory]=useState<Category|"new"|null>(null);
   const [imageUrl,setImageUrl]=useState("");
+  const [uploadingPhoto,setUploadingPhoto]=useState(false);
   const [ingredients,setIngredients]=useState("");
   const [allergens,setAllergens]=useState("");
   const [preparationMinutes,setPreparationMinutes]=useState("");
@@ -159,6 +160,16 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
           <label className="block text-sm font-medium">Описание<textarea maxLength={2000} value={description} onChange={e=>setDescription(e.target.value)} rows={3} className="mt-2 w-full rounded-xl border border-[#d0d5dd] p-3"/></label>
           {(type==="delivery"||type==="store")&&<label className="block text-sm font-medium">Категория<select value={categoryId} onChange={e=>setCategoryId(e.target.value)} className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"><option value="">Без категории</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
           <label className="block text-sm font-medium">{type==="delivery"?"Фото блюда":"Фото товара"} (HTTPS-ссылка)<input type="url" value={imageUrl} onChange={e=>setImageUrl(e.target.value)} placeholder="https://..." className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/></label>
+          <label className="flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-[#d0d5dd] bg-[#f9fafb] px-4 py-3 text-sm font-semibold text-[#5934dc]">
+            {uploadingPhoto?"Загружаем фото…":"Загрузить фото с устройства"}
+            <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={uploadingPhoto} onChange={async e=>{
+              const file=e.target.files?.[0];if(!file)return;
+              if(file.size>3*1024*1024){setError("Фото должно быть не больше 3 МБ");return;}
+              setUploadingPhoto(true);setError("");
+              try{const form=new FormData();form.set("botId",botId);form.set("photo",file);const response=await fetch("/api/catalog/image-upload",{method:"POST",headers:{"x-telegram-init-data":telegramData()},body:form});const data=await response.json() as {imageUrl?:string;error?:string};if(!response.ok||!data.imageUrl)throw new Error(data.error??"Ошибка загрузки");setImageUrl(data.imageUrl);}
+              catch(err){setError(err instanceof Error?err.message:"Ошибка загрузки фото");}finally{setUploadingPhoto(false);e.target.value="";}
+            }}/>
+          </label>
           {imageUrl&&/^https:\/\//i.test(imageUrl)&&<img src={imageUrl} loading="lazy" alt="Предпросмотр фотографии" className="h-28 w-full rounded-xl bg-[#f2f4f7] object-cover"/>}
           {type==="delivery"&&<>
             <label className="block text-sm font-medium">Состав блюда<input value={ingredients} onChange={e=>setIngredients(e.target.value)} placeholder="Говядина, рис, морковь" className="mt-2 h-11 w-full rounded-xl border border-[#d0d5dd] px-3"/><span className="mt-1 block text-xs font-normal text-[#667085]">Разделяйте ингредиенты запятыми</span></label>
