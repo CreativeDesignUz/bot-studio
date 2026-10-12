@@ -34,7 +34,7 @@ export async function resolveAppUser(request: Request, initData = "", _allowGues
     const match=/^(\\d+)\\.(\\d+)\\.([0-9a-f]{64})$/.exec(telegramCookie);
     if(match&&Number(match[2])>Date.now()){
       const value=match[1]+"."+match[2];
-      const expected=createHmac("sha256",(env as typeof env & {BOT_STUDIO_AUTH_SECRET?:string}).BOT_STUDIO_AUTH_SECRET).update(value).digest();
+      const expected=createHmac("sha256",(env as typeof env & {BOT_STUDIO_AUTH_SECRET?:string}).BOT_STUDIO_AUTH_SECRET ?? "").update(value).digest();
       const actual=Buffer.from(match[3],"hex");
       if(expected.length===actual.length&&timingSafeEqual(expected,actual)){
         const {data,error}=await supabase.from("app_users").select("id,telegram_id,first_name").eq("telegram_id",match[1]).maybeSingle();
