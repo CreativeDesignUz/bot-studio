@@ -31,7 +31,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE() {
-  return new Response(JSON.stringify({ok:true}),{
-    headers:{"content-type":"application/json","set-cookie":cookie("",0),"cache-control":"no-store"}
-  });
+  const headers=new Headers({"content-type":"application/json","cache-control":"no-store"});
+  headers.append("set-cookie",cookie("",0));
+  headers.append("set-cookie","bot_studio_telegram_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
+  return new Response(JSON.stringify({ok:true}),{headers});
 }
