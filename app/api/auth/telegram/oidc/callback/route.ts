@@ -3,7 +3,6 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { getSupabaseServer } from "@/lib/supabase/server";
 
 const cookie=(req:Request,name:string)=>(req.headers.get("cookie")??"").split(";").map(x=>x.trim()).find(x=>x.startsWith(name+"="))?.slice(name.length+1)??"";
-const fail=(reason:string)=>Response.redirect(new URL("/login?error="+reason,"https://bot-studio-staging.slavnauz.workers.dev"),302);
 type JwtPayload={iss?:string;aud?:string|string[];exp?:number;nbf?:number;sub?:string;id?:number;given_name?:string;family_name?:string;preferred_username?:string;name?:string};
 async function verifiedTelegramClaims(idToken:string,clientId:string):Promise<JwtPayload> {
  const [headerPart,payloadPart,sigPart,extra]=idToken.split(".");
