@@ -125,7 +125,6 @@ export default function MiniAppPage() {
     if (!shop || sending || !selected.length) return;
     if (mixedCurrency) { setError("В одном заказе нельзя смешивать сумы и доллары. Выберите позиции в одной валюте."); return; }
     if(deliveryInvalid){setError("Доставка недоступна по этому адресу или для выбранной валюты.");return;}
-    if(fulfillment==="delivery"){setError("Онлайн-оформление доставки пока недоступно. Выберите самовывоз.");return;}
     const telegram = (window as typeof window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp;
     if (!telegram?.initData) { setError("Для оформления заказа откройте магазин через Telegram"); return; }
     checkoutKey.current ??= crypto.randomUUID().replaceAll("-", "");
@@ -135,7 +134,7 @@ export default function MiniAppPage() {
     try {
       const response = await fetch("/api/checkout", {
         method: "POST", headers: { "content-type": "application/json" }, signal: controller.signal,
-        body: JSON.stringify({ botId: shop.bot.id, initData: telegram.initData, idempotencyKey: checkoutKey.current,
+        body: JSON.stringify({ botId: shop.bot.id, initData: telegram.initData, idempotencyKey: checkoutKey.current, name, fulfillment, address, latitude:fulfillment==="delivery"?deliveryPoint?.lat:undefined, longitude:fulfillment==="delivery"?deliveryPoint?.lng:undefined,
           items: selected.map(item => ({ id: item.id, quantity: cart[item.id] })) }),
       });
       const body = await response.json() as { error?: string; orderId?: string };
