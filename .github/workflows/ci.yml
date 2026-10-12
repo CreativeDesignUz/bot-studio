@@ -83,3 +83,21 @@ jobs:
 
       - name: Deploy only staging Worker
         run: npx wrangler deploy --config dist/server/wrangler.json --name bot-studio-staging --keep-vars
+
+      - name: Smoke test selected bot API (unauthenticated)
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://bot-studio-staging.slavnauz.workers.dev"
+          BOT="39237fdd-ec5d-415e-8634-e20c1d66edd1"
+          for attempt in 1 2 3 4 5; do
+            STATUS=$(curl --silent --show-error --location --output /tmp/botstudio-smoke.json --write-out '%{http_code}' "$BASE/api/miniapp/design?bot=$BOT" || true)
+            if [ "$STATUS" = "401" ] || [ "$STATUS" = "403" ]; then
+              echo "PASS: valid bot ID reached authentication guard (HTTP $STATUS)"
+              exit 0
+            fi
+            echo "Attempt $attempt: unexpected status $STATUS"
+            sleep 3
+          done
+          echo "::error::Mini App design API did not reach authorization guard with known valid bot ID"
+          exit 1
