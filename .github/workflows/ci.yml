@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main, fix/checkout-security-foundation-20261012]
+    branches: [main]
   schedule:
     - cron: '15 1 * * *'
   workflow_dispatch:
@@ -73,7 +73,7 @@ jobs:
   deploy-staging:
     name: Deploy Cloudflare staging
     needs: quality
-    if: (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || (github.event_name == 'pull_request' && github.head_ref == 'fix/checkout-security-foundation-20261012' && github.event.pull_request.head.repo.full_name == github.repository)
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
