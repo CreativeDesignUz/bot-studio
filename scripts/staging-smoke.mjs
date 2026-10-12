@@ -21,7 +21,8 @@ await check("buyer Mini App public catalogue","/api/miniapp?bot="+bot,(r,b)=>{
   const good=r.status===200&&data?.bot?.id===bot&&Array.isArray(data.items)&&Array.isArray(data.categories);
   return {ok:good,note:good?"published buyer catalogue loaded":"catalogue unavailable or wrong bot"};
 });
+await check("Privileged Supabase readiness","/api/health/auth",(r,b)=>{let data={};try{data=JSON.parse(b)}catch{}return {ok:r.status===200&&data.ok===true&&data.db==="reachable",note:data.db??"unknown"};});
 await check("Supabase project consistency","/api/auth/public-config",(r,b)=>{let d={};try{d=JSON.parse(b)}catch{}const host=typeof d.url==="string"?new URL(d.url).hostname:"missing";const expected="eslbcwopolrxoptcxqhp.supabase.co";return {ok:r.status===200&&host===expected&&typeof d.key==="string"&&d.key.length>20,note:host===expected?"staging project and public key present":"CONFIG_MISMATCH observed="+host+" expected="+expected};});
 await check("seller API unauthorized protection","/api/orders?bot="+bot,(r)=>({ok:r.status===401||r.status===403,note:"anonymous request blocked"}));
-console.log("Live Staging read-only checks: "+(5-failures)+"/5 passed");
+console.log("Live Staging read-only checks: "+(6-failures)+"/6 passed");
 if(failures)process.exitCode=1;
