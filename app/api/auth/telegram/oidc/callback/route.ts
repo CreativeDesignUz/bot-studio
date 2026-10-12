@@ -39,7 +39,14 @@ export async function GET(request:Request){
   if(!token.id_token)throw Error("MISSING_ID_TOKEN");
   const claims=await verifiedTelegramClaims(token.id_token,settings.TELEGRAM_OIDC_CLIENT_ID);
   const database=getSupabaseServer({privileged:true});
-  const {data,error}=await database.from("app_users").upsert({telegram_id:Number(claims.sub),first_name:(claims.given_name??claims.name??"Пользователь").slice(0,120),last_name:(claims.family_name??"").slice(0,120),telegram_username:claims.preferred_username??null,language_code:"ru"},{onConflict:"telegram_id"}).select("id").single();
+  const tgId=Number(claims.sub);
+  if(!Number.isSafeInteger(tgId)||tgId<=0)throw Error("INVALID_TELEGRAM_ID");
+  const profile={telegram_id:tgId,telegram_oidc_sub:claims.sub,first_name:(claims.given_name??claims.name??"Пользователь").slice(0,120),last_name:(claims.family_name??"").slice(0,120),telegram_username:claims.preferred_username??null,language_code:"ru"};
+  const {data:existing,error:findError}=await database.from("app_users").select("id").eq("telegram_oidc_sub",claims.sub).maybeSingle();
+  if(findError)throw Error("ACCOUNT_LOOKUP");
+  const {data,error}=existing
+    ? await database.from("app_users").update(profile).eq("id",existing.id).select("id").single()
+    : await database.from("app_users").upsert(profile,{onConflict:"telegram_id"}).select("id").single();
   if(error||!data)throw Error("ACCOUNT_SYNC");
   const expires=Date.now()+3600_000;
   const payload=claims.sub+"."+expires;
