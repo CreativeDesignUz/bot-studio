@@ -25,6 +25,6 @@ export async function POST(request:Request){
   if(error||!data)return Response.json({error:"Unable to create session"},{status:503});
   const expires=Date.now()+3600_000;
   const payload=String(identity.id)+"."+String(expires);
-  const sig=createHmac("sha256",(env as typeof env & {BOT_STUDIO_AUTH_SECRET?:string}).BOT_STUDIO_AUTH_SECRET).update(payload).digest("hex");
+  const sig=createHmac("sha256",(env as typeof env & {BOT_STUDIO_AUTH_SECRET?:string}).BOT_STUDIO_AUTH_SECRET ?? "").update(payload).digest("hex");
   return Response.json({ok:true},{headers:{"cache-control":"no-store","set-cookie":`bot_studio_telegram_session=${payload}.${sig}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=3600`}});
 }
