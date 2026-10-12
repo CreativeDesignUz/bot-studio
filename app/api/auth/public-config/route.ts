@@ -1,2 +1,6 @@
-import { env } from "cloudflare:workers";
-export async function GET(){return Response.json({url:env.SUPABASE_URL??"",key:env.SUPABASE_PUBLISHABLE_KEY??""},{headers:{"cache-control":"no-store"}});}
+export async function GET() {
+  return Response.json(
+    { url: process.env.SUPABASE_URL ?? "", key: process.env.SUPABASE_PUBLISHABLE_KEY ?? "" },
+    { headers: { "cache-control": "no-store" } },
+  );
+}
