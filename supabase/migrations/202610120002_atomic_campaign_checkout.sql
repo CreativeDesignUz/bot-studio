@@ -131,3 +131,6 @@ $function$
 
 REVOKE ALL ON FUNCTION public.create_miniapp_order(uuid,text,text,text,text,jsonb,text,numeric,numeric,text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.create_miniapp_order(uuid,text,text,text,text,jsonb,text,numeric,numeric,text) TO service_role;
+
+-- Prevent multiple active/inactive promotions with the same code in a single bot.
+CREATE UNIQUE INDEX IF NOT EXISTS discount_campaigns_bot_code_ci_idx ON public.discount_campaigns (bot_id, upper(code)) WHERE code IS NOT NULL;
