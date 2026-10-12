@@ -1,4 +1,4 @@
--- Additive 10-argument overload; legacy 9-argument RPC remains unchanged.
+-- Additive ten-argument RPC. Original nine-argument service checkout RPC remains unchanged.
 CREATE OR REPLACE FUNCTION public.create_miniapp_order(p_bot_id uuid, p_customer_external_id text, p_customer_name text, p_fulfillment text, p_delivery_address text, p_items jsonb, p_request_key text, p_lat numeric, p_lng numeric, p_promo_code text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -19,7 +19,7 @@ begin
     and customer_external_id=p_customer_external_id and request_key=p_request_key;
   if order_row.id is not null then
     if order_row.request_payload_hash is not null and order_row.request_payload_hash<>request_fingerprint then raise exception 'REQUEST_KEY_MISMATCH' using errcode='22023'; end if;
-    return jsonb_build_object('orderId',order_row.id,'totalMinor',order_row.total_minor,'currency',order_row.currency,'replayed',true);
+    return jsonb_build_object('orderId',order_row.id,'totalMinor',order_row.total_minor,'discountMinor',coalesce((order_row.payload->>'discount_minor')::bigint,0),'currency',order_row.currency,'replayed',true);
   end if;
   select b.published_snapshot->'catalog'->'items' into snapshot_items from public.bots b where b.id=p_bot_id;
   if jsonb_typeof(snapshot_items) is distinct from 'array' then raise exception 'PUBLISHED_CATALOG_MISSING' using errcode='22023'; end if;
@@ -73,30 +73,19 @@ begin
     if distance_km>radius_km then raise exception 'OUTSIDE_DELIVERY_ZONE' using errcode='22023'; end if;
   end if;
   normalized_code := upper(trim(coalesce(p_promo_code,'')));
-  if length(normalized_code)>32 or (normalized_code<>'' and normalized_code !~ '^[A-Z0-9_-]{3,32}(bot_id,customer_external_id,customer_name,status,subtotal_minor,total_minor,delivery_minor,currency,fulfillment_type,delivery_address,payload,request_key,request_payload_hash)
-    values(p_bot_id,left(trim(p_customer_external_id),100),left(trim(p_customer_name),100),'new',total_amount,greatest(0,total_amount+delivery_amount-discount_amount),delivery_amount,order_currency,p_fulfillment,
-      case when p_fulfillment='delivery' then jsonb_build_object('address',left(trim(p_delivery_address),500),'lat',p_lat,'lng',p_lng) else null end,
-      jsonb_build_object('source','telegram_miniapp','payment_method','on_delivery','promo_code',nullif(normalized_code,''),'discount_minor',discount_amount),p_request_key,request_fingerprint)
-    returning * into order_row;
-  exception when unique_violation then
-    select * into order_row from public.orders where bot_id=p_bot_id and customer_external_id=p_customer_external_id and request_key=p_request_key;
-    if order_row.id is null then raise; end if;
-    if order_row.request_payload_hash is not null and order_row.request_payload_hash<>request_fingerprint then raise exception 'REQUEST_KEY_MISMATCH' using errcode='22023'; end if;
-    return jsonb_build_object('orderId',order_row.id,'totalMinor',order_row.total_minor,'currency',order_row.currency,'replayed',true);
-  end;
-  insert into public.order_items(order_id,catalog_item_id,item_name,quantity,unit_price_minor)
-  select order_row.id,(items.value->>'id')::uuid,p.value->>'name',(items.value->>'quantity')::integer,(p.value->>'price_minor')::bigint
-  from jsonb_array_elements(p_items) items join jsonb_array_elements(snapshot_items) p on p.value->>'id'=items.value->>'id';
-  return jsonb_build_object('orderId',order_row.id,'totalMinor',greatest(0,total_amount+delivery_amount-discount_amount),'discountMinor',discount_amount,'deliveryMinor',delivery_amount,'currency',order_currency,'replayed',false);
-end;
-$function$
-) then raise exception 'INVALID_PROMO_CODE' using errcode='22023'; end if;
+  if length(normalized_code)>32 or (normalized_code<>'' and normalized_code !~ '^[A-Z0-9_-]{3,32}$') then
+    raise exception 'INVALID_PROMO_CODE' using errcode='22023';
+  end if;
   if normalized_code<>'' then
-    select * into campaign from public.discount_campaigns where bot_id=p_bot_id and upper(code)=normalized_code and is_active=true
-      and (starts_at is null or starts_at<=now()) and (ends_at is null or ends_at>=now()) for update;
+    select * into campaign from public.discount_campaigns
+      where bot_id=p_bot_id and upper(code)=normalized_code and is_active=true
+      and (starts_at is null or starts_at<=now()) and (ends_at is null or ends_at>=now())
+      for update;
     if campaign.id is null then raise exception 'PROMO_NOT_AVAILABLE' using errcode='22023'; end if;
-    if campaign.usage_limit is not null and campaign.usage_count>=campaign.usage_limit then raise exception 'PROMO_LIMIT_REACHED' using errcode='22023'; end if;
-    if campaign.minimum_order_minor is not null and total_amount<campaign.minimum_order_minor then raise exception 'PROMO_MINIMUM_ORDER' using errcode='22023'; end if;
+    if campaign.usage_limit is not null and campaign.usage_count>=campaign.usage_limit then
+      raise exception 'PROMO_LIMIT_REACHED' using errcode='22023'; end if;
+    if campaign.minimum_order_minor is not null and total_amount<campaign.minimum_order_minor then
+      raise exception 'PROMO_MINIMUM_ORDER' using errcode='22023'; end if;
     if campaign.discount_type='percent' then
       if campaign.discount_value not between 0 and 100 then raise exception 'INVALID_PROMO' using errcode='22023'; end if;
       discount_amount := floor(total_amount::numeric*campaign.discount_value/100)::bigint;
@@ -106,31 +95,30 @@ $function$
     elsif campaign.discount_type='free_delivery' then
       if p_fulfillment<>'delivery' then raise exception 'PROMO_REQUIRES_DELIVERY' using errcode='22023'; end if;
       discount_amount := delivery_amount;
-    else raise exception 'INVALID_PROMO_TYPE' using errcode='22023';
+    else
+      raise exception 'INVALID_PROMO_TYPE' using errcode='22023';
     end if;
     update public.discount_campaigns set usage_count=usage_count+1 where id=campaign.id;
   end if;
   begin
     insert into public.orders(bot_id,customer_external_id,customer_name,status,subtotal_minor,total_minor,delivery_minor,currency,fulfillment_type,delivery_address,payload,request_key,request_payload_hash)
-    values(p_bot_id,left(trim(p_customer_external_id),100),left(trim(p_customer_name),100),'new',total_amount,total_amount+delivery_amount,delivery_amount,order_currency,p_fulfillment,
+    values(p_bot_id,left(trim(p_customer_external_id),100),left(trim(p_customer_name),100),'new',total_amount,greatest(0,total_amount+delivery_amount-discount_amount),delivery_amount,order_currency,p_fulfillment,
       case when p_fulfillment='delivery' then jsonb_build_object('address',left(trim(p_delivery_address),500),'lat',p_lat,'lng',p_lng) else null end,
-      jsonb_build_object('source','telegram_miniapp','payment_method','on_delivery'),p_request_key,request_fingerprint)
+      jsonb_build_object('source','telegram_miniapp','payment_method','on_delivery','promo_code',nullif(normalized_code,''),'discount_minor',discount_amount),p_request_key,request_fingerprint)
     returning * into order_row;
   exception when unique_violation then
     select * into order_row from public.orders where bot_id=p_bot_id and customer_external_id=p_customer_external_id and request_key=p_request_key;
     if order_row.id is null then raise; end if;
     if order_row.request_payload_hash is not null and order_row.request_payload_hash<>request_fingerprint then raise exception 'REQUEST_KEY_MISMATCH' using errcode='22023'; end if;
-    return jsonb_build_object('orderId',order_row.id,'totalMinor',order_row.total_minor,'currency',order_row.currency,'replayed',true);
+    return jsonb_build_object('orderId',order_row.id,'totalMinor',order_row.total_minor,'discountMinor',coalesce((order_row.payload->>'discount_minor')::bigint,0),'currency',order_row.currency,'replayed',true);
   end;
   insert into public.order_items(order_id,catalog_item_id,item_name,quantity,unit_price_minor)
   select order_row.id,(items.value->>'id')::uuid,p.value->>'name',(items.value->>'quantity')::integer,(p.value->>'price_minor')::bigint
   from jsonb_array_elements(p_items) items join jsonb_array_elements(snapshot_items) p on p.value->>'id'=items.value->>'id';
-  return jsonb_build_object('orderId',order_row.id,'totalMinor',total_amount+delivery_amount,'deliveryMinor',delivery_amount,'currency',order_currency,'replayed',false);
+  return jsonb_build_object('orderId',order_row.id,'totalMinor',greatest(0,total_amount+delivery_amount-discount_amount),'discountMinor',discount_amount,'deliveryMinor',delivery_amount,'currency',order_currency,'replayed',false);
 end;
 $function$
 
 REVOKE ALL ON FUNCTION public.create_miniapp_order(uuid,text,text,text,text,jsonb,text,numeric,numeric,text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.create_miniapp_order(uuid,text,text,text,text,jsonb,text,numeric,numeric,text) TO service_role;
-
--- Prevent multiple active/inactive promotions with the same code in a single bot.
 CREATE UNIQUE INDEX IF NOT EXISTS discount_campaigns_bot_code_ci_idx ON public.discount_campaigns (bot_id, upper(code)) WHERE code IS NOT NULL;
