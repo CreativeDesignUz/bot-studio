@@ -13,7 +13,7 @@ function verifyLogin(user:Login,botToken:string){
   return timingSafeEqual(actual,Buffer.from(user.hash,"hex"));
 }
 export async function POST(request:Request){
-  if(!env.TELEGRAM_MANAGER_TOKEN||!env.BOT_STUDIO_AUTH_SECRET)return Response.json({error:"Telegram auth not configured"},{status:503});
+  if(!env.TELEGRAM_MANAGER_TOKEN||!(env as typeof env & {BOT_STUDIO_AUTH_SECRET?:string}).BOT_STUDIO_AUTH_SECRET)return Response.json({error:"Telegram auth not configured"},{status:503});
   let body:{login?:Login;initData?:string};
   try{const raw=await request.text();if(raw.length>9000)return Response.json({error:"Payload too large"},{status:413});body=JSON.parse(raw);}catch{return Response.json({error:"Invalid request"},{status:400});}
   let identity:Login|null=null;
@@ -25,6 +25,6 @@ export async function POST(request:Request){
   if(error||!data)return Response.json({error:"Unable to create session"},{status:503});
   const expires=Date.now()+3600_000;
   const payload=String(identity.id)+"."+String(expires);
-  const sig=createHmac("sha256",env.BOT_STUDIO_AUTH_SECRET).update(payload).digest("hex");
+  const sig=createHmac("sha256",(env as typeof env & {BOT_STUDIO_AUTH_SECRET?:string}).BOT_STUDIO_AUTH_SECRET).update(payload).digest("hex");
   return Response.json({ok:true},{headers:{"cache-control":"no-store","set-cookie":`bot_studio_telegram_session=${payload}.${sig}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=3600`}});
 }
