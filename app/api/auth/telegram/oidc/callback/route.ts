@@ -34,13 +34,13 @@ export async function GET(request:Request){
  try{
   const redirect=url.origin+"/api/auth/telegram/oidc/callback";
   const response=await fetch("https://oauth.telegram.org/token",{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded","authorization":"Basic "+Buffer.from(settings.TELEGRAM_OIDC_CLIENT_ID+":"+settings.TELEGRAM_OIDC_CLIENT_SECRET).toString("base64")},body:new URLSearchParams({grant_type:"authorization_code",code,redirect_uri:redirect,client_id:settings.TELEGRAM_OIDC_CLIENT_ID,code_verifier:verifier})});
-  if(!response.ok)throw Error("Token exchange failed");
+  if(!response.ok)throw Error("TOKEN_EXCHANGE_"+response.status);
   const token=await response.json() as {id_token?:string};
-  if(!token.id_token)throw Error("Missing ID token");
+  if(!token.id_token)throw Error("MISSING_ID_TOKEN");
   const claims=await verifiedTelegramClaims(token.id_token,settings.TELEGRAM_OIDC_CLIENT_ID);
   const database=getSupabaseServer({privileged:true});
   const {data,error}=await database.from("app_users").upsert({telegram_id:Number(claims.sub),first_name:(claims.given_name??claims.name??"Пользователь").slice(0,120),last_name:(claims.family_name??"").slice(0,120),telegram_username:claims.preferred_username??null,language_code:"ru"},{onConflict:"telegram_id"}).select("id").single();
-  if(error||!data)throw Error("Account sync failed");
+  if(error||!data)throw Error("ACCOUNT_SYNC");
   const expires=Date.now()+3600_000;
   const payload=claims.sub+"."+expires;
   const signature=createHmac("sha256",settings.BOT_STUDIO_AUTH_SECRET).update(payload).digest("hex");
@@ -49,5 +49,10 @@ export async function GET(request:Request){
   headers.append("set-cookie","bs_tg_oidc_state=; Path=/api/auth/telegram/oidc; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
   headers.append("set-cookie","bs_tg_oidc_pkce=; Path=/api/auth/telegram/oidc; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
   return new Response(null,{status:302,headers});
- }catch(e){console.error("Telegram OIDC failed",{type:e instanceof Error?e.name:"Unknown"});return Response.redirect(new URL("/login?error=telegram_auth",url.origin),302)}
+ }catch(e){
+  const cause=e instanceof Error?e.message:"UNKNOWN";
+  const stage=cause.startsWith("TOKEN_EXCHANGE_")?"token_exchange":cause==="MISSING_ID_TOKEN"?"missing_token":cause==="ACCOUNT_SYNC"?"account_sync":/JWT|signature|claims|signing key|Key retrieval|algorithm/i.test(cause)?"identity_verification":"unexpected";
+  console.error("Telegram OIDC failed",{stage,category:e instanceof Error?e.name:"Unknown"});
+  return Response.redirect(new URL("/login?error=telegram_auth&stage="+stage,url.origin),302);
+ }
 }
