@@ -14,7 +14,7 @@ test("demo food import keeps existing restaurant dishes instead of blocking or o
   assert.match(code,/bot\.status==="active"/);
 });
 test("live delivery workspace does not offer inserting demonstration dishes",async()=>{
-  const code=await readFile(new URL("../app/workspace/catalog-manager.tsx",import.meta.url),"utf8");
+  const code=await readFile(new URL("../features/web/components/catalog-manager.tsx",import.meta.url),"utf8");
   assert.doesNotMatch(code,/Добавить узбекские блюда|fillUzbekMenu|\/api\/catalog\/seed-uzbek/);
   assert.match(code,/опубликуйте приложение/);
 });

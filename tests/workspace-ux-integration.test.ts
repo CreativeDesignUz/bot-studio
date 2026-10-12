@@ -26,8 +26,8 @@ test("owner-only preview reads draft while public buyer still reads published sn
 });
 test("builder and workspace embed the real clickable miniapp and support store theme",async()=>{
  const builder=await source("app/workspace/builder/page.tsx");
- const appearance=await source("app/workspace/miniapp-appearance.tsx");
- const component=await source("app/workspace/miniapp-live-preview.tsx");
+ const appearance=await source("features/web/components/miniapp-appearance.tsx");
+ const component=await source("features/miniapp/components/live-preview.tsx");
  const designApi=await source("app/api/miniapp/design/route.ts");
  assert.match(builder,/MiniAppLivePreview/);
  assert.match(appearance,/MiniAppLivePreview/);

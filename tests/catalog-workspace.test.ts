@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 test("workspace uses real catalog API rather than synthetic module rows", async () => {
   const [workspace, manager] = await Promise.all([
     readFile(new URL("../app/workspace/page.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/workspace/catalog-manager.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../features/web/components/catalog-manager.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(workspace, /<CatalogManager/);
   assert.doesNotMatch(workspace, /\[1,2,3,4\]\.map/);
@@ -25,7 +25,7 @@ test("catalog endpoints verify owner and constrain every write by bot and item t
 test("new catalog item respects selected currency and seller workspace has no demo seed", async () => {
   const [route, manager] = await Promise.all([
     readFile(new URL("../app/api/catalog/route.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/workspace/catalog-manager.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../features/web/components/catalog-manager.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(route, /currency: input\.currency \?\? "UZS"/);
   assert.doesNotMatch(route, /item_type: auth\.itemType, currency: "UZS"/);
@@ -33,7 +33,7 @@ test("new catalog item respects selected currency and seller workspace has no de
 });
 
 test("restaurant menu has dedicated category management and category-aware item creation", async () => {
-  const manager = await readFile(new URL("../app/workspace/catalog-manager.tsx", import.meta.url), "utf8");
+  const manager = await readFile(new URL("../features/web/components/catalog-manager.tsx", import.meta.url), "utf8");
   assert.match(manager, /role="tablist" aria-label="Управление меню"/);
   assert.match(manager, /setMenuView\("categories"\)/);
   assert.match(manager, /setMenuView\("items"\)/);

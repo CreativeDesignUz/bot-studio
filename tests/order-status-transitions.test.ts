@@ -12,7 +12,7 @@ test("seller order status API checks ownership and rejects stale transitions",as
 });
 
 test("order manager renders lifecycle actions and handles server errors",async()=>{
- const ui=await readFile(new URL("../app/workspace/order-manager.tsx",import.meta.url),"utf8");
+ const ui=await readFile(new URL("../features/web/components/order-manager.tsx",import.meta.url),"utf8");
  assert.match(ui,/Принять заказ/);
  assert.match(ui,/Начать приготовление/);
  assert.match(ui,/Готов к выдаче/);

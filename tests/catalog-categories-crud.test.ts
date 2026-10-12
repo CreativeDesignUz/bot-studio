@@ -13,7 +13,7 @@ test("category modifications require an authenticated owner and bot scope",async
 });
 
 test("food and store editors expose persisted categories",async()=>{
- const ui=await readFile(new URL("../app/workspace/catalog-manager.tsx",import.meta.url),"utf8");
+ const ui=await readFile(new URL("../features/web/components/catalog-manager.tsx",import.meta.url),"utf8");
  assert.match(ui,/api\/catalog\/categories/);
  assert.match(ui,/Управление категориями/);
  assert.match(ui,/type==="delivery"\|\|type==="store"/);

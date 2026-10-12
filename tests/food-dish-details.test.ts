@@ -11,7 +11,7 @@ test("dish composition and preparation are validated and stored by owner-scoped 
  assert.match(code,/category_id,position,ingredients,allergens,preparation_minutes/);
 });
 test("food editor has optional ingredients allergens cooking time and image preview",async()=>{
- const code=await readFile(new URL("../app/workspace/catalog-manager.tsx",import.meta.url),"utf8");
+ const code=await readFile(new URL("../features/web/components/catalog-manager.tsx",import.meta.url),"utf8");
  assert.match(code,/Состав блюда/);
  assert.match(code,/Аллергены/);
  assert.match(code,/Время приготовления, мин/);

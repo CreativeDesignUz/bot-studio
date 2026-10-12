@@ -6,7 +6,7 @@ test("settings sidebar alone chooses profile chat or Mini App preview",async()=>
  const editor=await readFile(new URL("../app/workspace/builder/page.tsx",import.meta.url),"utf8");
  assert.match(editor,/activeSection==="profile"\?"profile":"chat"/);
  assert.match(editor,/activeSection==="miniapp"\?"miniapp":"telegram"/);
- const sidebar=await readFile(new URL("../app/workspace/workspace-sidebar.tsx",import.meta.url),"utf8");
+ const sidebar=await readFile(new URL("../features/web/components/workspace-sidebar.tsx",import.meta.url),"utf8");
  assert.match(editor,/WorkspaceSidebar/);
  assert.match(sidebar,/Приветствие/);
  assert.match(sidebar,/WorkFlow/);

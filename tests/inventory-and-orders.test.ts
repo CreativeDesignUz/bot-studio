@@ -3,7 +3,7 @@ import {readFile} from "node:fs/promises";
 import test from "node:test";
 
 test("seller can set stock and buyer cannot see zero-stock items",async()=>{
- const editor=await readFile(new URL("../app/workspace/catalog-manager.tsx",import.meta.url),"utf8");
+ const editor=await readFile(new URL("../features/web/components/catalog-manager.tsx",import.meta.url),"utf8");
  const api=await readFile(new URL("../app/api/catalog/route.ts",import.meta.url),"utf8");
  const miniapp=await readFile(new URL("../app/api/miniapp/route.ts",import.meta.url),"utf8");
  assert.match(editor,/Количество в наличии/);
@@ -25,7 +25,7 @@ test("checkout stock deduction and idempotency use an atomic database function",
 
 test("admin order details include product lines and delivery address",async()=>{
  const api=await readFile(new URL("../app/api/orders/route.ts",import.meta.url),"utf8");
- const ui=await readFile(new URL("../app/workspace/order-manager.tsx",import.meta.url),"utf8");
+ const ui=await readFile(new URL("../features/web/components/order-manager.tsx",import.meta.url),"utf8");
  assert.match(api,/\.eq\("owner_id",user\.id\)/);
  assert.match(api,/from\("order_items"\)/);
  assert.match(ui,/Что заказали/);

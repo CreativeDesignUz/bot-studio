@@ -22,7 +22,7 @@ test("onboarding uses verified credentials, real draft persistence and actual pu
 
 test("Mini App design wizard uses the same draft API and live interactive preview as the editor",async()=>{
  const wizard=await readFile(new URL("../app/onboarding/page.tsx",import.meta.url),"utf8");
- const design=await readFile(new URL("../app/onboarding/miniapp-design-step.tsx",import.meta.url),"utf8");
+ const design=await readFile(new URL("../features/web/components/onboarding-miniapp-design-step.tsx",import.meta.url),"utf8");
  assert.match(wizard,/MiniAppDesignStep/);
  assert.match(wizard,/stage===3/);
  assert.match(wizard,/stage===4/);

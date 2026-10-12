@@ -4,7 +4,7 @@ import test from "node:test";
 
 test("appearance draft supports theme policy and configurable banner", async () => {
  const api=await readFile(new URL("../app/api/miniapp/design/route.ts",import.meta.url),"utf8");
- const editor=await readFile(new URL("../app/workspace/miniapp-appearance.tsx",import.meta.url),"utf8");
+ const editor=await readFile(new URL("../features/web/components/miniapp-appearance.tsx",import.meta.url),"utf8");
  const buyer=await readFile(new URL("../app/miniapp/page.tsx",import.meta.url),"utf8");
  assert.match(api,/themeMode:"light"\|"dark"\|"customer"/);
  assert.match(api,/banner:parseBanner\(data.banner\)/);

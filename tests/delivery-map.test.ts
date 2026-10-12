@@ -16,14 +16,14 @@ test("delivery checkout requires and persists map coordinates",async()=>{
 });
 
 test("seller can view map coordinates and written address",async()=>{
- const ui=await readFile(new URL("../app/workspace/order-manager.tsx",import.meta.url),"utf8");
+ const ui=await readFile(new URL("../features/web/components/order-manager.tsx",import.meta.url),"utf8");
  assert.match(ui,/Точка доставки/);
  assert.match(ui,/openstreetmap.org\/export\/embed.html/);
  assert.match(ui,/Адрес доставки/);
 });
 
 test("picker allows map click and native geolocation without exposing keys",async()=>{
- const ui=await readFile(new URL("../app/miniapp/delivery-location-picker.tsx",import.meta.url),"utf8");
+ const ui=await readFile(new URL("../features/miniapp/components/delivery-location-picker.tsx",import.meta.url),"utf8");
  assert.match(ui,/navigator.geolocation.getCurrentPosition/);
  assert.match(ui,/tile.openstreetmap.org/);
  assert.match(ui,/onClick={choose}/);
@@ -31,7 +31,7 @@ test("picker allows map click and native geolocation without exposing keys",asyn
 });
 
 test("buyer map starts from published store or restaurant delivery center",async()=>{
- const picker=await readFile(new URL("../app/miniapp/delivery-location-picker.tsx",import.meta.url),"utf8");
+ const picker=await readFile(new URL("../features/miniapp/components/delivery-location-picker.tsx",import.meta.url),"utf8");
  const buyer=await readFile(new URL("../app/miniapp/page.tsx",import.meta.url),"utf8");
  assert.match(picker,/initialCenter\?:Point/);
  assert.match(picker,/value\?\?initialCenter/);
