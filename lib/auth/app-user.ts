@@ -15,8 +15,10 @@ export async function resolveAppUser(request: Request, initData = "", _allowGues
   if (!env.SUPABASE_SECRET_KEY) throw new Error("Supabase server access is not configured");
   const supabase = getSupabaseServer({ privileged: true });
   if (initData) {
-    if (!env.TELEGRAM_MANAGER_TOKEN) return { error: "Telegram authentication is not configured", status: 503 as const };
-    const telegram = await verifyTelegramInitData(initData, env.TELEGRAM_MANAGER_TOKEN);
+    const bindings=env as typeof env & {TELEGRAM_LOGIN_BOT_TOKEN?:string;TELEGRAM_MANAGER_TOKEN?:string};
+    const ownerLoginToken=bindings.TELEGRAM_LOGIN_BOT_TOKEN??bindings.TELEGRAM_MANAGER_TOKEN;
+    if (!ownerLoginToken) return { error: "Telegram authentication is not configured", status: 503 as const };
+    const telegram = await verifyTelegramInitData(initData, ownerLoginToken);
     if (!telegram) return { error: "Invalid Telegram session", status: 401 as const };
     const { data, error } = await supabase.from("app_users").upsert({
       telegram_id: telegram.id,
