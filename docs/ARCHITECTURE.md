@@ -53,7 +53,7 @@ Cloudflare Secret нельзя восстановить в исходном ви
 ## Выкладка
 Изменения → рабочая ветка и PR → обязательный GitHub CI → Cloudflare Preview → ручной Cloudflare Staging + Supabase Staging → интеграционная регрессия → отдельно согласованный Production deploy.
 
-- CI запускается для каждого Pull Request и для рабочих веток `fix/**`, `feat/**`, `refactor/**`, `chore/**`.
+- CI запускается для каждого Pull Request независимо от целевой ветки; отдельный push-run выполняется только для `main`, чтобы не дублировать проверки.
 - Ручной workflow без флага `deploy_staging` выполняет только проверки и ничего не публикует.
 - Staging deploy разрешён только из `main`, использует Worker `bot-studio-staging`, Wrangler strict mode и сохранение remote secrets.
 - Production Worker `bot-studio` не является целью GitHub Actions.

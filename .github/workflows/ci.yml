@@ -3,12 +3,7 @@ name: Bot Studio CI
 on:
   pull_request:
   push:
-    branches:
-      - main
-      - 'fix/**'
-      - 'feat/**'
-      - 'refactor/**'
-      - 'chore/**'
+    branches: [main]
   schedule:
     - cron: '15 1 * * *'
   workflow_dispatch:
