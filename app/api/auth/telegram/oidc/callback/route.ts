@@ -1,0 +1,54 @@
+import { env } from "cloudflare:workers";
+import { createHmac, timingSafeEqual } from "node:crypto";
+import { getSupabaseServer } from "@/lib/supabase/server";
+
+const cookie=(req:Request,name:string)=>(req.headers.get("cookie")??"").split(";").map(x=>x.trim()).find(x=>x.startsWith(name+"="))?.slice(name.length+1)??"";
+const fail=(reason:string)=>Response.redirect(new URL("/login?error="+reason,"https://bot-studio-staging.slavnauz.workers.dev"),302);
+type JwtPayload={iss?:string;aud?:string|string[];exp?:number;nbf?:number;sub?:string;id?:number;given_name?:string;family_name?:string;preferred_username?:string;name?:string};
+async function verifiedTelegramClaims(idToken:string,clientId:string):Promise<JwtPayload> {
+ const [headerPart,payloadPart,sigPart,extra]=idToken.split(".");
+ if(!headerPart||!payloadPart||!sigPart||extra)throw Error("Bad JWT");
+ const header=JSON.parse(Buffer.from(headerPart,"base64url").toString()) as {alg?:string;kid?:string};
+ if(header.alg!=="RS256"||!header.kid)throw Error("Unexpected JWT algorithm");
+ const response=await fetch("https://oauth.telegram.org/.well-known/jwks.json");
+ if(!response.ok)throw Error("Key retrieval failed");
+ const jwks=await response.json() as {keys?:Array<JsonWebKey&{kid?:string;alg?:string;use?:string}>};
+ const jwk=jwks.keys?.find(k=>k.kid===header.kid&&k.kty==="RSA"&&(!k.use||k.use==="sig"));
+ if(!jwk)throw Error("Unknown signing key");
+ const key=await crypto.subtle.importKey("jwk",jwk,{name:"RSASSA-PKCS1-v1_5",hash:"SHA-256"},false,["verify"]);
+ const ok=await crypto.subtle.verify("RSASSA-PKCS1-v1_5",key,Buffer.from(sigPart,"base64url"),new TextEncoder().encode(headerPart+"."+payloadPart));
+ if(!ok)throw Error("Invalid signature");
+ const claims=JSON.parse(Buffer.from(payloadPart,"base64url").toString()) as JwtPayload;
+ const now=Math.floor(Date.now()/1000);
+ if(claims.iss!=="https://oauth.telegram.org"||!(claims.aud===clientId||Array.isArray(claims.aud)&&claims.aud.includes(clientId))||!claims.exp||claims.exp<=now||claims.nbf&&claims.nbf>now||!claims.sub||!/^\d+$/.test(claims.sub))throw Error("Invalid ID token claims");
+ return claims;
+}
+export async function GET(request:Request){
+ const url=new URL(request.url);
+ const settings=env as typeof env & {TELEGRAM_OIDC_CLIENT_ID?:string;TELEGRAM_OIDC_CLIENT_SECRET?:string;BOT_STUDIO_AUTH_SECRET?:string};
+ if(!settings.TELEGRAM_OIDC_CLIENT_ID||!settings.TELEGRAM_OIDC_CLIENT_SECRET||!settings.BOT_STUDIO_AUTH_SECRET)return Response.json({error:"Telegram OIDC not configured"},{status:503});
+ const code=url.searchParams.get("code")??"";
+ const state=url.searchParams.get("state")??"";
+ const expected=cookie(request,"bs_tg_oidc_state");
+ const verifier=cookie(request,"bs_tg_oidc_pkce");
+ if(!code||code.length>4096||!state||!expected||!verifier||state.length!==expected.length||!timingSafeEqual(Buffer.from(state),Buffer.from(expected)))return Response.redirect(new URL("/login?error=telegram_session",url.origin),302);
+ try{
+  const redirect=url.origin+"/api/auth/telegram/oidc/callback";
+  const response=await fetch("https://oauth.telegram.org/token",{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded","authorization":"Basic "+Buffer.from(settings.TELEGRAM_OIDC_CLIENT_ID+":"+settings.TELEGRAM_OIDC_CLIENT_SECRET).toString("base64")},body:new URLSearchParams({grant_type:"authorization_code",code,redirect_uri:redirect,client_id:settings.TELEGRAM_OIDC_CLIENT_ID,code_verifier:verifier})});
+  if(!response.ok)throw Error("Token exchange failed");
+  const token=await response.json() as {id_token?:string};
+  if(!token.id_token)throw Error("Missing ID token");
+  const claims=await verifiedTelegramClaims(token.id_token,settings.TELEGRAM_OIDC_CLIENT_ID);
+  const database=getSupabaseServer({privileged:true});
+  const {data,error}=await database.from("app_users").upsert({telegram_id:Number(claims.sub),first_name:(claims.given_name??claims.name??"Пользователь").slice(0,120),last_name:(claims.family_name??"").slice(0,120),telegram_username:claims.preferred_username??null,language_code:"ru"},{onConflict:"telegram_id"}).select("id").single();
+  if(error||!data)throw Error("Account sync failed");
+  const expires=Date.now()+3600_000;
+  const payload=claims.sub+"."+expires;
+  const signature=createHmac("sha256",settings.BOT_STUDIO_AUTH_SECRET).update(payload).digest("hex");
+  const headers=new Headers({location:new URL("/workspace",url.origin).toString(),"cache-control":"no-store"});
+  headers.append("set-cookie",`bot_studio_telegram_session=${payload}.${signature}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=3600`);
+  headers.append("set-cookie","bs_tg_oidc_state=; Path=/api/auth/telegram/oidc; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
+  headers.append("set-cookie","bs_tg_oidc_pkce=; Path=/api/auth/telegram/oidc; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
+  return new Response(null,{status:302,headers});
+ }catch(e){console.error("Telegram OIDC failed",{type:e instanceof Error?e.name:"Unknown"});return Response.redirect(new URL("/login?error=telegram_auth",url.origin),302)}
+}
