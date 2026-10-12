@@ -13,12 +13,12 @@ function verifyLogin(user:Login,botToken:string){
   return timingSafeEqual(actual,Buffer.from(user.hash,"hex"));
 }
 export async function POST(request:Request){
-  if(!env.TELEGRAM_MANAGER_TOKEN||!(env as typeof env & {BOT_STUDIO_AUTH_SECRET?:string}).BOT_STUDIO_AUTH_SECRET)return Response.json({error:"Telegram auth not configured"},{status:503});
+  if(!(env as typeof env & {TELEGRAM_LOGIN_BOT_TOKEN?:string}).TELEGRAM_LOGIN_BOT_TOKEN!||!(env as typeof env & {BOT_STUDIO_AUTH_SECRET?:string}).BOT_STUDIO_AUTH_SECRET)return Response.json({error:"Telegram auth not configured"},{status:503});
   let body:{login?:Login;initData?:string};
   try{const raw=await request.text();if(raw.length>9000)return Response.json({error:"Payload too large"},{status:413});body=JSON.parse(raw);}catch{return Response.json({error:"Invalid request"},{status:400});}
   let identity:Login|null=null;
-  if(typeof body.initData==="string"&&body.initData.length<=8192)identity=await verifyTelegramInitData(body.initData,env.TELEGRAM_MANAGER_TOKEN);
-  else if(body.login&&verifyLogin(body.login,env.TELEGRAM_MANAGER_TOKEN))identity=body.login;
+  if(typeof body.initData==="string"&&body.initData.length<=8192)identity=await verifyTelegramInitData(body.initData,(env as typeof env & {TELEGRAM_LOGIN_BOT_TOKEN?:string}).TELEGRAM_LOGIN_BOT_TOKEN!);
+  else if(body.login&&verifyLogin(body.login,(env as typeof env & {TELEGRAM_LOGIN_BOT_TOKEN?:string}).TELEGRAM_LOGIN_BOT_TOKEN!))identity=body.login;
   if(!identity?.id)return Response.json({error:"Invalid Telegram authentication"},{status:401});
   const db=getSupabaseServer({privileged:true});
   const {data,error}=await db.from("app_users").upsert({telegram_id:identity.id,telegram_username:identity.username??null,first_name:identity.first_name??"Пользователь",last_name:identity.last_name??"",language_code:"ru"},{onConflict:"telegram_id"}).select("id").single();
