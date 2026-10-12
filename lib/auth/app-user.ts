@@ -31,7 +31,7 @@ export async function resolveAppUser(request: Request, initData = "", _allowGues
   // Website Telegram login uses a signed, HttpOnly short-lived cookie.
   const telegramCookie=(request.headers.get("cookie")??"").split(";").map(s=>s.trim()).find(s=>s.startsWith("bot_studio_telegram_session="))?.split("=")[1]??"";
   if(telegramCookie&&(env as typeof env & {BOT_STUDIO_AUTH_SECRET?:string}).BOT_STUDIO_AUTH_SECRET){
-    const match=/^(\\d+)\\.(\\d+)\\.([0-9a-f]{64})$/.exec(telegramCookie);
+    const match=/^(\d+)\.(\d+)\.([0-9a-f]{64})$/.exec(telegramCookie);
     if(match&&Number(match[2])>Date.now()){
       const value=match[1]+"."+match[2];
       const expected=createHmac("sha256",(env as typeof env & {BOT_STUDIO_AUTH_SECRET?:string}).BOT_STUDIO_AUTH_SECRET ?? "").update(value).digest();
@@ -47,7 +47,7 @@ export async function resolveAppUser(request: Request, initData = "", _allowGues
   if (!token) return { error: "Authentication required", status: 401 as const };
   const auth = getSupabaseServer();
   const { data: identity, error: authError } = await auth.auth.getUser(token);
-  if (authError || !identity.user || !identity.user.email_confirmed_at) {
+  if (authError || !identity.user || (identity.user.app_metadata?.provider !== "google" && !identity.user.email_confirmed_at)) {
     return { error: "Invalid or expired session", status: 401 as const };
   }
   const { data: existing, error } = await supabase.from("app_users")
