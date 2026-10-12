@@ -36,10 +36,21 @@ test("buyer Mini App uses Telegram-verified checkout with coordinates",()=>{
  assert.match(checkout,/p_delivery_address/);
  assert.match(src("app/api/channels/telegram/project-runtime/route.ts"),/miniapp\?bot=/);
 });
-test("campaign drafts cannot be activated before discount calculation exists",()=>{
+test("promotion checkout uses atomic server-side discount and scoped coupon",()=>{
  const api=src("app/api/campaigns/route.ts");
+ const checkout=src("app/api/checkout/route.ts");
+ const sql=src("supabase/migrations/202610120002_atomic_campaign_checkout.sql");
+ const miniapp=src("app/miniapp/page.tsx");
  assert.match(api,/is_active:false/);
- assert.match(api,/if\(body\.isActive\)return fail/);
+ assert.match(api,/if\(body\.isActive\)/);
+ assert.match(checkout,/p_promo_code:/);
+ assert.match(miniapp,/promoCode:promoCode\.trim\(\)\.toUpperCase\(\)/);
+ assert.match(sql,/bot_id=p_bot_id and upper\(code\)=normalized_code and is_active=true/);
+ assert.match(sql,/usage_count=usage_count\+1/);
+ assert.match(sql,/discount_amount/);
+ assert.match(sql,/p_request_key/);
+ assert.match(sql,/to service_role/i);
+ assert.match(sql,/unique index if not exists/i);
 });
 test("Google login supports code exchange using PKCE",()=>{
  assert.match(src("app/login/page.tsx"),/flowType:"pkce"/);
