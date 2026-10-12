@@ -1,3 +1,4 @@
+import { logServerError } from "@/lib/observability/error-log";
 import { resolveAppUser } from "@/lib/auth/app-user";
 
 type Customer = {id:string;external_id:string;full_name:string|null;telegram_username:string|null;last_activity_at:string|null};
@@ -60,7 +61,7 @@ export async function GET(request:Request) {
       recentOrders:orders.slice(0,20)
     },{headers:{"cache-control":"private, no-store"}});
   }catch(error){
-    console.error("Workspace analytics error",error instanceof Error?error.message:"unknown");
-    return Response.json({error:"Analytics unavailable"},{status:500});
+    const errorId = logServerError("workspace.insights", error);
+    return Response.json({error:"Analytics unavailable",errorId},{status:500});
   }
 }
