@@ -67,6 +67,11 @@ test("publishing preserves settings and snapshots published prices",()=>{
  assert.match(publish,/published_snapshot:snapshot/);
  assert.match(src("app/api/miniapp/route.ts"),/published_snapshot/);
 });
+test("onboarding never claims a draft item is already published",()=>{
+ const onboarding=src("app/onboarding/page.tsx");
+ assert.doesNotMatch(onboarding,/\{itemName\} опубликован/);
+ assert.match(onboarding,/сохранён в каталоге/);
+});
 test("BotFather connection and Telegram runtime remain wired securely",()=>{
  const route=src("app/api/channels/telegram/token/route.ts");
  const runtime=src("app/api/channels/telegram/project-runtime/route.ts");

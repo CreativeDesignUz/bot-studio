@@ -190,7 +190,7 @@ function ItemStep({ template, itemName, setItemName, price, setPrice, descriptio
 }
 
 function DoneStep({ template, botName, itemName, price, botId, onAdd }: { template:Template; botName:string; itemName:string; price:string; botId:string|null; onAdd:()=>void }) {
-  return <div className="flow-step done-step"><div className="success-mark"><Check /></div><div className="flow-heading"><span>Готов к работе</span><h1>Первый {template.item} добавлен</h1><p>{itemName} опубликован в «{botName}». Теперь можно открыть превью или продолжить наполнение.</p></div>
+  return <div className="flow-step done-step"><div className="success-mark"><Check /></div><div className="flow-heading"><span>Готов к работе</span><h1>Первый {template.item} добавлен</h1><p>{itemName} сохранён в каталоге «{botName}». Проверьте его в черновике, а затем опубликуйте бот.</p></div>
     <div className="first-item-card"><span className="first-item-image"><Package /></span><div><small>{template.item}</small><strong>{itemName}</strong><p>{price ? `${Number(price).toLocaleString("ru-RU")} сум` : "Цена не указана"}</p></div><span className="published-badge">Активен</span></div>
     <div className="launch-actions"><button className="flow-secondary" onClick={onAdd}><Plus />Добавить ещё</button><Link className="flow-primary" href={botId?`/workspace/builder?bot=${botId}`:"/workspace/builder"}>Настроить и посмотреть превью <ArrowRight /></Link></div>
   </div>;
