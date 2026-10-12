@@ -15,9 +15,9 @@ export default function LoginPage() {
     const query=new URLSearchParams(window.location.search);
     if(query.get("error")==="telegram_auth"){
       const messages:Record<string,string>={token_exchange:"Telegram отклонил подтверждение входа. Проверьте Client Secret и разрешённый адрес возврата в BotFather.",missing_token:"Telegram не передал токен пользователя.",account_sync:"Telegram подтвердил вход, но не удалось сохранить профиль пользователя.",identity_verification:"Не удалось проверить подпись авторизации Telegram.",unexpected:"Не удалось завершить вход. Повторите попытку."};
-      setError(messages[query.get("stage")??""]??"Не удалось завершить авторизацию Telegram. Повторите попытку.");
+      queueMicrotask(()=>setError(messages[query.get("stage")??""]??"Не удалось завершить авторизацию Telegram. Повторите попытку."));
     }else if(query.get("error")==="telegram_session"){
-      setError("Сессия Telegram истекла или была прервана. Попробуйте войти снова.");
+      queueMicrotask(()=>setError("Сессия Telegram истекла или была прервана. Попробуйте войти снова."));
     }
     const initData=window.Telegram?.WebApp?.initData;
     if(initData) {
