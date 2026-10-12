@@ -21,7 +21,7 @@ test("publishing preserves settings and snapshots published prices",()=>{
  const draft=src("app/api/bots/draft/route.ts");
  const publish=src("app/api/publish/route.ts");
  assert.match(draft,/settings:\s*\{\s*\.\.\.settings,/);
- assert.match(publish,/settings:\s*\{\s*\.\.\.currentSettings,/);
+ assert.match(publish,/const settings=\{\.\.\.currentSettings,home_buttons:buttons\}/);
  assert.match(publish,/publish_status:"published"/);
  assert.match(publish,/published_snapshot:snapshot/);
  assert.match(src("app/api/miniapp/route.ts"),/published_snapshot/);
