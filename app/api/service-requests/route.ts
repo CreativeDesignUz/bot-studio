@@ -1,6 +1,5 @@
-import { env } from "cloudflare:workers";
 import { getSupabaseServer } from "@/lib/supabase/server";
-import { getProjectBotToken } from "@/lib/channels/project-bot-token";
+import { resolveTelegramChannelToken } from "@/features/telegram/server/credentials";
 import { verifyTelegramInitData } from "@/lib/telegram/init-data";
 
 const fail=(error:string,status:number)=>Response.json({error},{status});
@@ -13,7 +12,7 @@ async function session(botId:string,initData:string){
   if(bot?.template_type!=="service"||bot.status!=="active"||bot.publish_status!=="published")return null;
   const {data:channel}=await db.from("bot_channels").select("external_account_id,status,secret_reference,configuration").eq("bot_id",botId).eq("channel","telegram").maybeSingle();
   if(!channel||channel.status!=="connected")return null;
-  const token=await getProjectBotToken(db,channel,{managerToken:env.TELEGRAM_MANAGER_TOKEN,encryptionKey:env.TELEGRAM_TOKEN_ENCRYPTION_KEY});
+  const token=await resolveTelegramChannelToken(db,channel);
   const user=await verifyTelegramInitData(initData,token);
   return user?{db,user}:null;
 }
