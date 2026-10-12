@@ -13,7 +13,7 @@ async function session(botId:string,initData:string){
   if(bot?.template_type!=="service"||bot.status!=="active"||bot.publish_status!=="published")return null;
   const {data:channel}=await db.from("bot_channels").select("external_account_id,status,secret_reference,configuration").eq("bot_id",botId).eq("channel","telegram").maybeSingle();
   if(!channel||channel.status!=="connected")return null;
-  const token=await getProjectBotToken(db,channel,{managerToken:env.TELEGRAM_MANAGER_TOKEN,encryptionKey:env.TELEGRAM_TOKEN_ENCRYPTION_KEY});
+  const token=await getProjectBotToken(db,channel,{managerToken:env.TELEGRAM_MANAGER_TOKEN,encryptionKey:env.TELEGRAM_TOKEN_ENCRYPTION_KEY,encryptionKeyV2:env.TELEGRAM_TOKEN_ENCRYPTION_KEY_V2});
   const user=await verifyTelegramInitData(initData,token);
   return user?{db,user}:null;
 }
