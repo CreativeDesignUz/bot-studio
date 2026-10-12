@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import MiniAppDesignStep from "./miniapp-design-step";
+import dynamic from "next/dynamic";
+const MiniAppDesignStep=dynamic(()=>import("@/features/web/components/onboarding-miniapp-design-step"));
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Bot, BookOpen, Check, CheckCircle2, Clock3, ExternalLink, ImagePlus, KeyRound, LayoutDashboard, LoaderCircle, Package, Rocket, Send, ShoppingBag, Sparkles, UtensilsCrossed } from "lucide-react";
 

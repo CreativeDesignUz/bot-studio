@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import {ImagePlus,LoaderCircle,Upload} from "lucide-react";
-import MiniAppLivePreview from "./miniapp-live-preview";
+import MiniAppLivePreview from "@/features/miniapp/components/live-preview";
 
 type Category={id:string;name:string};
 type Item={id:string;name:string};

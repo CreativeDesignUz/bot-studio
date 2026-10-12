@@ -2,7 +2,7 @@
 
 import {useEffect,useMemo,useState} from "react";
 import {ArrowRight,Check,LoaderCircle,Moon,Palette,Sparkles,Sun} from "lucide-react";
-import MiniAppLivePreview from "../workspace/miniapp-live-preview";
+import MiniAppLivePreview from "@/features/miniapp/components/live-preview";
 
 type Template="store"|"delivery"|"service"|"course";
 type Layout="food01"|"food02";

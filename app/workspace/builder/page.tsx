@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import FigmaTelegramPreview from "./figma-telegram-preview";
-import MiniAppLivePreview from "../miniapp-live-preview";
-import WorkspaceSidebar from "../workspace-sidebar";
+import FigmaTelegramPreview from "@/features/telegram/components/telegram-preview";
+import MiniAppLivePreview from "@/features/miniapp/components/live-preview";
+import WorkspaceSidebar from "@/features/web/components/workspace-sidebar";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Bot, Check, ChevronRight, Eye, GripVertical, LoaderCircle, Plus, Save, Send, Trash2, MessageCircle, Smartphone, ExternalLink, KeyRound, ShieldCheck, Unplug, Settings, Menu, X } from "lucide-react";
 

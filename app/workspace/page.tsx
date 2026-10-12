@@ -1,11 +1,12 @@
 "use client";
-import CatalogManager from "./catalog-manager";
-import OrderManager from "./order-manager";
-import DeliverySettings from "./delivery-settings";
-import MiniAppAppearance from "./miniapp-appearance";
-import ServiceRequestManager from "./service-request-manager";
-import WorkspaceSidebar from "./workspace-sidebar";
-import DemoNotifications from "./demo-notifications";
+import dynamic from "next/dynamic";
+const CatalogManager=dynamic(()=>import("@/features/web/components/catalog-manager"));
+const OrderManager=dynamic(()=>import("@/features/web/components/order-manager"));
+const DeliverySettings=dynamic(()=>import("@/features/web/components/delivery-settings"));
+const MiniAppAppearance=dynamic(()=>import("@/features/web/components/miniapp-appearance"));
+const ServiceRequestManager=dynamic(()=>import("@/features/web/components/service-request-manager"));
+import WorkspaceSidebar from "@/features/web/components/workspace-sidebar";
+const DemoNotifications=dynamic(()=>import("@/features/web/components/demo-notifications"));
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";

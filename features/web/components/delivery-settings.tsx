@@ -1,6 +1,6 @@
 "use client";
 import {useEffect,useState} from "react";
-import DeliveryLocationPicker,{type Point} from "../miniapp/delivery-location-picker";
+import DeliveryLocationPicker,{type Point} from "@/features/miniapp/components/delivery-location-picker";
 
 type Zone={enabled:boolean;centerLat:number;centerLng:number;radiusKm:number;feeMinor:number};
 const initial:Zone={enabled:false,centerLat:41.2995,centerLng:69.2401,radiusKm:5,feeMinor:0};

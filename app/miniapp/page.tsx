@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Check, Minus, Plus, Search, ShoppingBag, Store, Truck, UserRound, X } from "lucide-react";
-import ServiceMiniApp from "./service-miniapp";
-import DeliveryLocationPicker, {type Point} from "./delivery-location-picker";
+import dynamic from "next/dynamic";
+const ServiceMiniApp=dynamic(()=>import("@/features/miniapp/components/service-miniapp"));
+import type {Point} from "@/features/miniapp/components/delivery-location-picker";
+const DeliveryLocationPicker=dynamic(()=>import("@/features/miniapp/components/delivery-location-picker"));
 
 type Item = { id: string; name: string; description: string; image_url: string | null; price_minor: number | null; currency: string; category_id?:string|null;ingredients?:string[];allergens?:string[];preparation_minutes?:number|null };
 type Shop = { bot: { id: string; name: string; description: string; logoUrl: string | null; color: string; template: string }; items: Item[]; categories?:{id:string;name:string;position:number}[]; delivery?:DeliveryZone|null; design?:{layout?:"food01"|"food02";color?:string;dark?:boolean;themeMode?:"light"|"dark"|"customer";defaultTheme?:"system"|"light"|"dark";banner?:{enabled:boolean;title:string;description:string;imageUrl:string;buttonEnabled:boolean;buttonText:string;linkType:"category"|"product"|"page"|"external";target:string}}|null };
