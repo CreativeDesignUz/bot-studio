@@ -4,10 +4,18 @@
 
 ## Открыть проект
 
-- [Рабочий кабинет Bot Studio](https://bot-studio-uz.wittykrill2.chatgpt.site/workspace)
+- [Cloudflare Staging — кабинет Bot Studio](https://bot-studio-staging.slavnauz.workers.dev/workspace)
 - [Telegram-бот BotStudioManagerBot](https://t.me/BotStudioManagerBot)
 
-GitHub хранит исходный код и предоставляет короткую страницу входа через GitHub Pages. Само full-stack приложение работает на серверном хостинге, поскольку ему нужны API, Supabase и Telegram webhook — GitHub Pages поддерживает только статические страницы.
+GitHub хранит исходный код и запускает обязательные проверки. Full-stack приложение работает в Cloudflare Workers, поскольку ему нужны API, Supabase и Telegram webhook. GitHub Pages может быть только статической точкой входа.
+
+## Правила для ChatGPT/Codex
+
+- Главный файл инструкций: [`AGENTS.md`](AGENTS.md).
+- Архитектура и границы окружений: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+- Полная локальная проверка: `npm run check`.
+- Pull Request автоматически проверяет TypeScript, ESLint, тесты, production build и Cloudflare build contract.
+- Staging deploy запускается вручную из GitHub Actions только для проверенного `main`; Production не публикуется автоматически.
 
 ## Текущий MVP
 
@@ -20,7 +28,7 @@ GitHub хранит исходный код и предоставляет кор
 
 Инструкция по базе и переменным окружения: [docs/supabase-setup.md](docs/supabase-setup.md).
 
-A clean full-stack starter running on [vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and Drizzle support.
+Full-stack приложение работает на [vinext](https://github.com/cloudflare/vinext) и Cloudflare Workers. Рабочие данные Bot Studio находятся в Supabase; D1/R2 из исходного шаблона используются только для локальной совместимости и исключаются из итоговой Cloudflare-сборки.
 
 ## Prerequisites
 

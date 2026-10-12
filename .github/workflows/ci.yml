@@ -2,12 +2,17 @@ name: Bot Studio CI
 
 on:
   pull_request:
-    branches: [main]
   push:
     branches: [main]
   schedule:
     - cron: '15 1 * * *'
   workflow_dispatch:
+    inputs:
+      deploy_staging:
+        description: 'Deploy the checked main commit to Cloudflare Staging'
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -35,7 +40,7 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: TypeScript
-        run: npx tsc --noEmit --incremental false
+        run: npm run typecheck
 
       - name: ESLint
         run: npm run lint
@@ -45,6 +50,12 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+      - name: Verify Cloudflare build contract
+        run: npm run verify:cloudflare
+
+      - name: Wrangler strict dry run
+        run: npx wrangler deploy --config dist/server/wrangler.json --name bot-studio-ci-check --dry-run --strict
 
       - name: Dependency vulnerability audit
         run: npm audit --audit-level=high --omit=dev
@@ -72,6 +83,7 @@ jobs:
 
   staging-live-smoke:
     name: Live Staging smoke (read-only)
+    if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -86,10 +98,13 @@ jobs:
 
   deploy-staging:
     name: Deploy Cloudflare staging
-    needs: [quality, qa-bot, staging-live-smoke]
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: [quality, qa-bot]
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.deploy_staging == true
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    environment:
+      name: staging
+      url: https://bot-studio-staging.slavnauz.workers.dev
     permissions:
       contents: read
     env:
@@ -117,7 +132,7 @@ jobs:
         run: npm run build
 
       - name: Deploy only staging Worker
-        run: npx wrangler deploy --config dist/server/wrangler.json --name bot-studio-staging --keep-vars
+        run: npx wrangler deploy --config dist/server/wrangler.json --name bot-studio-staging --strict --keep-vars --message "GitHub $GITHUB_SHA"
 
       - name: Verify privileged database on deployed Staging
         run: EXPECT_PRIVILEGED=1 node scripts/staging-smoke.mjs

@@ -11,20 +11,90 @@ test("all seller tools and APIs stay connected",()=>{
  for(const p of ["app/workspace/catalog-manager.tsx","app/workspace/order-manager.tsx","app/workspace/campaign-manager.tsx","app/workspace/miniapp-appearance.tsx","app/api/catalog/route.ts","app/api/campaigns/route.ts","app/api/orders/route.ts","app/api/miniapp/design/route.ts"])assert.ok(has(p),p);
  const page=src("app/workspace/page.tsx");
  assert.match(page,/<CatalogManager/);assert.match(page,/<OrderManager/);assert.match(page,/<CampaignManager/);
+ assert.match(page,/onClick=\{addPrimaryItem\}/);
+ assert.match(page,/startCreating=\{catalogCreateRequest>0\}/);
 });
 test("product image upload checks ownership, file type and size",()=>{
  const api=src("app/api/catalog/image-upload/route.ts");
  assert.match(api,/owner_id/);assert.match(api,/photo\.size>3\*1024\*1024/);assert.match(api,/new Uint8Array/);assert.match(api,/storage\.from\("bot-assets"\)/);
  assert.match(src("app/workspace/catalog-manager.tsx"),/\/api\/catalog\/image-upload/);
 });
+test("catalog editor remains usable on small screens and includes direct image upload",()=>{
+ const catalog=src("app/workspace/catalog-manager.tsx");
+ assert.match(catalog,/max-h-\[calc\(100dvh-1\.5rem\)\]/);
+ assert.match(catalog,/overflow-y-auto/);
+ assert.match(catalog,/accept="image\/jpeg,image\/png,image\/webp"/);
+ assert.match(catalog,/Фото блюда/);
+});
+test("workspace exposes real bot and Mini App settings instead of decorative controls",()=>{
+ const workspace=src("app/workspace/page.tsx");
+ const builder=src("app/workspace/builder/page.tsx");
+ assert.ok(workspace.indexOf('href="/onboarding"')<workspace.indexOf('aria-label="Выбрать рабочего бота"'));
+ assert.match(workspace,/templateType=\{bot\.type\}/);
+ assert.match(builder,/scrollToSection/);
+ assert.match(builder,/section=miniapp_appearance/);
+ assert.doesNotMatch(builder,/\["Основное","Меню","Кнопки","Доставка","Оплата","Уведомления"\]/);
+});
+test("critical bot settings links bypass broken Vinext client navigation",()=>{
+ const workspace=src("app/workspace/page.tsx");
+ const onboarding=src("app/onboarding/page.tsx");
+ const builder=src("app/workspace/builder/page.tsx");
+ assert.match(workspace,/<a href=\{`\/workspace\/builder\?bot=\$\{bot\.id\}`\}/);
+ assert.doesNotMatch(workspace,/<Link href=\{`\/workspace\/builder\?bot=/);
+ assert.match(onboarding,/<a className="flow-primary" href=\{botId\?`\/workspace\/builder\?bot=/);
+ assert.match(builder,/<a href=\{`\/workspace\?bot=\$\{encodeURIComponent\(botId\)\}&section=miniapp_appearance`\}/);
+});
+test("seller can preview current Mini App draft without exposing it publicly",()=>{
+ const api=src("app/api/miniapp/route.ts");
+ const builder=src("app/workspace/builder/page.tsx");
+ assert.match(api,/searchParams\.get\("preview"\)===\s*"1"/);
+ assert.match(api,/resolveAppUser/);
+ assert.match(api,/\.eq\("owner_id",identity\.user\.id\)/);
+ assert.match(builder,/preview=1/);
+ assert.match(src("app/miniapp/page.tsx"),/preview\?"&preview=1"/);
+});
+test("Mini App appearance supports every MVP business template and light-dark modes",()=>{
+ const designApi=src("app/api/miniapp/design/route.ts");
+ const appearance=src("app/workspace/miniapp-appearance.tsx");
+ const buyer=src("app/miniapp/page.tsx");
+ assert.doesNotMatch(designApi,/Food-темы доступны только/);
+ assert.match(appearance,/templateType:TemplateType/);
+ assert.match(appearance,/Светлая тема/);
+ assert.match(appearance,/Тёмная тема/);
+ assert.match(buyer,/const dark=themeMode===/);
+});
+test("catalog accepts standard UUID bot and item identifiers",()=>{
+ const catalog=src("app/api/catalog/route.ts");
+ assert.match(catalog,/\(\?:\[0-9a-f\]\{4\}-\)\{3\}/);
+});
 test("publishing preserves settings and snapshots published prices",()=>{
  const draft=src("app/api/bots/draft/route.ts");
  const publish=src("app/api/publish/route.ts");
  assert.match(draft,/settings:\s*\{\s*\.\.\.settings,/);
- assert.match(publish,/const settings=\{\.\.\.currentSettings,home_buttons:buttons\}/);
+ assert.match(publish,/const settings=\{\.\.\.currentSettings,home_buttons:buttons,/);
  assert.match(publish,/publish_status:"published"/);
  assert.match(publish,/published_snapshot:snapshot/);
  assert.match(src("app/api/miniapp/route.ts"),/published_snapshot/);
+});
+test("onboarding never claims a draft item is already published",()=>{
+ const onboarding=src("app/onboarding/page.tsx");
+ assert.doesNotMatch(onboarding,/\{itemName\} опубликован/);
+ assert.match(onboarding,/сохранён в каталоге/);
+});
+test("BotFather connection and Telegram runtime remain wired securely",()=>{
+ const route=src("app/api/channels/telegram/token/route.ts");
+ const runtime=src("app/api/channels/telegram/project-runtime/route.ts");
+ const builder=src("app/workspace/builder/page.tsx");
+ assert.match(route,/getTelegramBotIdentity\(token\)/);
+ assert.match(route,/encryptTelegramToken\(token, encryptionKey\)/);
+ assert.match(route,/stage_direct_telegram_credential/);
+ assert.match(route,/complete_direct_telegram_connection/);
+ assert.match(route,/\.eq\("owner_id", user\.id\)/);
+ assert.match(runtime,/claim_telegram_update/);
+ assert.match(runtime,/callback_query/);
+ assert.match(builder,/action:"inspect"/);
+ assert.match(builder,/action:"connect"/);
+ assert.match(builder,/Опубликовать и открыть Mini App/);
 });
 test("buyer Mini App uses Telegram-verified checkout with coordinates",()=>{
  const buyer=src("app/miniapp/page.tsx");

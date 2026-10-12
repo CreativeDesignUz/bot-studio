@@ -1,13 +1,13 @@
 # Bot Studio — карта системы
-Последняя сверка: 2026-10-12. Владельцы изменений: разработка Bot Studio.
+Последняя сверка: 2026-10-13. Владельцы изменений: разработка Bot Studio.
 
 ## Окружения (НЕ путать)
 | Назначение | Supabase проект | Project ref | Cloudflare Worker |
 | --- | --- | --- | --- |
-| Production | **Bot Studio — Production** | `xpylzfdwudtaceysfcwd` | `bot-studio` (маршрут и привязки требуют проверки) |
+| Production | **Bot Studio — Production** | `xpylzfdwudtaceysfcwd` | `bot-studio` (не изменять без отдельного разрешения) |
 | Тестирование | **Bot Studio — Staging** | `eslbcwopolrxoptcxqhp` | `bot-studio-staging`, `https://bot-studio-staging.slavnauz.workers.dev` |
 
-Это **согласованная карта назначения окружений**, а не доказательство действующего подключения Cloudflare → конкретный Supabase. Адрес Supabase хранится в Cloudflare Secret `SUPABASE_URL` и скрыт при чтении через API. Проверить соответствие следует отдельной диагностикой / вручную через настройки окружений перед публикацией. Нельзя просто переносить production-ключ в staging и наоборот.
+Staging runtime 13 октября 2026 года подтвердил project ref `eslbcwopolrxoptcxqhp` через безопасную публичную диагностику и доступность привилегированного соединения без раскрытия ключа. Адрес Supabase хранится в Cloudflare Secret `SUPABASE_URL`. Нельзя переносить production-ключ в staging и наоборот.
 
 На 2026-10-12 оба Supabase проекта отвечали на read-only SQL-запросы. В Production: 4 бота, 27 записей `app_users`, 2 `catalog_items`, 0 заказов. В Staging: 10 ботов, 74 записи `app_users`, 19 `catalog_items`, 4 `customers`, 0 заказов. Числа — моментальный снимок, не норматив.
 
@@ -51,9 +51,13 @@
 Cloudflare Secret нельзя восстановить в исходном виде через dashboard после создания. Имена привязок — не подтверждение, что они валидны. При необходимости сравнивать ref проекта через доверенный защищённый способ и не логировать секреты.
 
 ## Выкладка
-Изменения → feature branch и PR → GitHub CI → Cloudflare Staging + Supabase Staging → интеграционный заказ и регрессия → отдельно согласованный Production deploy.
+Изменения → рабочая ветка и PR → обязательный GitHub CI → Cloudflare Preview → ручной Cloudflare Staging + Supabase Staging → интеграционная регрессия → отдельно согласованный Production deploy.
 
-**На момент написания:** PR #12 не слит в main. Cloudflare staging deploy из CI блокировался отсутствием GitHub Secrets `CLOUDFLARE_ACCOUNT_ID` и `CLOUDFLARE_API_TOKEN`; production не обновлён. Некоторые миграции checkout ещё не применены к реальным базам.
+- CI запускается для каждого Pull Request независимо от целевой ветки; отдельный push-run выполняется только для `main`, чтобы не дублировать проверки.
+- Ручной workflow без флага `deploy_staging` выполняет только проверки и ничего не публикует.
+- Staging deploy разрешён только из `main`, использует Worker `bot-studio-staging`, Wrangler strict mode и сохранение remote secrets.
+- Production Worker `bot-studio` не является целью GitHub Actions.
+- Текущая рабочая интеграция ведётся в PR #14; `main` и Production не обновлены.
 
 ## Работа с ошибками
 См. `docs/ERROR_LOG.md` (открытые проблемы) и `docs/OBSERVABILITY.md` (структура runtime-логов и правила). Каждая ошибка должна иметь ID, окружение, шаги воспроизведения, критичность, владельца и статус. Не хранить персональные данные и токены в этих файлах.
