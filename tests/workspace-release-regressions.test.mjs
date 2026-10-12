@@ -42,6 +42,7 @@ test("seller can preview current Mini App draft without exposing it publicly",()
  assert.match(api,/resolveAppUser/);
  assert.match(api,/\.eq\("owner_id",identity\.user\.id\)/);
  assert.match(builder,/preview=1/);
+ assert.match(src("app/miniapp/page.tsx"),/preview\?"&preview=1"/);
 });
 test("Mini App appearance supports every MVP business template and light-dark modes",()=>{
  const designApi=src("app/api/miniapp/design/route.ts");

@@ -41,11 +41,13 @@ export default function MiniAppPage() {
   useEffect(() => {
     const telegram = (window as typeof window & { Telegram?: { WebApp?: { ready?: () => void; expand?: () => void; initData?: string; initDataUnsafe?: { user?: { first_name?: string } } } } }).Telegram?.WebApp;
     telegram?.ready?.(); telegram?.expand?.();
-    const botId = new URLSearchParams(window.location.search).get("bot");
+    const params=new URLSearchParams(window.location.search);
+    const botId = params.get("bot");
+    const preview=params.get("preview")==="1";
     if (!botId) { Promise.resolve().then(() => { setError("Не указан магазин"); setLoading(false); }); return; }
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 12000);
-    fetch("/api/miniapp?bot=" + encodeURIComponent(botId), { cache: "no-store", signal: controller.signal })
+    fetch("/api/miniapp?bot=" + encodeURIComponent(botId)+(preview?"&preview=1":""), { cache: "no-store", signal: controller.signal })
       .then(async response => { const body = await response.json() as Shop & { error?: string }; if (!response.ok) throw new Error(body.error ?? "Не удалось загрузить магазин"); return body as Shop; })
       .then(data => { if (!controller.signal.aborted) { setShop(data); setError(""); } })
       .catch(e => {
