@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { resolveAppUser, withSessionCookie } from "@/lib/auth/app-user";
 import { getTelegramBotIdentity, telegramCall } from "@/lib/channels/telegram-api";
-import { getProjectBotToken } from "@/lib/channels/project-bot-token";
+import { resolveTelegramChannelToken } from "@/features/telegram/server/credentials";
 import { resolvePublicAppOrigin } from "@/lib/http/public-origin";
 import { decryptTelegramTokenFromStorage, encryptTelegramTokenForStorage, looksLikeTelegramBotToken } from "@/lib/security/telegram-token";
 
@@ -114,7 +114,7 @@ export async function POST(request: Request) {
     .eq("bot_id", payload.botId).eq("channel", "telegram").eq("status", "connected").maybeSingle();
   if (!channel) return withSessionCookie({ disconnected: true }, 200, setCookie);
   try {
-    const token = await getProjectBotToken(supabase, channel, { managerToken: env.TELEGRAM_MANAGER_TOKEN, encryptionKey: env.TELEGRAM_TOKEN_ENCRYPTION_KEY, encryptionKeyV2: env.TELEGRAM_TOKEN_ENCRYPTION_KEY_V2 });
+    const token = await resolveTelegramChannelToken(supabase, channel);
     await telegramCall(token, "deleteWebhook", { drop_pending_updates: false });
     const { error } = await supabase.rpc("disconnect_telegram_channel", { p_bot_id: payload.botId, p_owner_id: user.id });
     if (error) throw error;
