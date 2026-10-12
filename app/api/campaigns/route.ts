@@ -39,6 +39,7 @@ export async function PATCH(request:Request){
  let body:{botId?:string;id?:string;isActive?:boolean};
  try{body=await request.json() as typeof body;}catch{return fail("Некорректные данные",400)}
  if(!uuid.test(body.botId??"")||!uuid.test(body.id??"")||typeof body.isActive!=="boolean")return fail("Некорректная акция",400);
+ if(body.isActive)return fail("Публикация акций недоступна до серверной интеграции скидок с оформлением заказов",409);
  const auth=await owner(request,body.botId!);
  if("response" in auth)return auth.response;
  const {data,error}=await auth.identity.supabase.from("discount_campaigns").update({is_active:body.isActive}).eq("bot_id",body.botId!).eq("id",body.id!).select("id,is_active").maybeSingle();
