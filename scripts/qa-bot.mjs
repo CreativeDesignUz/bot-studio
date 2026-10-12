@@ -30,7 +30,7 @@ const extra=[
  {name:"Карта доставки в заказе",codeFilesPresent:source("app/workspace/order-manager.tsx").includes("openstreetmap.org/export/embed.html"),missing:[],liveE2E:"NOT_RUN"},
  {name:"Детали заказа: отдельная страница",codeFilesPresent:has("app/workspace/orders/[orderId]/page.tsx"),missing:[],liveE2E:"NOT_RUN"},
  {name:"Публикация: каталог и дизайн фиксируются в snapshot",codeFilesPresent:source("app/api/publish/route.ts").includes("published_snapshot:snapshot"),missing:[],liveE2E:"NOT_RUN"},
- {name:"Активные акции применяются на сервере при оформлении заказа",codeFilesPresent:false,missing:[],liveE2E:"NOT_RUN"},
+ {name:"Активные акции применяются на сервере при оформлении заказа",codeFilesPresent:source("app/api/checkout/route.ts").includes("p_promo_code")&&source("supabase/migrations/202610120002_atomic_campaign_checkout.sql").includes("discount_amount")&&source("app/workspace/campaign-manager.tsx").includes('toggle(row'),missing:[],liveE2E:"NOT_RUN_MIGRATION_REQUIRED"},
  {name:"Фото товара: поддержка HTTPS ссылки",codeFilesPresent:source("app/api/catalog/route.ts").includes("imageUrl"),missing:[],liveE2E:"NOT_RUN"}
 ];
 const all=[...results,...extra];
