@@ -38,3 +38,13 @@ test("privileged checkout never silently uses a guest session", () => {
 test.skip("E2E BLOCKER: Telegram project bot must open buyer storefront, not /workspace", () => {
   assert.doesNotMatch(runtime, /new URL\(`\/workspace\?/);
 });
+
+test("SQL migration is not truncated or accidentally duplicated", () => {
+  assert.equal((sql.match(/create or replace function public\.create_telegram_order\(/gi) || []).length, 1);
+  assert.equal((sql.match(/revoke all on function public\.create_telegram_order\(/gi) || []).length, 1);
+  assert.equal((sql.match(/grant execute on function public\.create_telegram_order\(/gi) || []).length, 1);
+  assert.match(sql, /\[0-9a-f\]\{12\}\$'/);
+  assert.match(sql, /checkout_fingerprint/);
+  assert.match(sql, /IDEMPOTENCY_CONFLICT/);
+  assert.match(sql, /on conflict \(bot_id, customer_external_id, idempotency_key\)/i);
+});
