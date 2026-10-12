@@ -49,6 +49,27 @@ jobs:
       - name: Dependency vulnerability audit
         run: npm audit --audit-level=high --omit=dev
 
+  qa-bot:
+    name: QA Bot — release readiness (no deploy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.13.1'
+      - name: Audit all requested flows and record blockers
+        run: node scripts/qa-bot.mjs
+      - name: Upload QA Bot report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-bot-readiness
+          path: qa-results/
+          if-no-files-found: error
+
   deploy-staging:
     name: Deploy Cloudflare staging
     needs: quality
