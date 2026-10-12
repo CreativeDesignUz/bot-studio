@@ -39,9 +39,13 @@ export async function PATCH(request:Request){
  let body:{botId?:string;id?:string;isActive?:boolean};
  try{body=await request.json() as typeof body;}catch{return fail("Некорректные данные",400)}
  if(!uuid.test(body.botId??"")||!uuid.test(body.id??"")||typeof body.isActive!=="boolean")return fail("Некорректная акция",400);
- if(body.isActive)return fail("Публикация акций недоступна до серверной интеграции скидок с оформлением заказов",409);
- const auth=await owner(request,body.botId!);
+ const auth=await owner(request,body.botId!,request.headers.get("x-telegram-init-data")??"");
  if("response" in auth)return auth.response;
+ if(body.isActive){
+  const {data:campaign,error:readError}=await auth.identity.supabase.from("discount_campaigns").select("id,code,discount_type,discount_value,starts_at,ends_at,usage_limit,usage_count").eq("bot_id",body.botId!).eq("id",body.id!).maybeSingle();
+  if(readError||!campaign)return fail("Акция не найдена",404);
+  if(!campaign.code||!Number.isSafeInteger(campaign.discount_value)||campaign.discount_value<=0&&campaign.discount_type!=="free_delivery"||campaign.discount_type==="percent"&&campaign.discount_value>100||campaign.usage_limit!=null&&campaign.usage_count>=campaign.usage_limit||campaign.ends_at&&Date.parse(campaign.ends_at)<Date.now())return fail("Акция не соответствует условиям публикации",409);
+ }
  const {data,error}=await auth.identity.supabase.from("discount_campaigns").update({is_active:body.isActive}).eq("bot_id",body.botId!).eq("id",body.id!).select("id,is_active").maybeSingle();
  if(error||!data)return fail("Не удалось изменить акцию",404);
  return withSessionCookie({campaign:data},200,auth.identity.setCookie);
