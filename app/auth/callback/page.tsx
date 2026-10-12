@@ -8,7 +8,7 @@ export default function AuthCallback(){
       try{
         const cfg=await fetch("/api/auth/public-config",{cache:"no-store"}).then(r=>r.json()) as {url?:string;key?:string};
         if(!cfg.url||!cfg.key)throw new Error("Вход через Google не настроен");
-        const client=createClient(cfg.url,cfg.key,{auth:{detectSessionInUrl:false,persistSession:true,flowType:"pkce"}});
+        const client=createClient(cfg.url,cfg.key,{auth:{detectSessionInUrl:false,persistSession:true,flowType:"pkce",storage:window.sessionStorage}});
         const params=new URLSearchParams(location.search);
         if(params.has("error"))throw new Error("Google отклонил вход: "+(params.get("error_description")??params.get("error"))?.slice(0,180));
         let token="";
@@ -24,7 +24,16 @@ export default function AuthCallback(){
         if(!token)throw new Error("Google не вернул сессию");
         const response=await fetch("/api/auth/oauth-session",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({token})});
         if(!response.ok)throw new Error("Ошибка серверной сессии Google (HTTP "+response.status+")");
-        await client.auth.signOut({scope:"local"});
+        // The access token now lives in an HttpOnly application cookie. Do not
+        // call Supabase signOut here: even a local sign-out can revoke the very
+        // token the server has just verified and stored.
+        client.auth.stopAutoRefresh();
+        const projectRef=new URL(cfg.url).hostname.split(".")[0];
+        const storagePrefix=`sb-${projectRef}-auth-token`;
+        for(let index=sessionStorage.length-1;index>=0;index--){
+          const key=sessionStorage.key(index);
+          if(key?.startsWith(storagePrefix))sessionStorage.removeItem(key);
+        }
         window.location.replace("/workspace");
       }catch(e){setError(e instanceof Error?e.message:"Ошибка авторизации");}
     };

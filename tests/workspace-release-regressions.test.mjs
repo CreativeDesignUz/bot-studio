@@ -11,6 +11,8 @@ test("all seller tools and APIs stay connected",()=>{
  for(const p of ["app/workspace/catalog-manager.tsx","app/workspace/order-manager.tsx","app/workspace/campaign-manager.tsx","app/workspace/miniapp-appearance.tsx","app/api/catalog/route.ts","app/api/campaigns/route.ts","app/api/orders/route.ts","app/api/miniapp/design/route.ts"])assert.ok(has(p),p);
  const page=src("app/workspace/page.tsx");
  assert.match(page,/<CatalogManager/);assert.match(page,/<OrderManager/);assert.match(page,/<CampaignManager/);
+ assert.match(page,/onClick=\{addPrimaryItem\}/);
+ assert.match(page,/startCreating=\{catalogCreateRequest>0\}/);
 });
 test("product image upload checks ownership, file type and size",()=>{
  const api=src("app/api/catalog/image-upload/route.ts");
@@ -21,10 +23,25 @@ test("publishing preserves settings and snapshots published prices",()=>{
  const draft=src("app/api/bots/draft/route.ts");
  const publish=src("app/api/publish/route.ts");
  assert.match(draft,/settings:\s*\{\s*\.\.\.settings,/);
- assert.match(publish,/const settings=\{\.\.\.currentSettings,home_buttons:buttons\}/);
+ assert.match(publish,/const settings=\{\.\.\.currentSettings,home_buttons:buttons,/);
  assert.match(publish,/publish_status:"published"/);
  assert.match(publish,/published_snapshot:snapshot/);
  assert.match(src("app/api/miniapp/route.ts"),/published_snapshot/);
+});
+test("BotFather connection and Telegram runtime remain wired securely",()=>{
+ const route=src("app/api/channels/telegram/token/route.ts");
+ const runtime=src("app/api/channels/telegram/project-runtime/route.ts");
+ const builder=src("app/workspace/builder/page.tsx");
+ assert.match(route,/getTelegramBotIdentity\(token\)/);
+ assert.match(route,/encryptTelegramToken\(token, encryptionKey\)/);
+ assert.match(route,/stage_direct_telegram_credential/);
+ assert.match(route,/complete_direct_telegram_connection/);
+ assert.match(route,/\.eq\("owner_id", user\.id\)/);
+ assert.match(runtime,/claim_telegram_update/);
+ assert.match(runtime,/callback_query/);
+ assert.match(builder,/action:"inspect"/);
+ assert.match(builder,/action:"connect"/);
+ assert.match(builder,/Опубликовать и открыть Mini App/);
 });
 test("buyer Mini App uses Telegram-verified checkout with coordinates",()=>{
  const buyer=src("app/miniapp/page.tsx");

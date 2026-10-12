@@ -33,7 +33,7 @@ export default function LoginPage() {
       const response=await fetch("/api/auth/public-config",{cache:"no-store"});
       const config=await response.json() as {url?:string;key?:string};
       if(!response.ok||!config.url||!config.key)throw new Error("Google OAuth не настроен");
-      const client=createClient(config.url,config.key,{auth:{flowType:"pkce",persistSession:true,detectSessionInUrl:false}});
+      const client=createClient(config.url,config.key,{auth:{flowType:"pkce",persistSession:true,detectSessionInUrl:false,storage:window.sessionStorage}});
       const {data,error:oauthError}=await client.auth.signInWithOAuth({provider:"google",options:{redirectTo:location.origin+"/auth/callback",skipBrowserRedirect:true}});
       if(oauthError||!data.url)throw new Error("Не удалось начать вход с Google");
       location.assign(data.url);

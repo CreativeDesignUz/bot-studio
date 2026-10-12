@@ -10,7 +10,7 @@ type ApiResult = { items?: Item[]; categories?:Category[]; item?: Item; created?
 const formatMoney = (minor: number, currency: string) => `${formatStoredPrice(minor, currency === "USD" ? "USD" : "UZS")} ${currency === "USD" ? "$" : "сум"}`;
 const telegramData = () => (window as typeof window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData ?? "";
 
-export default function CatalogManager({ botId, type }: { botId: string; type: "service" | "store" | "delivery" }) {
+export default function CatalogManager({ botId, type, startCreating = false }: { botId: string; type: "service" | "store" | "delivery"; startCreating?: boolean }) {
   const noun = type === "service" ? "услугу" : type === "delivery" ? "блюдо" : "товар";
   const [items, setItems] = useState<Item[]>([]);
   const [categories,setCategories]=useState<Category[]>([]);
@@ -28,7 +28,7 @@ export default function CatalogManager({ botId, type }: { botId: string; type: "
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
-  const [editing, setEditing] = useState<Item | null | "new">(null);
+  const [editing, setEditing] = useState<Item | null | "new">(startCreating ? "new" : null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
