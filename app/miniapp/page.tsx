@@ -212,7 +212,7 @@ export default function MiniAppPage() {
           {!shop.items.length ? <div className="rounded-2xl bg-white p-9 text-center text-sm text-[#667085]">В каталоге пока нет товаров</div> :
           <div className="grid grid-cols-2 gap-3">{shop.items.filter(item=>category==="all"||item.category_id===category).map(item => <article key={item.id} className="overflow-hidden rounded-[22px] border border-[#edf0f4] bg-white shadow-sm">
             {item.image_url ? <img src={item.image_url} alt={item.name} loading="lazy" decoding="async" className="aspect-[4/3] w-full object-cover"/> : <div className="grid aspect-[4/3] place-items-center bg-[#edf0f6]"><ShoppingBag size={29} color="#98a2b3"/></div>}
-            <div className="p-3"><h3 className="line-clamp-2 min-h-10 text-sm font-semibold">{item.name}</h3><p className="mb-3 line-clamp-2 min-h-8 text-xs text-[#98a2b3]">{item.description}</p>
+            <div className="p-3"><button type="button" onClick={()=>setDetailId(item.id)} className="line-clamp-2 min-h-10 w-full text-left text-sm font-semibold" aria-label={"Подробнее о товаре "+item.name}>{item.name}</button><p className="mb-3 line-clamp-2 min-h-8 text-xs text-[#98a2b3]">{item.description}</p>
               <div className="flex items-center justify-between gap-1"><span className="text-sm font-bold">{item.price_minor == null ? "По запросу" : money(Number(item.price_minor), item.currency)}</span></div>
               {item.price_minor != null && <div className="mt-3 flex justify-end">{cart[item.id] ? <div className="flex items-center gap-3"><button className="grid size-9 place-items-center rounded-full bg-[#f2f4f7]" onClick={()=>adjust(item.id,-1)} aria-label="Убрать"><Minus size={16}/></button><b>{cart[item.id]}</b><button className="grid size-9 place-items-center rounded-full text-white" style={{backgroundColor:color}} onClick={()=>adjust(item.id,1)} aria-label="Добавить"><Plus size={16}/></button></div> :
                 <button className="flex h-9 items-center gap-1 rounded-full px-4 text-sm font-semibold text-white" style={{backgroundColor:color}} onClick={()=>adjust(item.id,1)}><Plus size={16}/> Добавить</button>}</div>}
@@ -221,9 +221,9 @@ export default function MiniAppPage() {
       
       </>)}
 
-      {isFood&&detailItem&&<div className="fixed inset-0 z-50 grid items-end bg-black/60 p-0 sm:place-items-center sm:p-4" role="presentation" onClick={()=>setDetailId(null)}>
-        <section role="dialog" aria-modal="true" aria-label={"Описание блюда "+detailItem.name} className="max-h-[88dvh] w-full max-w-[520px] overflow-y-auto rounded-t-3xl p-5 shadow-2xl sm:rounded-3xl" style={{background:paper,color:ink}} onClick={e=>e.stopPropagation()}>
-          <div className="flex items-center justify-between"><h2 className="text-lg font-bold">О блюде</h2><button type="button" aria-label="Закрыть описание" onClick={()=>setDetailId(null)}><X/></button></div>
+      {detailItem&&<div className="fixed inset-0 z-50 grid items-end bg-black/60 p-0 sm:place-items-center sm:p-4" role="presentation" onClick={()=>setDetailId(null)}>
+        <section role="dialog" aria-modal="true" aria-label={"Детали товара "+detailItem.name} className="max-h-[88dvh] w-full max-w-[520px] overflow-y-auto rounded-t-3xl p-5 shadow-2xl sm:rounded-3xl" style={{background:paper,color:ink}} onClick={e=>e.stopPropagation()}>
+          <div className="flex items-center justify-between"><h2 className="text-lg font-bold">{isFood?"О блюде":"О товаре"}</h2><button type="button" aria-label="Закрыть описание" onClick={()=>setDetailId(null)}><X/></button></div>
           {detailItem.image_url&&<img src={detailItem.image_url} alt={detailItem.name} className="mt-4 aspect-[16/9] w-full rounded-2xl object-cover"/>}
           <h3 className="mt-4 text-xl font-bold">{detailItem.name}</h3>
           <p className="mt-2 text-sm" style={{color:hint}}>{detailItem.description}</p>
