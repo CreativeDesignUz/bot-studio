@@ -34,10 +34,11 @@ export async function resolveAppUser(request: Request, initData = "", _allowGues
   if (authError || !identity.user || !identity.user.email_confirmed_at) {
     return { error: "Invalid or expired session", status: 401 as const };
   }
-  let { data, error } = await supabase.from("app_users")
+  const { data: existing, error } = await supabase.from("app_users")
     .select("id,telegram_id,first_name")
     .eq("auth_user_id", identity.user.id).maybeSingle();
   if (error) throw error;
+  let data = existing;
   if (!data) {
     const created = await supabase.from("app_users").upsert({
       auth_user_id: identity.user.id,
