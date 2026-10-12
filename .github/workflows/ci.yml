@@ -40,8 +40,8 @@ jobs:
       - name: Security and regression QA tests
         run: npm test
 
-      - name: Dependency vulnerability audit
-        run: npm audit --audit-level=high --omit=dev
-
       - name: Production build
         run: npm run build
+
+      - name: Dependency vulnerability audit
+        run: npm audit --audit-level=high --omit=dev
