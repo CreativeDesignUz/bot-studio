@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { env } from "cloudflare:workers";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { verifyTelegramInitData } from "@/lib/telegram/init-data";
@@ -26,6 +27,21 @@ export async function resolveAppUser(request: Request, initData = "", _allowGues
     }, { onConflict: "telegram_id" }).select("id,telegram_id,first_name").single();
     if (error) throw error;
     return { user: data, supabase, setCookie: null };
+  }
+  // Website Telegram login uses a signed, HttpOnly short-lived cookie.
+  const telegramCookie=(request.headers.get("cookie")??"").split(";").map(s=>s.trim()).find(s=>s.startsWith("bot_studio_telegram_session="))?.split("=")[1]??"";
+  if(telegramCookie&&env.BOT_STUDIO_AUTH_SECRET){
+    const match=/^(\\d+)\\.(\\d+)\\.([0-9a-f]{64})$/.exec(telegramCookie);
+    if(match&&Number(match[2])>Date.now()){
+      const value=match[1]+"."+match[2];
+      const expected=createHmac("sha256",env.BOT_STUDIO_AUTH_SECRET).update(value).digest();
+      const actual=Buffer.from(match[3],"hex");
+      if(expected.length===actual.length&&timingSafeEqual(expected,actual)){
+        const {data,error}=await supabase.from("app_users").select("id,telegram_id,first_name").eq("telegram_id",match[1]).maybeSingle();
+        if(error)throw error;
+        if(data)return {user:data,supabase,setCookie:null};
+      }
+    }
   }
   const token = cookieValue(request);
   if (!token) return { error: "Authentication required", status: 401 as const };
