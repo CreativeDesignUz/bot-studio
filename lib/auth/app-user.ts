@@ -17,7 +17,11 @@ async function sha256(value: string) {
 export async function resolveAppUser(request: Request, initData = "", allowGuest = true) {
   if (!env.SUPABASE_SECRET_KEY) throw new Error("Supabase server access is not configured");
   const supabase = getSupabaseServer({ privileged: true });
-  if (initData && env.TELEGRAM_MANAGER_TOKEN) {
+  if (initData) {
+    // Never downgrade a Telegram request to an anonymous web session.
+    if (!env.TELEGRAM_MANAGER_TOKEN) {
+      return { error: "Telegram authentication is not configured", status: 503 as const };
+    }
     const telegram = await verifyTelegramInitData(initData, env.TELEGRAM_MANAGER_TOKEN);
     if (!telegram) return { error: "Invalid Telegram session", status: 401 as const };
     const { data, error } = await supabase.from("app_users").upsert({
