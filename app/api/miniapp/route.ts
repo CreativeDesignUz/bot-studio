@@ -1,6 +1,5 @@
-import { env } from "cloudflare:workers";
 import { getSupabaseServer } from "@/lib/supabase/server";
-import { getProjectBotToken } from "@/lib/channels/project-bot-token";
+import { resolveTelegramChannelToken } from "@/features/telegram/server/credentials";
 import { verifyTelegramInitData } from "@/lib/telegram/init-data";
 
 type OrderItem = { id: string; quantity: number };
@@ -94,7 +93,7 @@ export async function POST(request: Request) {
       .eq("bot_id", input.botId).eq("channel", "telegram").single();
     if (!channel || channel.status !== "connected" || !channel.external_account_id)
       return jsonError("Telegram-подключение недоступно", 503);
-    const token = await getProjectBotToken(supabase, channel, { managerToken: env.TELEGRAM_MANAGER_TOKEN, encryptionKey: env.TELEGRAM_TOKEN_ENCRYPTION_KEY });
+    const token = await resolveTelegramChannelToken(supabase, channel);
     const telegramUser = await verifyTelegramInitData(input.initData, token);
     if (!telegramUser) return jsonError("Откройте магазин через Telegram", 401);
 
