@@ -24,16 +24,18 @@ const runtime=source("app/api/channels/telegram/project-runtime/route.ts");
 const auth=source("lib/auth/app-user.ts");
 const extra=[
  {name:"Telegram runtime: есть ссылка на покупательский Mini App",codeFilesPresent:runtime.includes("/miniapp?bot=")&&!runtime.includes("web_app:{url:new URL(\`/workspace"),missing:[],liveE2E:"NOT_RUN"},
- {name:"Telegram runtime: секрет управляющего бота доступен в Worker",codeFilesPresent:false,missing:[],liveE2E:"NOT_VERIFIABLE_IN_CI"},
+ {name:"Telegram runtime: поддержка прямых зашифрованных ключей бота",codeFilesPresent:runtime.includes("getProjectBotToken")&&source("lib/channels/project-bot-token.ts").includes("decryptTelegramToken"),missing:[],liveE2E:"NOT_VERIFIABLE_IN_CI"},
  {name:"Google OAuth: поддержка authorization code callback",codeFilesPresent:!source("app/auth/callback/page.tsx").includes("требуется implicit callback"),missing:[],liveE2E:"NOT_RUN"},
  {name:"Подтверждение owner в API каталога",codeFilesPresent:source("app/api/catalog/route.ts").includes("owner_id"),missing:[],liveE2E:"NOT_RUN"},
  {name:"Карта доставки в заказе",codeFilesPresent:source("app/workspace/order-manager.tsx").includes("openstreetmap.org/export/embed.html"),missing:[],liveE2E:"NOT_RUN"},
  {name:"Детали заказа: отдельная страница",codeFilesPresent:has("app/workspace/orders/[orderId]/page.tsx"),missing:[],liveE2E:"NOT_RUN"},
+ {name:"Публикация: каталог и дизайн фиксируются в snapshot",codeFilesPresent:source("app/api/publish/route.ts").includes("published_snapshot:snapshot"),missing:[],liveE2E:"NOT_RUN"},
+ {name:"Активные акции применяются на сервере при оформлении заказа",codeFilesPresent:false,missing:[],liveE2E:"NOT_RUN"},
  {name:"Фото товара: поддержка HTTPS ссылки",codeFilesPresent:source("app/api/catalog/route.ts").includes("imageUrl"),missing:[],liveE2E:"NOT_RUN"}
 ];
 const all=[...results,...extra];
 const failures=all.filter(c=>!c.codeFilesPresent);
-const report={generatedAt:new Date().toISOString(),commit:process.env.GITHUB_SHA??"local",warning:"Static code audit only. No Google/Telegram signed-in browsing, data mutation, or real checkout performed.",total:all.length,blockers:failures.length,checks:all};
+const report={generatedAt:new Date().toISOString(),commit:process.env.GITHUB_SHA??"local",warning:"Static code audit only. No Google/Telegram signed-in browsing, data mutation, or real checkout performed. Even zero code blockers is NOT a release approval.",total:all.length,blockers:failures.length,checks:all};
 mkdirSync(join(root,"qa-results"),{recursive:true});
 writeFileSync(join(root,"qa-results","qa-bot.json"),JSON.stringify(report,null,2));
 writeFileSync(join(root,"qa-results","qa-bot.md"),"# Bot Studio QA bot — статический аудит\n\n**Внимание:** этот запуск НЕ проверяет авторизованные browser E2E.\n\n"+all.map(x=>"- "+(x.codeFilesPresent?"✅":"❌")+" "+x.name+(x.missing?.length?" — отсутствует: "+x.missing.join(", "):"")+"; LIVE="+x.liveE2E).join("\n")+"\n");
