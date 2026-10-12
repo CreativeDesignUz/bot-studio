@@ -31,6 +31,7 @@ export default function MiniAppPage() {
   const [name, setName] = useState("");
   const [fulfillment, setFulfillment] = useState<"pickup" | "delivery">("pickup");
   const [address, setAddress] = useState("");
+  const [promoCode,setPromoCode]=useState("");
   const [deliveryPoint,setDeliveryPoint]=useState<Point|null>(null);
   const [sending, setSending] = useState(false);
   const [success, setSuccess] = useState("");
@@ -134,7 +135,7 @@ export default function MiniAppPage() {
     try {
       const response = await fetch("/api/checkout", {
         method: "POST", headers: { "content-type": "application/json" }, signal: controller.signal,
-        body: JSON.stringify({ botId: shop.bot.id, initData: telegram.initData, idempotencyKey: checkoutKey.current, name, fulfillment, address, latitude:fulfillment==="delivery"?deliveryPoint?.lat:undefined, longitude:fulfillment==="delivery"?deliveryPoint?.lng:undefined,
+        body: JSON.stringify({ botId: shop.bot.id, initData: telegram.initData, idempotencyKey: checkoutKey.current, name, fulfillment, address, promoCode:promoCode.trim().toUpperCase(), latitude:fulfillment==="delivery"?deliveryPoint?.lat:undefined, longitude:fulfillment==="delivery"?deliveryPoint?.lng:undefined,
           items: selected.map(item => ({ id: item.id, quantity: cart[item.id] })) }),
       });
       const body = await response.json() as { error?: string; orderId?: string };
@@ -241,6 +242,7 @@ export default function MiniAppPage() {
           <div className="flex items-center gap-2"><button onClick={()=>adjust(item.id,-1)} aria-label="Уменьшить"><Minus size={17}/></button><b>{cart[item.id]}</b><button onClick={()=>adjust(item.id,1)} aria-label="Увеличить"><Plus size={17}/></button></div>
         </article>)}</div>
           <div className="mt-6 rounded-2xl bg-white p-5"><h3 className="mb-4 font-bold">Оформление заказа</h3><label className="mb-3 block text-sm">Имя получателя<input value={name} onChange={e=>{checkoutKey.current=null;setName(e.target.value)}} maxLength={100} className="mt-1 block h-12 w-full rounded-xl border border-[#d0d5dd] px-3 outline-none focus:border-[#667085]" placeholder="Ваше имя"/></label>
+            <label className="mb-3 block text-sm">Промокод (необязательно)<input value={promoCode} onChange={e=>{checkoutKey.current=null;setPromoCode(e.target.value.toUpperCase())}} maxLength={32} autoComplete="off" className="mt-1 block h-12 w-full rounded-xl border border-[#d0d5dd] px-3 outline-none focus:border-[#667085]" placeholder="Например, LUNCH10"/></label>
             <div className="mb-3 grid grid-cols-2 gap-2"><button onClick={()=>{checkoutKey.current=null;setFulfillment("pickup")}} className={`flex items-center justify-center gap-2 rounded-xl border p-3 text-sm ${fulfillment==="pickup"?"border-[#101828] bg-[#f2f4f7]":"border-[#d0d5dd]"}`}><Store size={16}/> Самовывоз</button><button onClick={()=>{checkoutKey.current=null;setFulfillment("delivery")}} className={`flex items-center justify-center gap-2 rounded-xl border p-3 text-sm ${fulfillment==="delivery"?"border-[#101828] bg-[#f2f4f7]":"border-[#d0d5dd]"}`}><Truck size={16}/> Доставка</button></div>
             {fulfillment==="delivery" && <div className="space-y-3"><DeliveryLocationPicker key={shop.bot.id+":"+String(deliveryZone?.centerLat)+":"+String(deliveryZone?.centerLng)} initialCenter={deliveryZone?{lat:deliveryZone.centerLat,lng:deliveryZone.centerLng}:undefined} value={deliveryPoint} onChange={point=>{checkoutKey.current=null;setDeliveryPoint(point);}}/><label className="block text-sm">Адрес доставки<textarea value={address} onChange={e=>{checkoutKey.current=null;setAddress(e.target.value)}} maxLength={500} className="mt-1 block min-h-20 w-full rounded-xl border border-[#d0d5dd] p-3" placeholder="Улица, дом, квартира, подъезд, этаж"/></label></div>}
             {fulfillment==="delivery"&&!deliveryAvailable&&<p role="alert" className="mb-3 text-sm text-red-600">Продавец ещё не настроил доставку. Выберите самовывоз.</p>}
