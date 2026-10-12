@@ -19,6 +19,10 @@ test("product image upload checks ownership, file type and size",()=>{
  assert.match(api,/owner_id/);assert.match(api,/photo\.size>3\*1024\*1024/);assert.match(api,/new Uint8Array/);assert.match(api,/storage\.from\("bot-assets"\)/);
  assert.match(src("app/workspace/catalog-manager.tsx"),/\/api\/catalog\/image-upload/);
 });
+test("catalog accepts standard UUID bot and item identifiers",()=>{
+ const catalog=src("app/api/catalog/route.ts");
+ assert.match(catalog,/\(\?:\[0-9a-f\]\{4\}-\)\{3\}/);
+});
 test("publishing preserves settings and snapshots published prices",()=>{
  const draft=src("app/api/bots/draft/route.ts");
  const publish=src("app/api/publish/route.ts");
