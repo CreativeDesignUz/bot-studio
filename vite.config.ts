@@ -68,7 +68,12 @@ export default defineConfig(async ({ command }) => {
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
         inspectorPort: false,
         config: {
-          ...localBindingConfig,
+          // Hosting-template D1/R2 placeholders are for local preview only.
+          // Bot Studio uses Supabase, so production Workers must not require
+          // an unrelated R2 bucket or a placeholder D1 database.
+          ...(command === "build"
+            ? { main: localBindingConfig.main, compatibility_flags: localBindingConfig.compatibility_flags }
+            : localBindingConfig),
           ...(command === "serve"
             ? {
                 services: [
