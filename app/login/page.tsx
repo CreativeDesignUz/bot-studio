@@ -14,7 +14,7 @@ export default function LoginPage() {
     fetch("/api/auth/providers").then(r=>r.json() as Promise<{telegramBotUsername?:string}>).then(data=>setTelegramUsername(data.telegramBotUsername??"")).catch(()=>{});
     const initData=window.Telegram?.WebApp?.initData;
     if(initData) {
-      setBusy(true);
+      queueMicrotask(()=>setBusy(true));
       fetch("/api/auth/telegram",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({initData})})
       .then(async r=>{if(!r.ok)throw new Error("Не удалось подтвердить аккаунт Telegram");router.replace("/workspace");router.refresh();})
       .catch(e=>setError(e.message)).finally(()=>setBusy(false));
