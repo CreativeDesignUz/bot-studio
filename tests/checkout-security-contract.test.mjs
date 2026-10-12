@@ -9,7 +9,8 @@ const auth = source("../lib/auth/app-user.ts");
 const runtime = source("../app/api/channels/telegram/project-runtime/route.ts");
 
 test("checkout verifies signature with project-specific Telegram token", () => {
-  assert.match(checkout, /getManagedBotToken\(/);
+  assert.match(checkout, /getProjectBotToken\(/);
+  assert.match(source("../lib/channels/project-bot-token.ts"), /decryptTelegramToken/);
   assert.match(checkout, /verifyTelegramInitData\(body\.initData, token\)/);
   assert.match(checkout, /bot\.id/);
 });
@@ -21,7 +22,9 @@ test("checkout never accepts a submitted unit price or total", () => {
 });
 
 test("order and items written within one database transaction", () => {
-  assert.match(checkout, /rpc\("create_telegram_order"/);
+  assert.match(checkout, /rpc\("create_miniapp_order"/);
+  assert.match(checkout, /p_request_key: body\.idempotencyKey/);
+  assert.match(checkout, /p_items: body\.items/);
   assert.match(sql, /insert into public\.orders/i);
   assert.match(sql, /insert into public\.order_items/i);
   assert.match(sql, /idempotency_key/i);
@@ -35,8 +38,9 @@ test("privileged checkout never silently uses a guest session", () => {
 
 // Safety regression guard: buyer bot currently still opens seller workspace.
 // This is a known release blocker; make the gate fail if shipped without storefront.
-test.skip("E2E BLOCKER: Telegram project bot must open buyer storefront, not /workspace", () => {
+test("Telegram project bot opens buyer storefront, not seller workspace", () => {
   assert.doesNotMatch(runtime, /new URL\(`\/workspace\?/);
+  assert.match(runtime, /new URL\(`\/miniapp\?bot=/);
 });
 
 test("SQL migration is not truncated or accidentally duplicated", () => {
