@@ -117,7 +117,7 @@ begin
   from jsonb_array_elements(p_items) items join jsonb_array_elements(snapshot_items) p on p.value->>'id'=items.value->>'id';
   return jsonb_build_object('orderId',order_row.id,'totalMinor',greatest(0,total_amount+delivery_amount-discount_amount),'discountMinor',discount_amount,'deliveryMinor',delivery_amount,'currency',order_currency,'replayed',false);
 end;
-$function$
+$function$;
 
 REVOKE ALL ON FUNCTION public.create_miniapp_order(uuid,text,text,text,text,jsonb,text,numeric,numeric,text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.create_miniapp_order(uuid,text,text,text,text,jsonb,text,numeric,numeric,text) TO service_role;
