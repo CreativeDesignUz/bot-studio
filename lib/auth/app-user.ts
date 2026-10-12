@@ -1,24 +1,24 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { env } from "cloudflare:workers";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { verifyTelegramInitData } from "@/lib/telegram/init-data";
 
-const COOKIE = "bot_studio_session";
+const COOKIE = "bot_studio_access_token";
 
 function cookieValue(request: Request) {
   const raw = request.headers.get("cookie") ?? "";
-  return raw.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${COOKIE}=`))?.slice(COOKIE.length + 1) ?? "";
+  const pair = raw.split(";").map(part => part.trim()).find(part => part.startsWith(`${COOKIE}=`));
+  return pair?.slice(COOKIE.length + 1) ?? "";
 }
 
-async function sha256(value: string) {
-  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-export async function resolveAppUser(request: Request, initData = "", allowGuest = true) {
+export async function resolveAppUser(request: Request, initData = "", _allowGuest = false) {
   if (!env.SUPABASE_SECRET_KEY) throw new Error("Supabase server access is not configured");
   const supabase = getSupabaseServer({ privileged: true });
-  if (initData && env.TELEGRAM_MANAGER_TOKEN) {
-    const telegram = await verifyTelegramInitData(initData, env.TELEGRAM_MANAGER_TOKEN);
+  if (initData) {
+    const bindings=env as typeof env & {TELEGRAM_LOGIN_BOT_TOKEN?:string;TELEGRAM_MANAGER_TOKEN?:string};
+    const ownerLoginToken=bindings.TELEGRAM_LOGIN_BOT_TOKEN??bindings.TELEGRAM_MANAGER_TOKEN;
+    if (!ownerLoginToken) return { error: "Telegram authentication is not configured", status: 503 as const };
+    const telegram = await verifyTelegramInitData(initData, ownerLoginToken);
     if (!telegram) return { error: "Invalid Telegram session", status: 401 as const };
     const { data, error } = await supabase.from("app_users").upsert({
       telegram_id: telegram.id,
@@ -30,22 +30,46 @@ export async function resolveAppUser(request: Request, initData = "", allowGuest
     if (error) throw error;
     return { user: data, supabase, setCookie: null };
   }
-  if (!allowGuest) return { error: "Telegram session is required", status: 401 as const };
-
-  let session = cookieValue(request);
-  let setCookie: string | null = null;
-  if (!/^[a-f0-9]{64}$/.test(session)) {
-    session = Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) => byte.toString(16).padStart(2, "0")).join("");
-    setCookie = `${COOKIE}=${session}; Path=/; Max-Age=31536000; HttpOnly; Secure; SameSite=Lax`;
+  // Website Telegram login uses a signed, HttpOnly short-lived cookie.
+  const telegramCookie=(request.headers.get("cookie")??"").split(";").map(s=>s.trim()).find(s=>s.startsWith("bot_studio_telegram_session="))?.split("=")[1]??"";
+  if(telegramCookie&&(env as typeof env & {BOT_STUDIO_AUTH_SECRET?:string}).BOT_STUDIO_AUTH_SECRET){
+    const match=/^(\d+)\.(\d+)\.([0-9a-f]{64})$/.exec(telegramCookie);
+    if(match&&Number(match[2])>Date.now()){
+      const value=match[1]+"."+match[2];
+      const expected=createHmac("sha256",(env as typeof env & {BOT_STUDIO_AUTH_SECRET?:string}).BOT_STUDIO_AUTH_SECRET ?? "").update(value).digest();
+      const actual=Buffer.from(match[3],"hex");
+      if(expected.length===actual.length&&timingSafeEqual(expected,actual)){
+        const {data,error}=await supabase.from("app_users").select("id,telegram_id,first_name").eq("telegram_id",match[1]).maybeSingle();
+        if(error)throw error;
+        if(data)return {user:data,supabase,setCookie:null};
+        const {data:oidcUser,error:oidcError}=await supabase.from("app_users").select("id,telegram_id,first_name").eq("telegram_oidc_sub",match[1]).maybeSingle();
+        if(oidcError)throw oidcError;
+        if(oidcUser)return {user:oidcUser,supabase,setCookie:null};
+      }
+    }
   }
-  const webSessionHash = await sha256(session);
-  let { data } = await supabase.from("app_users").select("id,telegram_id,first_name").eq("web_session_hash", webSessionHash).maybeSingle();
+  const token = cookieValue(request);
+  if (!token) return { error: "Authentication required", status: 401 as const };
+  const auth = getSupabaseServer();
+  const { data: identity, error: authError } = await auth.auth.getUser(token);
+  if (authError || !identity.user || (identity.user.app_metadata?.provider !== "google" && !identity.user.email_confirmed_at)) {
+    return { error: "Invalid or expired session", status: 401 as const };
+  }
+  const { data: existing, error } = await supabase.from("app_users")
+    .select("id,telegram_id,first_name")
+    .eq("auth_user_id", identity.user.id).maybeSingle();
+  if (error) throw error;
+  let data = existing;
   if (!data) {
-    const created = await supabase.from("app_users").insert({ web_session_hash: webSessionHash, first_name: "Гость", language_code: "ru" }).select("id,telegram_id,first_name").single();
+    const created = await supabase.from("app_users").upsert({
+      auth_user_id: identity.user.id,
+      first_name: String(identity.user.user_metadata?.full_name ?? identity.user.email?.split("@")[0] ?? "Пользователь"),
+      language_code: "ru",
+    }, { onConflict: "auth_user_id" }).select("id,telegram_id,first_name").single();
     if (created.error) throw created.error;
     data = created.data;
   }
-  return { user: data, supabase, setCookie };
+  return { user: data, supabase, setCookie: null };
 }
 
 export function withSessionCookie(body: unknown, status: number, setCookie?: string | null) {

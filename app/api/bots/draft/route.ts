@@ -29,11 +29,14 @@ export async function POST(request: Request) {
   const identity = await resolveAppUser(request, payload.initData ?? "");
   if ("error" in identity) return Response.json({ error: identity.error }, { status: identity.status });
   const { supabase, user: appUser, setCookie } = identity;
+  const {data:current,error:readError}=await supabase.from("bots").select("id,settings").eq("id",payload.botId).eq("owner_id",appUser.id).maybeSingle();
+  if(readError||!current)return Response.json({error:"Бот не найден или у вас нет доступа"},{status:404});
+  const settings=current.settings&&typeof current.settings==="object"&&!Array.isArray(current.settings)?current.settings as Record<string,unknown>:{};
   const { data: bot, error } = await supabase.from("bots").update({
     name: payload.name.trim(),
     description: payload.description.trim(),
     primary_color: payload.color ?? "#6541F5",
-    settings: { home_buttons: payload.buttons ?? [] },
+    settings: { ...settings, home_buttons: payload.buttons ?? [] },
   }).eq("id", payload.botId).eq("owner_id", appUser.id).select("id,status,updated_at").single();
   if (error || !bot) return Response.json({ error: "Бот не найден или у вас нет доступа." }, { status: 404 });
   return withSessionCookie({ bot }, 200, setCookie);

@@ -31,11 +31,15 @@ function secureEqual(left: string, right: string) {
 }
 
 export async function verifyTelegramInitData(initData: string, botToken: string, maxAgeSeconds = 86_400) {
+  if (!initData || initData.length > 16384 || !botToken) return null;
   const params = new URLSearchParams(initData);
+  // Reject ambiguous duplicated fields, including hash, that may be parsed inconsistently.
+  const keys = [...params.keys()];
+  if (new Set(keys).size !== keys.length) return null;
   const receivedHash = params.get("hash") ?? "";
   const authDate = Number(params.get("auth_date") ?? 0);
   const now = Math.floor(Date.now() / 1000);
-  if (!receivedHash || !authDate || now - authDate > maxAgeSeconds || authDate > now + 60) return null;
+  if (!/^[a-f0-9]{64}$/i.test(receivedHash) || !Number.isSafeInteger(authDate) || authDate <= 0 || now - authDate > maxAgeSeconds || authDate > now + 60) return null;
 
   params.delete("hash");
   const checkString = [...params.entries()]

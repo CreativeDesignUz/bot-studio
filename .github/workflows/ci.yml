@@ -5,6 +5,9 @@ on:
     branches: [main]
   push:
     branches: [main]
+  schedule:
+    - cron: '15 1 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -37,5 +40,102 @@ jobs:
       - name: ESLint
         run: npm run lint
 
+      - name: Security and regression QA tests
+        run: npm test
+
       - name: Production build
         run: npm run build
+
+      - name: Dependency vulnerability audit
+        run: npm audit --audit-level=high --omit=dev
+
+  qa-bot:
+    name: QA Bot — release readiness (no deploy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.13.1'
+      - name: Audit all requested flows and record blockers
+        run: node scripts/qa-bot.mjs
+      - name: Upload QA Bot report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-bot-readiness
+          path: qa-results/
+          if-no-files-found: error
+
+  staging-live-smoke:
+    name: Live Staging smoke (read-only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.13.1'
+      - name: Verify deployed login, OIDC, shop, and API access
+        run: node scripts/staging-smoke.mjs
+
+  deploy-staging:
+    name: Deploy Cloudflare staging
+    needs: [quality, qa-bot, staging-live-smoke]
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CLOUDFLARE_API_TOKENS }}
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.13.1'
+          cache: npm
+
+      - name: Confirm deployment credentials
+        run: |
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "::error::CLOUDFLARE_ACCOUNT_ID GitHub secret is missing"; exit 1; }
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "::error::CLOUDFLARE_API_TOKEN GitHub secret is missing"; exit 1; }
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+
+      - name: Deploy only staging Worker
+        run: npx wrangler deploy --config dist/server/wrangler.json --name bot-studio-staging --keep-vars
+
+      - name: Verify privileged database on deployed Staging
+        run: EXPECT_PRIVILEGED=1 node scripts/staging-smoke.mjs
+
+      - name: Smoke test selected bot API (unauthenticated)
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://bot-studio-staging.slavnauz.workers.dev"
+          BOT="39237fdd-ec5d-415e-8634-e20c1d66edd1"
+          for attempt in 1 2 3 4 5; do
+            STATUS=$(curl --silent --show-error --location --output /tmp/botstudio-smoke.json --write-out '%{http_code}' "$BASE/api/miniapp/design?bot=$BOT" || true)
+            if [ "$STATUS" = "401" ] || [ "$STATUS" = "403" ]; then
+              echo "PASS: valid bot ID reached authentication guard (HTTP $STATUS)"
+              exit 0
+            fi
+            echo "Attempt $attempt: unexpected status $STATUS"
+            sleep 3
+          done
+          echo "::error::Mini App design API did not reach authorization guard with known valid bot ID"
+          exit 1
