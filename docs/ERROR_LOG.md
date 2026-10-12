@@ -4,14 +4,20 @@
 
 | ID | Приоритет | Окружение | Статус | Проблема и подтверждение | Критерий закрытия |
 | --- | --- | --- | --- | --- | --- |
-| BS-001 | P0 | Staging | OPEN | В GitHub Actions deploy blocked: отсутствуют `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` repository secrets | Deploy staging успешен и URL проверен |
+| BS-001 | P0 | Staging | OPEN | РАНЕЕ: недоставало Cloudflare CI secrets; позднее CI deploy проходил, но вручную подтверждённый E2E отсутствует | Deploy staging успешен и URL проверен |
 | BS-002 | P0 | Staging | OPEN | Полный заказ через Mini App не прошёл живой E2E; buyer route и запуск у продавца не подтверждены | Тестовый покупатель оформил заказ, заказ появился у продавца |
 | BS-003 | P0 | Production | OPEN | В Production отсутствовала функция `create_telegram_order` и checkout idempotency column (read-only SQL 2026-10-12) | Проверка миграций в Staging, отдельное решение о Production rollout |
 | BS-004 | P0 | All | OPEN | Cloudflare → конкретный Supabase ref не подтверждён по runtime: секрет URL недоступен для чтения | Безопасная проверка соответствия для staging и production |
 | BS-005 | P1 | Staging | IN PROGRESS | Web Auth UI/API написаны в PR #12; вход с реальным пользователем и OAuth Google end-to-end не проверены | Login, logout, отсутствие guest, доступ к своим проектам проверены |
 | BS-006 | P1 | Staging | IN PROGRESS | CRM и отчёты написаны в PR #12; ограничение выборок 500/2000; нет полноценной пагинации | Реальные данные, фильтры и экспорт проверены на staging |
 | BS-007 | P1 | All | PLANNED | Акции, сегменты и уведомления ещё не подключены | Скидка применяется на сервере, показ в Mini App, проверка уведомлений и отказов |
-| BS-008 | P2 | All | OPEN | Единые структурированные runtime-логи ранее отсутствовали | Error ID и структурированные безопасные логи в основных API, проверено CI |
+| BS-008 | P2 | All | IN PROGRESS | Логи реализованы для части API, полная централизованная диагностика отсутствует | Error ID и структурированные безопасные логи во всех критичных API |
+
+| BS-009 | P0 | Staging | OPEN | «Укажите бота» при выбранном рабочем боте в каталоге и Mini App | Browser E2E с сохранением категории, блюда и оформления на реальном UUID |
+| BS-010 | P0 | Staging | OPEN | Пустые тёмные кнопки с невидимым текстом | Визуальные снимки и проверка computed CSS/контрастности на desktop/mobile |
+| BS-011 | P0 | Staging | OPEN | Telegram runtime покупателя ведёт в seller workspace; buyer Mini App отсутствует | /start → покупательский Mini App → корзина → заказ (staging E2E) |
+| BS-012 | P0 | Staging | OPEN | OAuth/Telegram login → workspace и persistence не подтверждены живыми E2E | Google + Telegram вход и refresh проверены с тестовыми пользователями |
+| BS-013 | P1 | All | MITIGATED | PR ранее автоматически публиковался на общую Staging без browser E2E | Деплой только с явного ручного запуска после ревью; см. docs/RELEASE-GATES.md |
 
 ### Как фиксировать новую ошибку
 1. Добавить строку с новым `BS-NNN` (не переиспользовать ID).
