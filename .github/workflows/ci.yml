@@ -17,44 +17,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  dependency-repair:
-    # Only the owner-controlled remediation branch can push lockfile updates.
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'fix/checkout-security-foundation-20261012'
-    name: Refresh vulnerable dependencies
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout owner branch
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
-          persist-credentials: true
-
-      - name: Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22.13.1'
-          cache: npm
-
-      - name: Fix vulnerable production dependencies and lockfile
-        run: |
-          npm pkg set overrides.miniflare.sharp=0.35.5
-          npm install --package-lock-only --save-exact next@16.4.0 sharp@0.35.5 --no-audit --no-fund
-          npm audit fix --package-lock-only --omit=dev --no-fund
-          npm ci --no-audit --no-fund
-          npm audit --audit-level=high --omit=dev
-
-      - name: Commit refreshed lockfile only if changed
-        run: |
-          if ! git diff --quiet -- package.json package-lock.json; then
-            git config user.name 'github-actions[bot]'
-            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git add package.json package-lock.json
-            git commit -m 'security: update vulnerable npm dependencies and lockfile'
-            git push origin HEAD:${{ github.head_ref }}
-          fi
-
   quality:
     name: Typecheck, lint, build
     runs-on: ubuntu-latest
