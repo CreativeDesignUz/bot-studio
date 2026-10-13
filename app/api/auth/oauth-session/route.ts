@@ -1,10 +1,40 @@
 import { getSupabaseServer } from "@/lib/supabase/server";
-export async function POST(request:Request){
-  let token="";
-  try{const raw=await request.text();if(raw.length>10000)return Response.json({error:"Invalid request"},{status:413});token=(JSON.parse(raw) as {token?:string}).token??"";}catch{return Response.json({error:"Invalid request"},{status:400});}
-  if(typeof token!=="string"||token.length<20||token.length>8192)return Response.json({error:"Invalid token"},{status:400});
-  const client=getSupabaseServer();
-  const {data,error}=await client.auth.getUser(token);
-  if(error||!data.user||data.user.app_metadata?.provider!=="google")return Response.json({error:"Invalid Google session"},{status:401});
-  return Response.json({ok:true},{headers:{"cache-control":"no-store","set-cookie":`bot_studio_access_token=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=3600`}});
+import { googleSessionCookies } from "@/lib/auth/google-cookie";
+
+export async function POST(request: Request) {
+  let data: { token?: unknown; refreshToken?: unknown; expiresIn?: unknown };
+  try {
+    const raw = await request.text();
+    if (raw.length > 20000) return Response.json({ error: "Request too large" }, { status: 413 });
+    data = JSON.parse(raw) as typeof data;
+  } catch {
+    return Response.json({ error: "Invalid request" }, { status: 400 });
+  }
+  const token = data?.token;
+  const refreshToken = data?.refreshToken;
+  if (typeof token !== "string" || token.length < 20 || token.length > 10000
+    || typeof refreshToken !== "string" || refreshToken.length < 10 || refreshToken.length > 4096) {
+    return Response.json({ error: "Invalid OAuth session" }, { status: 400 });
+  }
+
+  const supabase = getSupabaseServer();
+  // Never trust the browser's user ID/email: verify the Supabase access token server-side.
+  const { data: verified, error } = await supabase.auth.getUser(token);
+  const user = verified.user;
+  const providers = user?.app_metadata?.providers;
+  if (error || !user || !(user.app_metadata?.provider === "google"
+    || (Array.isArray(providers) && providers.includes("google")))) {
+    return Response.json({ error: "Google identity could not be verified" }, { status: 401 });
+  }
+
+  const expiresIn = typeof data.expiresIn === "number" && Number.isFinite(data.expiresIn)
+    ? data.expiresIn : 3600;
+  const headers = new Headers({
+    "content-type": "application/json",
+    "cache-control": "private, no-store",
+  });
+  for (const cookie of googleSessionCookies(token, refreshToken, expiresIn)) {
+    headers.append("set-cookie", cookie);
+  }
+  return new Response(JSON.stringify({ ok: true, redirectTo: "/workspace" }), { status: 200, headers });
 }
