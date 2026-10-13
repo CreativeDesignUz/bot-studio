@@ -36,5 +36,7 @@ export async function POST(request: Request) {
   for (const cookie of googleSessionCookies(token, refreshToken, expiresIn)) {
     headers.append("set-cookie", cookie);
   }
+  // A user who switches from Telegram to Google must not retain a competing session.
+  headers.append("set-cookie", "bot_studio_telegram_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
   return new Response(JSON.stringify({ ok: true, redirectTo: "/workspace" }), { status: 200, headers });
 }
