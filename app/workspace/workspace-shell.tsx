@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { Bot, Menu } from "lucide-react";
 import type { BotTemplateId } from "@/lib/product/templates";
 import WorkspaceSidebar from "./workspace-sidebar";
 
@@ -81,19 +82,25 @@ export default function WorkspaceShell({ children }: { children: React.ReactNode
   return (
     <Context.Provider value={{ bots: data.bots, bot, user: data.user, loading, error }}>
       <div className="min-h-screen bg-[#f4f6f8] text-[#101828]">
-        <WorkspaceSidebar
-          bots={data.bots}
-          bot={bot}
-          user={data.user}
-          mobileOpen={mobileOpen}
-          setMobileOpen={setMobileOpen}
-        />
-        <div className="min-w-0 lg:flex-1" data-workspace-content>
+        <header className="flex h-14 items-center gap-3 border-b border-[#eaecf0] bg-white px-4 lg:hidden">
+          <button type="button" aria-label="Открыть меню" aria-expanded={mobileOpen} aria-controls="workspace-sidebar" onClick={() => setMobileOpen(true)} className="grid size-10 place-items-center rounded-xl border border-[#e4e7ec] hover:bg-[#f7f5ff]"><Menu className="size-5" /></button>
+          <a href="/workspace" className="flex items-center gap-2 text-base font-bold text-[#101828] no-underline"><span className="grid size-8 place-items-center rounded-lg bg-[#6d45f5] text-white"><Bot className="size-[18px]" /></span>Bot Studio</a>
+        </header>
+        <div className="flex min-h-[calc(100vh-56px)] lg:min-h-screen">
+          <WorkspaceSidebar
+            bots={data.bots}
+            bot={bot}
+            user={data.user}
+            mobileOpen={mobileOpen}
+            setMobileOpen={setMobileOpen}
+          />
+          <div className="min-w-0 flex-1" data-workspace-content>
           {loading
             ? <div role="status" className="grid min-h-[75vh] place-items-center p-8 text-sm text-[#667085]">Загружаем кабинет…</div>
             : error
               ? <div role="alert" className="p-8"><p>{error}</p><button type="button" onClick={() => location.reload()} className="mt-4 rounded-xl bg-[#101828] px-4 py-3 text-white">Повторить</button></div>
               : children}
+          </div>
         </div>
       </div>
     </Context.Provider>
