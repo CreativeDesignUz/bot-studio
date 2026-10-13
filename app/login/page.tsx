@@ -72,6 +72,23 @@ export default function LoginPage() {
     }
   }
 
+  async function loginTelegram() {
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/auth/public-config", { cache: "no-store" });
+      if (!response.ok) throw new Error("Не удалось проверить настройки Telegram.");
+      const config = await response.json() as { telegramConfigured?: boolean };
+      if (!config.telegramConfigured) {
+        throw new Error("Telegram-вход ещё не настроен для этого домена.");
+      }
+      window.location.assign("/api/auth/telegram/oidc/start");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Ошибка Telegram.");
+      setBusy(false);
+    }
+  }
+
   return (
     <main className="flex min-h-dvh items-center justify-center bg-[#f4f6f8] px-4 py-8 text-[#101828]">
       <section className="w-full max-w-[440px] rounded-[24px] border border-[#e4e7ec] bg-white p-7 shadow-[0_12px_40px_rgba(16,24,40,.06)] sm:p-9">
@@ -95,7 +112,7 @@ export default function LoginPage() {
           <div className="flex items-center gap-3 py-1 text-xs text-[#98a2b3]">
             <span className="h-px flex-1 bg-[#eaecf0]" />или<span className="h-px flex-1 bg-[#eaecf0]" />
           </div>
-          <button type="button" disabled={busy} onClick={() => window.location.assign("/api/auth/telegram/oidc/start")}
+          <button type="button" disabled={busy} onClick={() => void loginTelegram()}
             className="flex h-12 w-full items-center justify-center gap-3 rounded-xl bg-[#e9eef5] px-4 text-sm font-semibold transition hover:bg-[#e1e9f4] disabled:opacity-60">
             <Send className="size-5 text-[#229ed9]" />Продолжить через Telegram
           </button>
