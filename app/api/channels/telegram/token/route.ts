@@ -13,7 +13,7 @@ const COMMANDS = [
   { command: "start", description: "Открыть главное меню" },
   { command: "help", description: "Помощь" },
 ];
-const errorResponse = (error: string, status: number, setCookie?: string | null) => withSessionCookie({ error }, status, setCookie);
+const errorResponse = (error: string, status: number, setCookie?: string | string[] | null) => withSessionCookie({ error }, status, setCookie);
 
 async function ownedBot(supabase: ReturnType<typeof import("@/lib/supabase/server").getSupabaseServer>, botId: string, ownerId: string) {
   return supabase.from("bots").select("id,name,description").eq("id", botId).eq("owner_id", ownerId).single();
