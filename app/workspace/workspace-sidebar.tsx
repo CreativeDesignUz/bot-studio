@@ -110,14 +110,14 @@ export default function WorkspaceSidebar({ bots, bot, user, mobileOpen, setMobil
     if (view) params.set("view", view);
     return `/workspace?${params}`;
   };
-  const productLabel = bot?.template_type === "delivery" ? "Блюда"
-    : bot?.template_type === "service" ? "Услуги" : "Товары";
+  // Sidebar labels stay identical across bot templates; page content adapts to the type.
+  const productLabel = "Товары";
   const selectedBot = bot?.id ?? "";
   const initial = Array.from(user.firstName?.trim() || "П")[0]?.toLocaleUpperCase("ru-RU") ?? "П";
   const detailClass = "block rounded-lg px-3 py-2.5 text-[13px] no-underline transition-colors focus-visible:outline-2 focus-visible:outline-[#6d45f5]";
   const subItems = [
     { label: `Все ${productLabel.toLowerCase()}`, href: href("catalog", "list"), view: "list" },
-    { label: `Создать ${bot?.template_type === "delivery" ? "блюдо" : bot?.template_type === "service" ? "услугу" : "товар"}`, href: href("catalog", "create"), view: "create" },
+    { label: "Создать товар", href: href("catalog", "create"), view: "create" },
     { label: "Категории", href: href("catalog", "categories"), view: "categories" },
   ];
   const badge = bot?.metrics.newOrders ?? 0;
