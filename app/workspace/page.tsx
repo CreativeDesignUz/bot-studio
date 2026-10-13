@@ -9,7 +9,7 @@ import OrderManager from "./order-manager";
 import DeliverySettings from "./delivery-settings";
 import MiniAppAppearance from "./miniapp-appearance";
 import ServiceRequestManager from "./service-request-manager";
-import { Bell, Bot, ChevronDown, CircleCheck, Clock3, MoreHorizontal, Plus, Search, Settings, TrendingUp } from "lucide-react";
+import { Bell, Bot, ChevronDown, CircleCheck, Clock3, LogOut, MoreHorizontal, Plus, Search, Settings, TrendingUp } from "lucide-react";
 import { BotTemplateId, productTemplates } from "@/lib/product/templates";
 
 const demoBots: { id: string; name: string; type: BotTemplateId; username: string }[] = [
@@ -110,7 +110,7 @@ export default function WorkspacePage() {
         <header className="sticky top-0 z-20 flex h-[72px] items-center gap-3 border-b border-[#e4e7ec] bg-white/90 px-4 backdrop-blur-xl sm:px-7">
           <label className="relative min-w-0 flex-1 lg:hidden"><select value={botId} onChange={(event) => switchBot(event.target.value)} className="h-11 w-full appearance-none rounded-xl border border-[#e4e7ec] bg-white px-3 pr-9 text-sm font-semibold">{bots.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2" /></label>
           <label className="relative hidden max-w-md flex-1 lg:block"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#98a2b3]" /><input className="h-11 w-full rounded-xl border border-[#e4e7ec] bg-[#f9fafb] pl-10 pr-4 text-sm outline-none focus:border-[#6d45f5]" placeholder="Поиск по кабинету" /></label>
-          <button className="ml-auto grid size-11 place-items-center rounded-xl border border-[#e4e7ec] bg-white"><Bell className="size-[18px]" /></button><span className="grid size-10 place-items-center rounded-full bg-[#eee9ff] text-sm font-semibold text-[#5934dc]">A</span>
+          <button className="ml-auto grid size-11 place-items-center rounded-xl border border-[#e4e7ec] bg-white" aria-label="Уведомления"><Bell className="size-[18px]" /></button><span className="grid size-10 place-items-center rounded-full bg-[#eee9ff] text-sm font-semibold text-[#5934dc]">A</span><form action="/api/auth/logout" method="post"><button type="submit" aria-label="Выйти из аккаунта" title="Выйти из аккаунта" className="grid size-10 place-items-center rounded-xl border border-[#e4e7ec] bg-white text-[#667085] transition hover:bg-[#f9fafb] hover:text-[#101828]"><LogOut className="size-[18px]" /></button></form>
         </header>
         <div className="border-b border-[#e4e7ec] bg-white px-4 py-2 lg:hidden"><div className="flex gap-1 overflow-x-auto">{template.modules.map(({ id, label }) => <button key={id} onClick={() => setSection(id)} className={`shrink-0 rounded-full px-3 py-2 text-xs font-semibold ${currentSection === id ? "bg-[#101828] text-white" : "bg-[#f2f4f7] text-[#667085]"}`}>{label}</button>)}</div></div>
         <div className="p-4 pb-24 sm:p-7 sm:pb-24 lg:p-9">
