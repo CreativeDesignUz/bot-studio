@@ -83,7 +83,7 @@ test("legacy Google endpoint does not start another OAuth flow", async () => {
 
 test("logout uses POST, blocks cross-origin requests and clears both providers", () => {
   const route = source("app/api/auth/logout/route.ts");
-  const header = source("app/workspace/page.tsx");
+  const menu = source("app/workspace/profile-menu.tsx");
   assert.match(route, /export async function POST/);
   assert.match(route, /scope: "local"/);
   assert.match(route, /origin !== new URL\(request.url\).origin/);
@@ -91,6 +91,26 @@ test("logout uses POST, blocks cross-origin requests and clears both providers",
   assert.match(route, /clearGoogleSessionCookies/);
   assert.match(route, /bot_studio_telegram_session=;/);
   assert.match(route, /status: 303/);
-  assert.match(header, /action="\/api\/auth\/logout" method="post"/);
-  assert.match(header, /Выйти из аккаунта/);
+  assert.match(menu, /action="\/api\/auth\/logout" method="post"/);
+  assert.match(menu, /Выйти/);
+});
+
+test("avatar opens a real profile dropdown without touching existing auth flow", () => {
+  const workspace = source("app/workspace/page.tsx");
+  const menu = source("app/workspace/profile-menu.tsx");
+  const summary = source("app/workspace/profile-summary.tsx");
+  assert.match(workspace, /<ProfileMenu firstName=/);
+  assert.match(workspace, /currentSection==="profile"/);
+  assert.match(workspace, /<ProfileSummary firstName=/);
+  assert.match(workspace, /setAccount\(result.user\)/);
+  assert.match(menu, /aria-label="Меню профиля"/);
+  assert.match(menu, /aria-expanded=\{open\}/);
+  assert.match(menu, /setOpen\(\(value\) => !value\)/);
+  assert.match(menu, /document.addEventListener\("pointerdown"/);
+  assert.match(menu, /event.key === "Escape"/);
+  assert.match(menu, /section=profile/);
+  assert.match(menu, /Мой профиль/);
+  assert.match(menu, /<form action="\/api\/auth\/logout" method="post">/);
+  assert.match(summary, /telegramLinked/);
+  assert.doesNotMatch(menu, /signInWithOAuth|exchangeCodeForSession|signOut/);
 });
