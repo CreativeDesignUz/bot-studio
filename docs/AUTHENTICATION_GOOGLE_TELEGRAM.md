@@ -50,3 +50,31 @@ Official docs:
 - https://supabase.com/docs/guides/auth/social-login/auth-google
 - https://supabase.com/docs/guides/auth/sessions/pkce-flow
 - https://core.telegram.org/bots/telegram-login
+
+## Why the old Google route was changed (2026-10-13)
+
+A Google sign-in can legitimately start on the server **when the PKCE verifier is stored in server-request cookies and recovered by a server callback**. This project currently uses a different and intentionally consistent design: the browser begins PKCE with `createGoogleBrowserClient`, saves the code verifier in same-origin `sessionStorage`, then `/auth/callback` exchanges the code on the same browser.
+
+The previous `GET /api/auth/google` called a second Supabase client server-side without sharing the browser verifier. Its OAuth initiation was incompatible with our callback. The endpoint now responds **303 Location: /login**, cache disabled. It neither issues tokens nor touches Supabase. Existing bookmarked URLs remain safe; Google OAuth starts only after the user clicks the Google button on the login form.
+
+Do not reintroduce another Google OAuth initiation route unless migrating both initiation and callback to a single complete cookie-based PKCE SSR design.
+
+**Troubleshooting:**
+- `redirect_uri_mismatch`: compare Google Cloud Authorized redirect URIs against the Supabase `/auth/v1/callback`, including protocol, hostname and trailing slash.
+- Redirect back to the wrong domain: check Supabase URL Configuration → Redirect URLs and Site URL; `redirectTo` must be allowed.
+- `both auth code and code verifier should be non-empty`: confirm start and callback share the same origin, browsing tab, PKCE storage key and exact Supabase project; do not open competing OAuth flows in other tabs.
+- Reused or expired `code`: restart Google authorization. Supabase code is one-time and short-lived.
+- The Google Client Secret belongs in Supabase Auth provider settings, **not** in the browser.
+
+**References and discussions:**
+- https://supabase.com/docs/guides/auth/sessions/pkce-flow
+- https://supabase.com/docs/guides/auth/redirect-urls
+- https://developers.google.com/identity/protocols/oauth2/web-server
+- https://github.com/orgs/supabase/discussions/21183
+- https://github.com/orgs/supabase/discussions/6832
+
+## Signing out
+
+The seller workspace has a native HTML POST form pointing to `/api/auth/logout`. The route rejects cross-site logout requests, asks Supabase to revoke the **current** Google session where possible (`scope: "local"`), clears both Google cookies and the signed Telegram website cookie, and redirects to `/login`. The logout response is private and not cached. If the authorization service is temporarily unavailable, browser cookies are still cleared. A previously issued access JWT may remain valid until expiry, as noted in https://supabase.com/docs/guides/auth/signout.
+
+A successful GitHub CI or QA static run **does not prove** actual Google login. The release gate still requires a real browser OAuth E2E on a deployed candidate, including callback, cookie refresh, failed redirect and separate account identities. Staging is not automatically deployed by this PR.
