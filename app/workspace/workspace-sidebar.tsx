@@ -72,12 +72,13 @@ export default function WorkspaceSidebar({ bots, bot, user, mobileOpen, setMobil
   const profileRoot = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    try { setCollapsed(localStorage.getItem(SIDEBAR_STORAGE_KEY) === "true"); }
-    catch { /* Browser privacy settings may deny storage. */ }
+    // Restore persisted width after hydration without synchronously cascading renders.
+    const frame = requestAnimationFrame(() => {
+      try { setCollapsed(localStorage.getItem(SIDEBAR_STORAGE_KEY) === "true"); }
+      catch { /* Browser privacy settings may deny storage. */ }
+    });
+    return () => cancelAnimationFrame(frame);
   }, []);
-  useEffect(() => {
-    if (activeSection === "catalog") setCatalogExpanded(true);
-  }, [activeSection]);
   useEffect(() => {
     if (!flyout && !profileOpen) return;
     function outside(event: PointerEvent) {
