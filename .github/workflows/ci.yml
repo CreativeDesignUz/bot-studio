@@ -73,6 +73,8 @@ jobs:
           node-version: '22.13.1'
       - name: Audit all requested flows and record blockers
         run: node scripts/qa-bot.mjs
+      - name: Google OAuth QA — official docs and live unauthenticated Staging
+        run: node scripts/qa-google-auth.mjs
       - name: Upload QA Bot report
         if: always()
         uses: actions/upload-artifact@v4
