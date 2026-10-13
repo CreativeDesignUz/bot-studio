@@ -44,6 +44,7 @@ export default function WorkspacePage() {
     async function loadWorkspace(){
       try{
         const response=await fetch("/api/workspace",{headers:{"x-telegram-init-data":initData}});
+        if(response.status===401){window.location.replace("/auth");return;}
         if(!response.ok)throw new Error("Workspace request failed");
         const result=await response.json() as WorkspaceResponse;
         const loaded=result.bots.map(item=>({id:item.id,name:item.name,type:item.template_type,username:item.username??`studio_${item.id.slice(0,8)}_bot`,metrics:item.metrics}));
