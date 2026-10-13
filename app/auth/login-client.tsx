@@ -22,14 +22,14 @@ export default function LoginPage({callback=false}:{callback?:boolean}){
  useEffect(()=>{void Promise.resolve().then(()=>setIsPublicDomain(window.location.protocol==="https:"&&!["localhost","127.0.0.1"].includes(window.location.hostname)))},[]);
  const getClient=useCallback((config:Providers["google"])=>{
   if(!config)throw new Error("Google OAuth не настроен в Supabase.");
-  if(!clientRef.current)clientRef.current=createClient(config.supabaseUrl,config.publishableKey,{auth:{persistSession:true,detectSessionInUrl:true,flowType:"implicit",storageKey:"bot-studio-supabase-google"}});
+  if(!clientRef.current)clientRef.current=createClient(config.supabaseUrl,config.publishableKey,{auth:{persistSession:true,detectSessionInUrl:false,flowType:"pkce",storageKey:"bot-studio-supabase-google"}});
   return clientRef.current;
  },[]);
  const finish=useCallback(async(payload:object)=>{
   const response=await fetch("/api/auth/account",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
-  const result=await response.json() as {error?:string};
+  const result=await response.json() as {error?:string;redirectTo?:string};
   if(!response.ok)throw new Error(result.error??"Вход не завершён.");
-  window.location.replace("/workspace");
+  window.location.replace(result.redirectTo==="/workspace"?result.redirectTo:"/workspace");
  },[]);
 
  useEffect(()=>{
@@ -45,10 +45,16 @@ export default function LoginPage({callback=false}:{callback?:boolean}){
    setWorking(true);
    try{
     const client=getClient(providers.google);
-    const {data,error:sessionError}=await client.auth.getSession();
-    if(sessionError||!data.session?.access_token)throw new Error("Google не вернул сессию. Попробуйте войти ещё раз.");
+    const url=new URL(window.location.href);
+    const oauthError=url.searchParams.get("error_description")??url.searchParams.get("error");
+    if(oauthError)throw new Error("Google отменил вход или не разрешил доступ.");
+    const code=url.searchParams.get("code");
+    if(!code)throw new Error("Google не вернул код авторизации. Повторите вход.");
+    const {data,error:sessionError}=await client.auth.exchangeCodeForSession(code);
+    if(sessionError||!data.session?.access_token)throw new Error("Google не подтвердил сессию. Попробуйте войти ещё раз.");
     if(cancel)return;
     await finish({provider:"google",accessToken:data.session.access_token});
+    await client.auth.signOut({scope:"local"});
    }catch(e){if(!cancel)setError(e instanceof Error?e.message:"Ошибка входа.");}
    finally{if(!cancel)setWorking(false)}
   }
