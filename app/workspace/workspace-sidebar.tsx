@@ -68,7 +68,7 @@ export default function WorkspaceSidebar({ bots, bot, user, mobileOpen, setMobil
   const [catalogExpanded, setCatalogExpanded] = useState(activeSection === "catalog");
   const [flyout, setFlyout] = useState<"catalog" | "bots" | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
-  const root = useRef<HTMLAsideElement>(null);
+  const root = useRef<HTMLElement>(null);
   const profileRoot = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
