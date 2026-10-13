@@ -1,8 +1,20 @@
-import { getSupabaseServer } from "@/lib/supabase/server";
-export async function GET(request:Request){
-  const origin=new URL(request.url).origin;
-  const supabase=getSupabaseServer();
-  const {data,error}=await supabase.auth.signInWithOAuth({provider:"google",options:{redirectTo:origin+"/auth/callback",skipBrowserRedirect:true}});
-  if(error||!data.url)return Response.json({error:"Google login unavailable"},{status:503});
-  return Response.redirect(data.url,302);
+/**
+ * Backward-compatible alias for the old Google entry point.
+ *
+ * This route MUST NOT initiate a new OAuth flow on the server:
+ * our canonical PKCE client starts OAuth inside /login and stores the verifier
+ * in sessionStorage for the /auth/callback exchange.
+ *
+ * Redirect any bookmarked /api/auth/google link to the same login form.
+ * A relative Location avoids reflecting a potentially untrusted Host header.
+ */
+export async function GET() {
+  return new Response(null, {
+    status: 303,
+    headers: {
+      location: "/login",
+      "cache-control": "no-store",
+      "referrer-policy": "no-referrer",
+    },
+  });
 }

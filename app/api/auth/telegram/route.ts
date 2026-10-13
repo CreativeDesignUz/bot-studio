@@ -2,6 +2,7 @@ import { createHmac, createHash, timingSafeEqual } from "node:crypto";
 import { env } from "cloudflare:workers";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { verifyTelegramInitData } from "@/lib/telegram/init-data";
+import { clearGoogleSessionCookies } from "@/lib/auth/google-cookie";
 
 type Login={id?:number;auth_date?:number;hash?:string;first_name?:string;last_name?:string;username?:string};
 function verifyLogin(user:Login,botToken:string){
@@ -26,5 +27,8 @@ export async function POST(request:Request){
   const expires=Date.now()+3600_000;
   const payload=String(identity.id)+"."+String(expires);
   const sig=createHmac("sha256",(env as typeof env & {BOT_STUDIO_AUTH_SECRET?:string}).BOT_STUDIO_AUTH_SECRET ?? "").update(payload).digest("hex");
-  return Response.json({ok:true},{headers:{"cache-control":"no-store","set-cookie":`bot_studio_telegram_session=${payload}.${sig}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=3600`}});
+  const headers=new Headers({"cache-control":"private, no-store"});
+  headers.append("set-cookie",`bot_studio_telegram_session=${payload}.${sig}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=3600`);
+  for (const cookie of clearGoogleSessionCookies()) headers.append("set-cookie", cookie);
+  return Response.json({ok:true},{headers});
 }

@@ -9,6 +9,8 @@ import OrderManager from "./order-manager";
 import DeliverySettings from "./delivery-settings";
 import MiniAppAppearance from "./miniapp-appearance";
 import ServiceRequestManager from "./service-request-manager";
+import ProfileMenu from "./profile-menu";
+import ProfileSummary from "./profile-summary";
 import { Bell, Bot, ChevronDown, CircleCheck, Clock3, MoreHorizontal, Plus, Search, Settings, TrendingUp } from "lucide-react";
 import { BotTemplateId, productTemplates } from "@/lib/product/templates";
 
@@ -19,7 +21,7 @@ const demoBots: { id: string; name: string; type: BotTemplateId; username: strin
 ];
 type BotMetrics={ordersToday:number;revenueTodayMinor:number;catalogItems:number;customers:number;recentOrders:{id:string;customer_name:string;status:string;total_minor:number}[]};
 type WorkspaceBot=(typeof demoBots)[number]&{metrics?:BotMetrics};
-type WorkspaceResponse={bots:{id:string;name:string;username:string|null;template_type:BotTemplateId;metrics:BotMetrics}[]};
+type WorkspaceResponse={bots:{id:string;name:string;username:string|null;template_type:BotTemplateId;metrics:BotMetrics}[];user?:{firstName:string;telegramLinked:boolean}};
 
 const content = {
   store: { kpis: [["18", "заказов сегодня", "+12%"], ["7 240 000 сум", "выручка", "+18%"], ["34", "товара заканчиваются", "Проверить"]], rows: [["#1048", "Сабина М.", "Кроссовки Mono", "690 000 сум", "Оплачен"], ["#1047", "Жасур Б.", "Худи Studio", "420 000 сум", "Новый"], ["#1046", "Лола Т.", "Сумка Mini", "530 000 сум", "Собран"]], goal: "Поднять средний чек", tip: "Добавьте комплект кроссовки + носки со скидкой 10%. Покажем его в корзине.", action: "Создать комплект" },
@@ -31,6 +33,7 @@ export default function WorkspacePage() {
   const [bots, setBots] = useState<WorkspaceBot[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [account, setAccount] = useState<WorkspaceResponse["user"]>(undefined);
   const [botId, setBotId] = useState("");
   const [section, setSection] = useState("overview");
   const [catalogCreateRequest, setCatalogCreateRequest] = useState(0);
@@ -39,8 +42,8 @@ export default function WorkspacePage() {
   const basePage = content[bot.type];
   const metrics = bot.metrics ?? {ordersToday:0,revenueTodayMinor:0,catalogItems:0,customers:0,recentOrders:[]};
   const page = { ...basePage, kpis: [[String(metrics.ordersToday), "заказов сегодня", "Сегодня"], [`${Math.round(metrics.revenueTodayMinor/100).toLocaleString("ru-RU")} сум`, "выручка сегодня", "Факт"], [String(metrics.catalogItems), bot.type==="delivery"?"блюд в меню":bot.type==="store"?"товаров в каталоге":"активных услуг", "Каталог"]], rows: metrics.recentOrders.map(order=>[`#${order.id.slice(0,6)}`,order.customer_name||"Клиент","Заказ",`${Math.round(order.total_minor/100).toLocaleString("ru-RU")} сум`,order.status]) };
-  const currentSection = useMemo(() => ((section==="delivery_settings" && (bot.type==="delivery"||bot.type==="store")) || section==="miniapp_appearance" || template.modules.some((item) => item.id===section)) ? section : "overview", [section, template, bot.type]);
-  const sectionName = currentSection==="delivery_settings" ? "Настройки доставки" : currentSection==="miniapp_appearance" ? "Оформление Mini App" : template.modules.find((item) => item.id === currentSection)?.label ?? "Обзор";
+  const currentSection = useMemo(() => ((section==="profile") || (section==="delivery_settings" && (bot.type==="delivery"||bot.type==="store")) || section==="miniapp_appearance" || template.modules.some((item) => item.id===section)) ? section : "overview", [section, template, bot.type]);
+  const sectionName = currentSection==="profile" ? "Мой профиль" : currentSection==="delivery_settings" ? "Настройки доставки" : currentSection==="miniapp_appearance" ? "Оформление Mini App" : template.modules.find((item) => item.id === currentSection)?.label ?? "Обзор";
 
   useEffect(() => {
     const telegram = (window as typeof window & { Telegram?: { WebApp?: { ready?:()=>void; expand?:()=>void; setHeaderColor?:(color:string)=>void; setBackgroundColor?:(color:string)=>void } } }).Telegram?.WebApp;
@@ -53,6 +56,7 @@ export default function WorkspacePage() {
         if(response.status===401){ window.location.replace("/login"); return; }
         if(!response.ok)throw new Error("Workspace request failed");
         const result=await response.json() as WorkspaceResponse;
+        setAccount(result.user);
         const loaded=result.bots.map(item=>({id:item.id,name:item.name,type:item.template_type,username:item.username??`studio_${item.id.slice(0,8)}_bot`,metrics:item.metrics}));
         const params=new URLSearchParams(location.search);const requested=params.get("bot");const requestedSection=params.get("section");
         setBots(loaded);setBotId(loaded.some(item=>item.id===requested)?requested!:loaded[0]?.id??"");if(requestedSection)setSection(requestedSection);setLoadError(false);
@@ -75,7 +79,14 @@ export default function WorkspacePage() {
 
   if(loading)return <main className="grid min-h-screen place-items-center bg-[#f4f6f8] text-sm text-[#667085]">Загружаем кабинет…</main>;
   if(loadError)return <main className="grid min-h-screen place-items-center bg-[#f4f6f8] p-5 text-[#101828]"><section className="w-full max-w-lg rounded-[24px] border border-[#e4e7ec] bg-white p-8 text-center"><span className="mx-auto grid size-14 place-items-center rounded-2xl bg-[#fff1f3] text-[#c01048]"><Bot/></span><h1 className="mt-5 text-2xl font-semibold">Не удалось открыть кабинет</h1><p className="mt-2 text-sm leading-6 text-[#667085]">Проверьте соединение и повторите загрузку. Введённые данные останутся в базе.</p><button onClick={()=>location.reload()} className="mt-6 h-11 rounded-xl bg-[#101828] px-5 text-sm font-semibold text-white">Повторить</button></section></main>;
-  if(!bots.length)return <main className="grid min-h-screen place-items-center bg-[#f4f6f8] p-5 text-[#101828]"><section className="w-full max-w-lg rounded-[24px] border border-[#e4e7ec] bg-white p-8 text-center"><span className="mx-auto grid size-14 place-items-center rounded-2xl bg-[#f0ecff] text-[#6d45f5]"><Bot/></span><h1 className="mt-5 text-2xl font-semibold">Создайте первого бота</h1><p className="mt-2 text-sm leading-6 text-[#667085]">Выберите готовый тип бизнеса, добавьте первый товар или услугу — и сразу увидите Mini App.</p><Link href="/onboarding" className="mt-6 inline-flex h-11 items-center rounded-xl bg-[#101828] px-5 text-sm font-semibold text-white no-underline">Начать создание</Link></section></main>;
+  if(!bots.length)return <main className="min-h-screen bg-[#f4f6f8] text-[#101828]">
+    <header className="flex min-h-[72px] items-center justify-between border-b border-[#e4e7ec] bg-white px-5 sm:px-8">
+      <Link href="/workspace" className="flex items-center gap-3 text-lg font-bold text-[#101828] no-underline"><span className="grid size-10 place-items-center rounded-xl bg-[#6d45f5] text-white"><Bot className="size-5"/></span>Bot Studio</Link>
+      <ProfileMenu firstName={account?.firstName}/>
+    </header>
+    {section==="profile" ? <div className="mx-auto max-w-[1000px] p-5 sm:p-8"><h1 className="mb-6 text-2xl font-semibold">Мой профиль</h1><ProfileSummary firstName={account?.firstName} telegramLinked={account?.telegramLinked}/></div>
+      : <div className="grid min-h-[calc(100vh-72px)] place-items-center p-5"><section className="w-full max-w-lg rounded-[24px] border border-[#e4e7ec] bg-white p-8 text-center"><span className="mx-auto grid size-14 place-items-center rounded-2xl bg-[#f0ecff] text-[#6d45f5]"><Bot/></span><h1 className="mt-5 text-2xl font-semibold">Создайте первого бота</h1><p className="mt-2 text-sm leading-6 text-[#667085]">Выберите готовый тип бизнеса, добавьте первый товар или услугу — и сразу увидите Mini App.</p><Link href="/onboarding" className="mt-6 inline-flex h-11 items-center rounded-xl bg-[#101828] px-5 text-sm font-semibold text-white no-underline">Начать создание</Link></section></div>}
+  </main>;
   return <main className="min-h-screen bg-[#f4f6f8] text-[#101828]">
     <div className="mx-auto flex min-h-screen max-w-[1600px]">
       <aside className="sticky top-0 hidden h-screen w-[270px] shrink-0 flex-col border-r border-[#e4e7ec] bg-white px-4 py-6 lg:flex">
@@ -110,12 +121,13 @@ export default function WorkspacePage() {
         <header className="sticky top-0 z-20 flex h-[72px] items-center gap-3 border-b border-[#e4e7ec] bg-white/90 px-4 backdrop-blur-xl sm:px-7">
           <label className="relative min-w-0 flex-1 lg:hidden"><select value={botId} onChange={(event) => switchBot(event.target.value)} className="h-11 w-full appearance-none rounded-xl border border-[#e4e7ec] bg-white px-3 pr-9 text-sm font-semibold">{bots.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2" /></label>
           <label className="relative hidden max-w-md flex-1 lg:block"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#98a2b3]" /><input className="h-11 w-full rounded-xl border border-[#e4e7ec] bg-[#f9fafb] pl-10 pr-4 text-sm outline-none focus:border-[#6d45f5]" placeholder="Поиск по кабинету" /></label>
-          <button className="ml-auto grid size-11 place-items-center rounded-xl border border-[#e4e7ec] bg-white"><Bell className="size-[18px]" /></button><span className="grid size-10 place-items-center rounded-full bg-[#eee9ff] text-sm font-semibold text-[#5934dc]">A</span>
+          <button className="ml-auto grid size-11 place-items-center rounded-xl border border-[#e4e7ec] bg-white" aria-label="Уведомления"><Bell className="size-[18px]" /></button><ProfileMenu firstName={account?.firstName} activeBotId={bot.id}/>
         </header>
         <div className="border-b border-[#e4e7ec] bg-white px-4 py-2 lg:hidden"><div className="flex gap-1 overflow-x-auto">{template.modules.map(({ id, label }) => <button key={id} onClick={() => setSection(id)} className={`shrink-0 rounded-full px-3 py-2 text-xs font-semibold ${currentSection === id ? "bg-[#101828] text-white" : "bg-[#f2f4f7] text-[#667085]"}`}>{label}</button>)}</div></div>
         <div className="p-4 pb-24 sm:p-7 sm:pb-24 lg:p-9">
           <div className="mb-7 flex flex-wrap items-end justify-between gap-4"><div><p className="mb-2 text-xs font-semibold text-[#6d45f5]">{template.label} · @{bot.username}</p><h1 className="text-2xl font-semibold tracking-[-.035em] sm:text-3xl">{sectionName}</h1><p className="mt-1.5 text-sm text-[#667085]">{currentSection === "overview" ? "Главное за сегодня и следующий шаг для роста." : `Управляйте разделом «${sectionName}» без перехода в другие сервисы.`}</p></div>{(currentSection==="overview"||currentSection==="catalog")&&<button type="button" onClick={addPrimaryItem} className="flex h-11 items-center gap-2 rounded-xl bg-[#101828] px-4 text-sm font-semibold text-white"><Plus className="size-4" />Добавить {template.itemLabel}</button>}</div>
-          {currentSection==="delivery_settings" ? <DeliverySettings key={bot.id} botId={bot.id}/>
+          {currentSection==="profile" ? <ProfileSummary firstName={account?.firstName} telegramLinked={account?.telegramLinked} />
+            : currentSection==="delivery_settings" ? <DeliverySettings key={bot.id} botId={bot.id}/>
             : currentSection==="miniapp_appearance" ? <MiniAppAppearance key={bot.id} botId={bot.id} templateType={bot.type}/>
             : currentSection==="orders" && (bot.type==="delivery"||bot.type==="store") ? <OrderManager key={bot.id} botId={bot.id}/>
             : currentSection==="catalog" ? <CatalogManager key={`${bot.id}:${catalogCreateRequest}`} botId={bot.id} type={bot.type} startCreating={catalogCreateRequest>0}/>

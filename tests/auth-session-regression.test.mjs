@@ -13,5 +13,8 @@ test("Telegram signed cookie parser accepts numeric ID, expiry and SHA256 signat
 });
 test("Google OAuth access uses verified identity",()=>{
  const source=readFileSync(new URL("../lib/auth/app-user.ts",import.meta.url),"utf8");
- assert.match(source,/app_metadata\?\.provider !== "google"/);
+ assert.match(source,/auth.auth.getUser/);
+ assert.match(source,/app_metadata\?\.provider === "google"/);
+ assert.match(source,/providers.includes\("google"\)/);
+ assert.match(source,/auth.auth.refreshSession/);
 });

@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { getSupabaseServer } from "@/lib/supabase/server";
+import { clearGoogleSessionCookies } from "@/lib/auth/google-cookie";
 
 const cookie=(req:Request,name:string)=>(req.headers.get("cookie")??"").split(";").map(x=>x.trim()).find(x=>x.startsWith(name+"="))?.slice(name.length+1)??"";
 type JwtPayload={iss?:string;aud?:string|string[];exp?:number;nbf?:number;sub?:string;id?:number;given_name?:string;family_name?:string;preferred_username?:string;name?:string};
@@ -53,6 +54,7 @@ export async function GET(request:Request){
   const signature=createHmac("sha256",settings.BOT_STUDIO_AUTH_SECRET).update(payload).digest("hex");
   const headers=new Headers({location:new URL("/workspace",url.origin).toString(),"cache-control":"no-store"});
   headers.append("set-cookie",`bot_studio_telegram_session=${payload}.${signature}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=3600`);
+  for (const cookie of clearGoogleSessionCookies()) headers.append("set-cookie", cookie);
   headers.append("set-cookie","bs_tg_oidc_state=; Path=/api/auth/telegram/oidc; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
   headers.append("set-cookie","bs_tg_oidc_pkce=; Path=/api/auth/telegram/oidc; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
   return new Response(null,{status:302,headers});

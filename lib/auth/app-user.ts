@@ -2,14 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { env } from "cloudflare:workers";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { verifyTelegramInitData } from "@/lib/telegram/init-data";
-
-const COOKIE = "bot_studio_access_token";
-
-function cookieValue(request: Request) {
-  const raw = request.headers.get("cookie") ?? "";
-  const pair = raw.split(";").map(part => part.trim()).find(part => part.startsWith(`${COOKIE}=`));
-  return pair?.slice(COOKIE.length + 1) ?? "";
-}
+import { readGoogleCookie, googleSessionCookies } from "@/lib/auth/google-cookie";
 
 export async function resolveAppUser(request: Request, initData = "", _allowGuest = false) {
   if (!env.SUPABASE_SECRET_KEY) throw new Error("Supabase server access is not configured");
@@ -48,32 +41,55 @@ export async function resolveAppUser(request: Request, initData = "", _allowGues
       }
     }
   }
-  const token = cookieValue(request);
-  if (!token) return { error: "Authentication required", status: 401 as const };
+  const token = readGoogleCookie(request, "access");
+  const refreshToken = readGoogleCookie(request, "refresh");
+  if (!token && !refreshToken) return { error: "Authentication required", status: 401 as const };
+
+  // A Supabase access token expires quickly; verify it against the Auth service,
+  // then use the HttpOnly refresh cookie only when the access token has expired.
+  // A request-specific client prevents cross-user state leakage.
   const auth = getSupabaseServer();
-  const { data: identity, error: authError } = await auth.auth.getUser(token);
-  if (authError || !identity.user || (identity.user.app_metadata?.provider !== "google" && !identity.user.email_confirmed_at)) {
+  let identity = token ? await auth.auth.getUser(token) : null;
+  let renewedCookies: string[] | null = null;
+  if ((!identity?.data.user || identity.error) && refreshToken) {
+    const { data: refreshed, error: refreshError } = await auth.auth.refreshSession({
+      refresh_token: refreshToken,
+    });
+    const session = refreshed.session;
+    if (refreshError || !session?.access_token || !session.refresh_token) {
+      return { error: "Session expired; sign in again", status: 401 as const };
+    }
+    identity = await auth.auth.getUser(session.access_token);
+    if (identity.error || !identity.data.user) {
+      return { error: "Invalid refreshed identity", status: 401 as const };
+    }
+    renewedCookies = googleSessionCookies(session.access_token, session.refresh_token, session.expires_in);
+  }
+  const verifiedUser = identity?.data.user;
+  const providers = verifiedUser?.app_metadata?.providers;
+  if (!verifiedUser || !(verifiedUser.app_metadata?.provider === "google"
+    || (Array.isArray(providers) && providers.includes("google")))) {
     return { error: "Invalid or expired session", status: 401 as const };
   }
   const { data: existing, error } = await supabase.from("app_users")
     .select("id,telegram_id,first_name")
-    .eq("auth_user_id", identity.user.id).maybeSingle();
+    .eq("auth_user_id", verifiedUser.id).maybeSingle();
   if (error) throw error;
   let data = existing;
   if (!data) {
     const created = await supabase.from("app_users").upsert({
-      auth_user_id: identity.user.id,
-      first_name: String(identity.user.user_metadata?.full_name ?? identity.user.email?.split("@")[0] ?? "Пользователь"),
+      auth_user_id: verifiedUser.id,
+      first_name: String(verifiedUser.user_metadata?.full_name ?? verifiedUser.email?.split("@")[0] ?? "Пользователь"),
       language_code: "ru",
     }, { onConflict: "auth_user_id" }).select("id,telegram_id,first_name").single();
     if (created.error) throw created.error;
     data = created.data;
   }
-  return { user: data, supabase, setCookie: null };
+  return { user: data, supabase, setCookie: renewedCookies };
 }
 
-export function withSessionCookie(body: unknown, status: number, setCookie?: string | null) {
-  const headers = new Headers({ "content-type": "application/json" });
-  if (setCookie) headers.set("set-cookie", setCookie);
+export function withSessionCookie(body: unknown, status: number, setCookie?: string | string[] | null) {
+  const headers = new Headers({ "content-type": "application/json", "cache-control": "private, no-store" });
+  if (setCookie) for (const cookie of Array.isArray(setCookie) ? setCookie : [setCookie]) headers.append("set-cookie", cookie);
   return new Response(JSON.stringify(body), { status, headers });
 }
