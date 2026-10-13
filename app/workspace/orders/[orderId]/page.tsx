@@ -1,11 +1,13 @@
 "use client";
 import {useEffect,useState} from "react";
-import {useParams,useSearchParams} from "next/navigation";
+import {useParams} from "next/navigation";
 import Link from "next/link";
+import {useWorkspace} from "../../workspace-shell";
 type Order={id:string;customer_name:string;status:string;currency:string;total_minor:number;delivery_minor:number;fulfillment_type:string|null;delivery_address:unknown;created_at:string;items:{item_name:string;quantity:number;unit_price_minor:number}[]};
 export default function OrderDetailPage(){
- const params=useParams<{orderId:string}>(),query=useSearchParams();
- const botId=query.get("bot")??"",orderId=params.orderId;
+ const params=useParams<{orderId:string}>();
+ const {bot}=useWorkspace();
+ const botId=bot?.id??"",orderId=params.orderId;
  const [order,setOrder]=useState<Order|null>(null),[error,setError]=useState(""),[loading,setLoading]=useState(true);
  useEffect(()=>{const abort=new AbortController();void (async()=>{try{
  if(!/^[0-9a-f-]{36}$/i.test(botId)||!/^[0-9a-f-]{36}$/i.test(orderId))throw new Error("Некорректный заказ");
@@ -21,7 +23,7 @@ export default function OrderDetailPage(){
  const valid=typeof loc.lat==="number"&&typeof loc.lng==="number"&&Number.isFinite(loc.lat)&&Number.isFinite(loc.lng)&&Math.abs(loc.lat)<=85&&Math.abs(loc.lng)<=180;
  const marker=valid?String(loc.lat)+","+String(loc.lng):"";
  return <main className="min-h-screen bg-[#f4f6f8] px-4 py-8 text-[#101828]"><div className="mx-auto max-w-3xl">
- <Link href={"/workspace?bot="+encodeURIComponent(botId)} className="text-sm font-semibold text-[#6541f5]">← Вернуться в кабинет</Link>
+ <Link href={"/workspace?bot="+encodeURIComponent(botId)+"&section=orders"} className="text-sm font-semibold text-[#6541f5]">← Вернуться в кабинет</Link>
  <h1 className="my-6 text-2xl font-bold">Детали заказа</h1>
  {loading?<section className="rounded-2xl bg-white p-6">Загрузка…</section>:error?<p role="alert" className="rounded-xl bg-red-50 p-5 text-red-700">{error}</p>:order&&<div className="space-y-4">
  <section className="rounded-2xl border bg-white p-6"><div className="flex items-center justify-between gap-3"><h2 className="font-semibold">№ {order.id.slice(0,8).toUpperCase()}</h2><span className="rounded-full bg-[#f0eaff] px-3 py-1 text-sm">{order.status}</span></div>
