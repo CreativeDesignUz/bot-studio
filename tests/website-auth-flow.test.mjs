@@ -66,3 +66,17 @@ test("cookies are HttpOnly, Secure, SameSite Lax and can be cleared", async () =
   assert.equal(readGoogleCookie(req, "refresh"), "valid-refresh");
   assert.ok(clearGoogleSessionCookies().every((value) => /Max-Age=0/.test(value)));
 });
+
+test("legacy Google endpoint does not start another OAuth flow", async () => {
+  const oldRoute = source("app/api/auth/google/route.ts");
+  assert.doesNotMatch(oldRoute, /signInWithOAuth/);
+  assert.doesNotMatch(oldRoute, /getSupabaseServer/);
+  const { GET } = await import("../app/api/auth/google/route.ts");
+  const response = await GET(new Request("https://example.com/api/auth/google"));
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get("location"), "/login");
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.equal(response.headers.get("referrer-policy"), "no-referrer");
+  assert.equal(response.headers.get("set-cookie"), null);
+  assert.equal(await response.text(), "");
+});
