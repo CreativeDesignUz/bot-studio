@@ -80,3 +80,17 @@ test("legacy Google endpoint does not start another OAuth flow", async () => {
   assert.equal(response.headers.get("set-cookie"), null);
   assert.equal(await response.text(), "");
 });
+
+test("logout uses POST, blocks cross-origin requests and clears both providers", () => {
+  const route = source("app/api/auth/logout/route.ts");
+  const header = source("app/workspace/page.tsx");
+  assert.match(route, /export async function POST/);
+  assert.match(route, /scope: "local"/);
+  assert.match(route, /origin !== new URL\(request.url\).origin/);
+  assert.match(route, /fetchSite === "cross-site"/);
+  assert.match(route, /clearGoogleSessionCookies/);
+  assert.match(route, /bot_studio_telegram_session=;/);
+  assert.match(route, /status: 303/);
+  assert.match(header, /action="\/api\/auth\/logout" method="post"/);
+  assert.match(header, /Выйти из аккаунта/);
+});
