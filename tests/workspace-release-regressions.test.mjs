@@ -123,6 +123,7 @@ test("promotion checkout uses atomic server-side discount and scoped coupon",()=
  assert.match(sql,/unique index if not exists/i);
 });
 test("Google login supports code exchange using PKCE",()=>{
- assert.match(src("app/login/page.tsx"),/flowType:"pkce"/);
+ assert.match(src("lib/auth/google-browser.ts"),/flowType: "pkce"/);
+ assert.match(src("app/login/page.tsx"),/createGoogleBrowserClient/);
  assert.match(src("app/auth/callback/page.tsx"),/exchangeCodeForSession/);
 });
