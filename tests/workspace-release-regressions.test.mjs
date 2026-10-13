@@ -12,7 +12,7 @@ test("all seller tools and APIs stay connected",()=>{
  const page=src("app/workspace/page.tsx");
  assert.match(page,/<CatalogManager/);assert.match(page,/<OrderManager/);assert.match(page,/<CampaignManager/);
  assert.match(page,/onClick=\{addPrimaryItem\}/);
- assert.match(page,/startCreating=\{catalogCreateRequest>0\}/);
+ assert.match(page,/startCreating=\{view === "create" \|\| catalogCreateRequest>0\}/);
 });
 test("product image upload checks ownership, file type and size",()=>{
  const api=src("app/api/catalog/image-upload/route.ts");
@@ -29,18 +29,20 @@ test("catalog editor remains usable on small screens and includes direct image u
 test("workspace exposes real bot and Mini App settings instead of decorative controls",()=>{
  const workspace=src("app/workspace/page.tsx");
  const builder=src("app/workspace/builder/page.tsx");
- assert.ok(workspace.indexOf('href="/onboarding"')<workspace.indexOf('aria-label="Выбрать рабочего бота"'));
- assert.match(workspace,/templateType=\{bot\.type\}/);
+ const sidebar=src("app/workspace/workspace-sidebar.tsx");
+ assert.match(sidebar,/aria-label="Выбрать бота"/);
+ assert.match(sidebar,/href="\/onboarding"/);
+ assert.match(workspace,/templateType=\{bot\.template_type\}/);
  assert.match(builder,/scrollToSection/);
  assert.match(builder,/section=miniapp_appearance/);
  assert.doesNotMatch(builder,/\["Основное","Меню","Кнопки","Доставка","Оплата","Уведомления"\]/);
 });
 test("critical bot settings links bypass broken Vinext client navigation",()=>{
- const workspace=src("app/workspace/page.tsx");
+ const sidebar=src("app/workspace/workspace-sidebar.tsx");
  const onboarding=src("app/onboarding/page.tsx");
  const builder=src("app/workspace/builder/page.tsx");
- assert.match(workspace,/<a href=\{`\/workspace\/builder\?bot=\$\{bot\.id\}`\}/);
- assert.doesNotMatch(workspace,/<Link href=\{`\/workspace\/builder\?bot=/);
+ assert.match(sidebar,/href=\{bot \? `\/workspace\/builder\?bot=/);
+ assert.doesNotMatch(sidebar,/<Link href=\{.*\/workspace\/builder/);
  assert.match(onboarding,/<a className="flow-primary" href=\{botId\?`\/workspace\/builder\?bot=/);
  assert.match(builder,/<a href=\{`\/workspace\?bot=\$\{encodeURIComponent\(botId\)\}&section=miniapp_appearance`\}/);
 });
@@ -126,4 +128,30 @@ test("Google login supports code exchange using PKCE",()=>{
  assert.match(src("lib/auth/google-browser.ts"),/flowType: "pkce"/);
  assert.match(src("app/login/page.tsx"),/createGoogleBrowserClient/);
  assert.match(src("app/auth/callback/page.tsx"),/exchangeCodeForSession/);
+});
+
+test("shared sidebar remains a single layout across pages and respects URL navigation",()=>{
+ const layout=src("app/workspace/layout.tsx");
+ const shell=src("app/workspace/workspace-shell.tsx");
+ const menu=src("app/workspace/workspace-sidebar.tsx");
+ assert.match(layout,/<WorkspaceShell>/);
+ assert.match(shell,/<WorkspaceSidebar/);
+ assert.match(shell,/cache: "no-store"/);
+ for(const label of ["Главная","Заказы","Клиенты","Настройки бота","Настройки Mini App","Профиль"])
+  assert.ok(menu.includes(label),label);
+ assert.match(menu,/view: "create"/);
+ assert.match(menu,/view: "categories"/);
+ assert.match(src("app/workspace/catalog-manager.tsx"),/initialView = "items"/);
+ assert.match(src("app/workspace/page.tsx"),/initialView=\{view === "categories" \? "categories" : "items"\}/);
+ assert.match(menu,/aria-current=\{active \? "page"/);
+ assert.match(menu,/aria-expanded=\{catalogExpanded\}/);
+ assert.match(menu,/PanelLeftClose/);
+ assert.match(menu,/PanelLeftOpen/);
+ assert.match(menu,/localStorage\.setItem\(SIDEBAR_STORAGE_KEY/);
+ assert.match(menu,/lg:w-\[76px\]/);
+ assert.match(menu,/lg:w-\[272px\]/);
+ assert.match(menu,/aria-label="Меню профиля"/);
+ assert.match(menu,/action="\/api\/auth\/logout" method="post"/);
+ assert.match(menu,/newOrders/);
+ assert.match(src("app/api/workspace/route.ts"),/newOrders\.count/);
 });

@@ -17,8 +17,9 @@ test("every unauthenticated website visitor gets a form with Google and Telegram
   assert.match(login, /signInWithOAuth/);
   assert.match(login, /provider: "google"/);
   assert.match(login, /\/api\/auth\/telegram\/oidc\/start/);
-  assert.match(source("app/workspace/page.tsx"), /response.status===401/);
-  assert.match(source("app/workspace/page.tsx"), /window.location.replace\("\/login"\)/);
+  const shell = source("app/workspace/workspace-shell.tsx");
+  assert.match(shell, /response.status === 401/);
+  assert.match(shell, /window.location.replace\("\/login"\)/);
 });
 
 test("Google OAuth uses one explicit PKCE code exchange with matching tab storage", () => {
@@ -83,7 +84,7 @@ test("legacy Google endpoint does not start another OAuth flow", async () => {
 
 test("logout uses POST, blocks cross-origin requests and clears both providers", () => {
   const route = source("app/api/auth/logout/route.ts");
-  const menu = source("app/workspace/profile-menu.tsx");
+  const menu = source("app/workspace/workspace-sidebar.tsx");
   assert.match(route, /export async function POST/);
   assert.match(route, /scope: "local"/);
   assert.match(route, /origin !== new URL\(request.url\).origin/);
@@ -95,22 +96,22 @@ test("logout uses POST, blocks cross-origin requests and clears both providers",
   assert.match(menu, /Выйти/);
 });
 
-test("avatar opens a real profile dropdown without touching existing auth flow", () => {
+test("avatar opens profile and logout in the shared sidebar without changing OAuth", () => {
   const workspace = source("app/workspace/page.tsx");
-  const menu = source("app/workspace/profile-menu.tsx");
+  const menu = source("app/workspace/workspace-sidebar.tsx");
+  const shell = source("app/workspace/workspace-shell.tsx");
   const summary = source("app/workspace/profile-summary.tsx");
-  assert.match(workspace, /<ProfileMenu firstName=/);
-  assert.match(workspace, /currentSection==="profile"/);
+  assert.match(workspace, /currentSection === "profile"/);
   assert.match(workspace, /<ProfileSummary firstName=/);
-  assert.match(workspace, /setAccount\(result.user\)/);
+  assert.match(shell, /<WorkspaceSidebar/);
   assert.match(menu, /aria-label="Меню профиля"/);
-  assert.match(menu, /aria-expanded=\{open\}/);
-  assert.match(menu, /setOpen\(\(value\) => !value\)/);
+  assert.match(menu, /aria-expanded=\{profileOpen\}/);
+  assert.match(menu, /setProfileOpen\(value => !value\)/);
   assert.match(menu, /document.addEventListener\("pointerdown"/);
   assert.match(menu, /event.key === "Escape"/);
-  assert.match(menu, /section=profile/);
+  assert.match(menu, /href\("profile"\)/);
   assert.match(menu, /Мой профиль/);
-  assert.match(menu, /<form action="\/api\/auth\/logout" method="post">/);
+  assert.match(menu, /<form action="\/api\/auth\/logout" method="post"/);
   assert.match(summary, /telegramLinked/);
-  assert.doesNotMatch(menu, /signInWithOAuth|exchangeCodeForSession|signOut/);
+  assert.doesNotMatch(menu, /signInWithOAuth|exchangeCodeForSession|auth\.signOut/);
 });

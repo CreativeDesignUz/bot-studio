@@ -24,7 +24,8 @@ const cookie = read("lib/auth/google-cookie.ts");
 const identity = read("lib/auth/app-user.ts");
 const workspaceApi = read("app/api/workspace/route.ts");
 const workspaceUi = read("app/workspace/page.tsx");
-const profileMenu = read("app/workspace/profile-menu.tsx");
+const workspaceShell = read("app/workspace/workspace-shell.tsx");
+const profileMenu = read("app/workspace/workspace-sidebar.tsx");
 const oldGoogleRoute = read("app/api/auth/google/route.ts");
 const telegram = read("app/api/auth/telegram/oidc/start/route.ts");
 const checks = [];
@@ -60,7 +61,7 @@ add("G08","Сессии не кэшируются публично",session.incl
   identity.includes("private, no-store"),
   "Запрет общего кеширования ответов Set-Cookie");
 add("G09","Закрытый workspace без авторизации",workspaceApi.includes("resolveAppUser") &&
-  workspaceUi.includes("response.status===401"),
+  workspaceShell.includes("response.status === 401") && workspaceShell.includes('window.location.replace("/login")'),
   "API проверяет владельца сессии; UI перенаправляет гостя");
 add("G10","Нет второго несовместимого Google OAuth entry point",
   !oldGoogleRoute || (!oldGoogleRoute.includes("signInWithOAuth") &&
@@ -69,7 +70,7 @@ add("G10","Нет второго несовместимого Google OAuth entry
     oldGoogleRoute.includes("status: 303")),
   "Старый /api/auth/google должен только перенаправлять на /login без нового OAuth и verifier");
 add("G11","Есть понятный выход из аккаунта",
-  workspaceUi.includes("<ProfileMenu") &&
+  workspaceShell.includes("<WorkspaceSidebar") &&
   profileMenu.includes('action="/api/auth/logout" method="post"') &&
   profileMenu.includes("Выйти") &&
   read("app/api/auth/logout/route.ts").includes("export async function POST"),

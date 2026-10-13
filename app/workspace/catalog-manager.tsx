@@ -10,7 +10,7 @@ type ApiResult = { items?: Item[]; categories?:Category[]; item?: Item; created?
 const formatMoney = (minor: number, currency: string) => `${formatStoredPrice(minor, currency === "USD" ? "USD" : "UZS")} ${currency === "USD" ? "$" : "сум"}`;
 const telegramData = () => (window as typeof window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData ?? "";
 
-export default function CatalogManager({ botId, type, startCreating = false }: { botId: string; type: "service" | "store" | "delivery"; startCreating?: boolean }) {
+export default function CatalogManager({ botId, type, startCreating = false, initialView = "items" }: { botId: string; type: "service" | "store" | "delivery"; startCreating?: boolean; initialView?: "items" | "categories" }) {
   const noun = type === "service" ? "услугу" : type === "delivery" ? "блюдо" : "товар";
   const [items, setItems] = useState<Item[]>([]);
   const [categories,setCategories]=useState<Category[]>([]);
@@ -23,7 +23,7 @@ export default function CatalogManager({ botId, type, startCreating = false }: {
   const [allergens,setAllergens]=useState("");
   const [preparationMinutes,setPreparationMinutes]=useState("");
   const [chosenCategory,setChosenCategory]=useState("all");
-  const [menuView,setMenuView]=useState<"items"|"categories">("items");
+  const [menuView,setMenuView]=useState<"items"|"categories">(initialView);
   const [notice,setNotice]=useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
