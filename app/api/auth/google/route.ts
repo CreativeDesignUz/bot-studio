@@ -1,7 +1,7 @@
 /**
  * Backward-compatible alias for the old Google entry point.
  *
- * This route MUST NOT call signInWithOAuth on the server:
+ * This route MUST NOT initiate a new OAuth flow on the server:
  * our canonical PKCE client starts OAuth inside /login and stores the verifier
  * in sessionStorage for the /auth/callback exchange.
  *
