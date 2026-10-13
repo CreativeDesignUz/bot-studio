@@ -62,11 +62,11 @@ add("G09","Закрытый workspace без авторизации",workspaceAp
   workspaceUi.includes("response.status===401"),
   "API проверяет владельца сессии; UI перенаправляет гостя");
 add("G10","Нет второго несовместимого Google OAuth entry point",
-  !oldGoogleRoute || (oldGoogleRoute.includes("createGoogleBrowserClient") ||
-  oldGoogleRoute.includes("Response.redirect(new URL(\"/login\"")),
-  oldGoogleRoute
-    ?"app/api/auth/google/route.ts запускает независимый серверный OAuth и не хранит PKCE verifier для браузерного callback"
-    :"Не обнаружен отдельный конкурирующий маршрут");
+  !oldGoogleRoute || (!oldGoogleRoute.includes("signInWithOAuth") &&
+    oldGoogleRoute.includes('location: "/login"') &&
+    oldGoogleRoute.includes('"cache-control": "no-store"') &&
+    oldGoogleRoute.includes("status: 303")),
+  "Старый /api/auth/google должен только перенаправлять на /login без нового OAuth и verifier");
 add("G11","Есть понятный выход из аккаунта",
   /signout|logout|выйти/i.test(workspaceUi) &&
   (read("app/api/auth/logout/route.ts") || read("app/api/auth/signout/route.ts")).length>0,
