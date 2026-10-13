@@ -24,6 +24,7 @@ const cookie = read("lib/auth/google-cookie.ts");
 const identity = read("lib/auth/app-user.ts");
 const workspaceApi = read("app/api/workspace/route.ts");
 const workspaceUi = read("app/workspace/page.tsx");
+const profileMenu = read("app/workspace/profile-menu.tsx");
 const oldGoogleRoute = read("app/api/auth/google/route.ts");
 const telegram = read("app/api/auth/telegram/oidc/start/route.ts");
 const checks = [];
@@ -68,8 +69,10 @@ add("G10","Нет второго несовместимого Google OAuth entry
     oldGoogleRoute.includes("status: 303")),
   "Старый /api/auth/google должен только перенаправлять на /login без нового OAuth и verifier");
 add("G11","Есть понятный выход из аккаунта",
-  /signout|logout|выйти/i.test(workspaceUi) &&
-  (read("app/api/auth/logout/route.ts") || read("app/api/auth/signout/route.ts")).length>0,
+  workspaceUi.includes("<ProfileMenu") &&
+  profileMenu.includes('action="/api/auth/logout" method="post"') &&
+  profileMenu.includes("Выйти") &&
+  read("app/api/auth/logout/route.ts").includes("export async function POST"),
   "Для устойчивой авторизации нужен выход, очищающий Google и Telegram cookies");
 add("G12","Telegram OIDC не заменён Google OAuth",telegram.includes("oauth.telegram.org/auth") &&
   login.includes("/api/auth/telegram/oidc/start"),
