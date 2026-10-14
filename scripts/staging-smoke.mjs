@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from "node:crypto";
 // Read-only checks against the actual deployed Staging Worker, not source-code presence.
 const base=process.env.BOT_STUDIO_STAGING_URL??"https://bot-studio-staging.slavnauz.workers.dev";
 const bot="39237fdd-ec5d-415e-8634-e20c1d66edd1";
@@ -24,5 +25,19 @@ await check("buyer Mini App public catalogue","/api/miniapp?bot="+bot,(r,b)=>{
 if(process.env.EXPECT_PRIVILEGED==="1") await check("Privileged Supabase readiness","/api/health/auth",(r,b)=>{let data={};try{data=JSON.parse(b)}catch{}return {ok:r.status===200&&data.ok===true&&data.db==="reachable",note:data.db??"unknown"};});
 await check("Supabase project consistency","/api/auth/public-config",(r,b)=>{let d={};try{d=JSON.parse(b)}catch{}const host=typeof d.url==="string"?new URL(d.url).hostname:"missing";const expected="eslbcwopolrxoptcxqhp.supabase.co";return {ok:r.status===200&&host===expected&&typeof d.key==="string"&&d.key.length>20,note:host===expected?"staging project and public key present":"CONFIG_MISMATCH observed="+host+" expected="+expected};});
 await check("seller API unauthorized protection","/api/orders?bot="+bot,(r)=>({ok:r.status===401||r.status===403,note:"anonymous request blocked"}));
-console.log("Live Staging read-only checks: "+((process.env.EXPECT_PRIVILEGED==="1"?6:5)-failures)+"/"+(process.env.EXPECT_PRIVILEGED==="1"?6:5)+" passed");
+// Check provider initiation without user credentials or following external redirects.
+const pkceChallenge = createHash("sha256").update(randomBytes(32)).digest("base64url");
+const oauthProbe = new URL("https://eslbcwopolrxoptcxqhp.supabase.co/auth/v1/authorize");
+oauthProbe.searchParams.set("provider", "google");
+oauthProbe.searchParams.set("redirect_to", new URL("/auth/callback", base).toString());
+oauthProbe.searchParams.set("code_challenge", pkceChallenge);
+oauthProbe.searchParams.set("code_challenge_method", "s256");
+await check("Google OAuth provider redirect (no user login)",oauthProbe.toString(),(r)=>{
+  let hostname = "none";
+  try { hostname = new URL(r.headers.get("location") ?? "").hostname; } catch { /* no redirect */ }
+  const good = r.status >= 300 && r.status < 400 && hostname === "accounts.google.com";
+  return { ok: good, note: good ? "Google OAuth redirect available" : "provider redirect unavailable" };
+});
+
+console.log("Live Staging read-only checks: "+((process.env.EXPECT_PRIVILEGED==="1"?7:6)-failures)+"/"+(process.env.EXPECT_PRIVILEGED==="1"?7:6)+" passed");
 if(failures)process.exitCode=1;
