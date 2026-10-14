@@ -40,8 +40,9 @@ export async function GET(request:Request){
   if(!token.id_token)throw Error("MISSING_ID_TOKEN");
   const claims=await verifiedTelegramClaims(token.id_token,settings.TELEGRAM_OIDC_CLIENT_ID);
   const database=getSupabaseServer({privileged:true});
-  const tgId=Number(claims.sub);
-  if(!Number.isSafeInteger(tgId)||tgId<=0)throw Error("INVALID_TELEGRAM_ID");
+  // OIDC 'sub' is a subject string, not necessarily a safe JavaScript integer.
+  // The optional 'id' profile claim is the numeric Telegram user ID.
+  const tgId = Number.isSafeInteger(claims.id) && (claims.id ?? 0) > 0 ? claims.id : null;
   const profile={telegram_id:tgId,telegram_oidc_sub:claims.sub,first_name:(claims.given_name??claims.name??"Пользователь").slice(0,120),last_name:(claims.family_name??"").slice(0,120),telegram_username:claims.preferred_username??null,language_code:"ru"};
   const {data:existing,error:findError}=await database.from("app_users").select("id").eq("telegram_oidc_sub",claims.sub).maybeSingle();
   if(findError)throw Error("ACCOUNT_LOOKUP");
