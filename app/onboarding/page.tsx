@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, ArrowRight, Bot, Check, ChevronDown, CircleDollarSign, Clock3, CreditCard, ImagePlus, MapPin, Package, Palette, Plus, ShoppingBag, Sparkles, Store, Users, UtensilsCrossed } from "lucide-react";
@@ -58,6 +58,8 @@ export default function OnboardingPage() {
   const [botId, setBotId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState("");
+  const pendingCreateId = useRef<string | null>(null);
+  const creationInFlight = useRef(false);
   const template = useMemo(() => templates.find((item) => item.id === templateId) ?? templates[1], [templateId]);
   const TemplateIcon = template.icon;
   const progress = stage === "details" ? 20 : stage === "type" ? 40 : stage === "created" ? 60 : stage === "item" ? 80 : 100;
@@ -82,24 +84,40 @@ export default function OnboardingPage() {
   const initData = () => (window as typeof window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData;
 
   const createBot = async () => {
+    if (creationInFlight.current) return;
+    creationInFlight.current = true;
+    // Keep the same id after timeouts/retries. The server verifies ownership.
+    const candidateId = botId ?? (pendingCreateId.current ??= crypto.randomUUID());
     setSaveState("saving"); setSaveError("");
-    const response = await fetch("/api/onboarding", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ initData: initData(), botId, botName, description: botDescription, templateType: template.id, primaryColor, secondaryColor }),
-    });
-    const result = await response.json().catch(() => ({ error:"Сервис сохранения временно недоступен" })) as { bot?: { id?: string }; error?: string };
-    if (!response.ok || !result.bot?.id) { setSaveState("error"); setSaveError(result.error ?? "Не удалось создать бота"); return; }
-    const nextBotId = result.bot.id;
-    setBotId(nextBotId); localStorage.setItem("botStudioBotId", nextBotId);
-    if (logoFile) {
-      const form = new FormData(); form.append("botId", nextBotId); form.append("logo", logoFile);
-      if (initData()) form.append("initData", initData()!);
-      const logoResponse = await fetch("/api/bots/logo", { method:"POST", body:form });
-      const logoResult = await logoResponse.json() as { logoUrl?: string; error?: string };
-      if (logoResponse.ok && logoResult.logoUrl) setLogoUrl(logoResult.logoUrl);
-      else setSaveError("Бот создан, но логотип не загрузился. Его можно добавить позже.");
+    try {
+      const response = await fetch("/api/onboarding", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ initData: initData(), botId: candidateId, botName, description: botDescription, templateType: template.id, primaryColor, secondaryColor }),
+      });
+      const result = await response.json().catch(() => ({ error:"Сервис сохранения временно недоступен" })) as { bot?: { id?: string }; error?: string };
+      if (!response.ok || !result.bot?.id) throw new Error(result.error ?? "Не удалось создать бота");
+      const nextBotId = result.bot.id;
+      pendingCreateId.current = null;
+      setBotId(nextBotId);
+      try { localStorage.setItem("botStudioBotId", nextBotId); } catch { /* private browsing */ }
+      setStage("created");
+      setSaveState("idle");
+      if (logoFile) {
+        try {
+          const form = new FormData(); form.append("botId", nextBotId); form.append("logo", logoFile);
+          if (initData()) form.append("initData", initData()!);
+          const logoResponse = await fetch("/api/bots/logo", { method:"POST", body:form });
+          const logoResult = await logoResponse.json() as { logoUrl?: string; error?: string };
+          if (logoResponse.ok && logoResult.logoUrl) setLogoUrl(logoResult.logoUrl);
+          else setSaveError("Проект создан. Логотип можно добавить позднее.");
+        } catch { setSaveError("Проект создан. Логотип можно добавить позднее."); }
+      }
+    } catch (cause) {
+      setSaveState("error");
+      setSaveError(cause instanceof Error ? cause.message : "Не удалось сохранить проект. Повторите попытку.");
+    } finally {
+      creationInFlight.current = false;
     }
-    setSaveState("idle"); setStage("created");
   };
 
   const saveFirstItem = async () => {
