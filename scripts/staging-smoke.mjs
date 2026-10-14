@@ -39,5 +39,27 @@ await check("Google OAuth provider redirect (no user login)",oauthProbe.toString
   return { ok: good, note: good ? "Google OAuth redirect available" : "provider redirect unavailable" };
 });
 
-console.log("Live Staging read-only checks: "+((process.env.EXPECT_PRIVILEGED==="1"?7:6)-failures)+"/"+(process.env.EXPECT_PRIVILEGED==="1"?7:6)+" passed");
+async function unauthenticatedPost(name,path,payload) {
+  try {
+    const response = await fetch(new URL(path,base), {
+      method: "POST", redirect: "manual", signal: AbortSignal.timeout(20000),
+      headers: { "content-type": "application/json" }, body: JSON.stringify(payload),
+    });
+    const good = response.status === 401 || response.status === 403;
+    console.log((good?"PASS":"FAIL")+" "+name+" HTTP="+response.status+" anonymous request rejected");
+    if (!good) failures++;
+  } catch (error) {
+    console.log("FAIL "+name+" "+(error instanceof Error?error.name:"Unknown"));
+    failures++;
+  }
+}
+await unauthenticatedPost("seller bot creation protected","/api/onboarding",{
+  botId:"11111111-1111-4111-8111-111111111111",
+  botName:"CI unauthorized check",templateType:"store",
+});
+await unauthenticatedPost("Telegram BotFather linking protected","/api/channels/telegram/token",{
+  botId:"11111111-1111-4111-8111-111111111111",
+  action:"inspect",token:"123456789:"+ "A".repeat(46),
+});
+console.log("Live Staging read-only checks: "+((process.env.EXPECT_PRIVILEGED==="1"?9:8)-failures)+"/"+(process.env.EXPECT_PRIVILEGED==="1"?9:8)+" passed");
 if(failures)process.exitCode=1;
