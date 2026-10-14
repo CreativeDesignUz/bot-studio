@@ -9,6 +9,8 @@ type RequestPayload = { initData?: string; action?: "inspect" | "connect" | "dis
 type PendingCredential = { id: string; bot_id: string; channel_id: string; owner_id: string; external_account_id: string; external_username: string; token_ciphertext: string; token_iv: string; status: string; expires_at: string };
 type RuntimeBindings = typeof env & { PUBLIC_APP_URL?: string; TELEGRAM_TOKEN_ENCRYPTION_KEY?: string; TELEGRAM_TOKEN_ENCRYPTION_KEY_V2?: string; TELEGRAM_MANAGER_TOKEN?: string };
 
+class TelegramWebhookConflict extends Error {}
+
 const COMMANDS = [
   { command: "start", description: "Открыть главное меню" },
   { command: "help", description: "Помощь" },
@@ -94,19 +96,29 @@ export async function POST(request: Request) {
     catch { return errorResponse("Публичный HTTPS-адрес приложения не настроен.", 503, setCookie); }
     const runtimeSecret = crypto.randomUUID().replaceAll("-", "");
     const miniAppUrl = new URL(`/miniapp?bot=${payload.botId}`, origin).toString();
+    const webhookUrl = new URL(`/api/channels/telegram/project-runtime?channel=${pending.channel_id}`, origin).toString();
+    let webhookConfigured = false;
+    let connectedToken: string | null = null;
     try {
       const token = await decryptTelegramTokenFromKeyring(pending.token_ciphertext, pending.token_iv, encryptionKeys);
       const telegramBot = await getTelegramBotIdentity(token);
       if (String(telegramBot.id) !== pending.external_account_id) throw new Error("TELEGRAM_BOT_CHANGED");
+      connectedToken = token;
+      const previous = await telegramCall<{ url: string }>(token, "getWebhookInfo", {});
+      // Never hijack a webhook owned by another service or another Bot Studio project.
+      if (previous.url && previous.url !== webhookUrl) throw new TelegramWebhookConflict("WEBHOOK_ALREADY_IN_USE");
       await telegramCall(token, "setMyCommands", { commands: COMMANDS });
       await telegramCall(token, "setMyDescription", { description: bot.description.slice(0, 512) });
       await telegramCall(token, "setChatMenuButton", { menu_button: { type: "web_app", text: "Открыть", web_app: { url: miniAppUrl } } });
       await telegramCall(token, "setWebhook", {
-        url: new URL(`/api/channels/telegram/project-runtime?channel=${pending.channel_id}`, origin).toString(),
+        url: webhookUrl,
         secret_token: runtimeSecret,
         allowed_updates: ["message", "callback_query"],
         drop_pending_updates: false,
       });
+      webhookConfigured = true;
+      const webhook = await telegramCall<{ url: string }>(token, "getWebhookInfo", {});
+      if (webhook.url !== webhookUrl) throw new Error("WEBHOOK_VERIFICATION_FAILED");
       const { data: channel, error: channelError } = await supabase.rpc("complete_direct_telegram_connection", {
         p_credential_id: pending.id,
         p_bot_id: payload.botId,
@@ -116,9 +128,20 @@ export async function POST(request: Request) {
       });
       if (channelError || !channel) throw new Error("CONNECTION_COMMIT_FAILED");
       return withSessionCookie({ connected: true, bot: { name: telegramBot.first_name, username: telegramBot.username } }, 200, setCookie);
-    } catch {
+    } catch (cause) {
+      if (cause instanceof TelegramWebhookConflict) {
+        return errorResponse("У этого бота уже есть активный webhook другого сервиса. Отключите прежнюю интеграцию, затем повторите подключение.", 409, setCookie);
+      }
+      // Compensate only for the hook installed during this request, never delete
+      // a third-party webhook that could have been registered concurrently.
+      if (webhookConfigured && connectedToken) {
+        try {
+          const live = await telegramCall<{ url: string }>(connectedToken, "getWebhookInfo", {});
+          if (live.url === webhookUrl) await telegramCall(connectedToken, "deleteWebhook", { drop_pending_updates: false });
+        } catch { /* Keep original setup error; manual recovery remains possible. */ }
+      }
       await supabase.from("telegram_bot_credentials").update({ last_error: "Telegram connection configuration failed" }).eq("id", pending.id).eq("status", "pending");
-      return errorResponse("Не удалось настроить Telegram webhook. Проверьте токен и повторите подключение.", 502, setCookie);
+      return errorResponse("Не удалось завершить подключение Telegram. Проверьте настройки и повторите попытку.", 502, setCookie);
     }
   }
 
