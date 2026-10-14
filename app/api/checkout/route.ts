@@ -54,8 +54,8 @@ export async function POST(request: Request) {
       .eq("channel", "telegram").eq("status", "connected").single();
     if (!channel?.external_account_id) return reply("Telegram channel unavailable", 503);
 
-    const keys=env as typeof env & {TELEGRAM_MANAGER_TOKEN?:string;TELEGRAM_TOKEN_ENCRYPTION_KEY?:string};
-    const token = await getProjectBotToken(supabase, channel, {managerToken:keys.TELEGRAM_MANAGER_TOKEN,encryptionKey:keys.TELEGRAM_TOKEN_ENCRYPTION_KEY});
+    const keys=env as typeof env & {TELEGRAM_MANAGER_TOKEN?:string;TELEGRAM_TOKEN_ENCRYPTION_KEY?:string;TELEGRAM_TOKEN_ENCRYPTION_KEY_V2?:string};
+    const token = await getProjectBotToken(supabase, channel, {managerToken:keys.TELEGRAM_MANAGER_TOKEN,encryptionKey:keys.TELEGRAM_TOKEN_ENCRYPTION_KEY,encryptionKeyV2:keys.TELEGRAM_TOKEN_ENCRYPTION_KEY_V2});
     const customer = await verifyTelegramInitData(body.initData, token);
     if (!customer) return reply("Invalid Telegram session", 401);
 
