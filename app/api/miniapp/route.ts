@@ -4,7 +4,7 @@ import { getProjectBotToken } from "@/lib/channels/project-bot-token";
 import { verifyTelegramInitData } from "@/lib/telegram/init-data";
 
 type OrderItem = { id: string; quantity: number };
-type Checkout = { botId?: string; initData?: string; requestKey?: string; name?: string; items?: OrderItem[]; fulfillment?: "pickup" | "delivery"; address?: string };
+type Checkout = { botId?: string; initData?: string; requestKey?: string; name?: string; items?: OrderItem[]; fulfillment?: "pickup" | "delivery"; address?: string; latitude?:number;longitude?:number };
 
 const jsonError = (message: string, status: number) => Response.json({ error: message }, { status });
 const isUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -19,29 +19,34 @@ export async function GET(request: Request) {
       .eq("id", botId).single();
     if (error || !bot || bot.status !== "active" || bot.publish_status !== "published")
       return jsonError("Магазин ещё не опубликован", 404);
-    const [itemResult, categoryResult] = await Promise.all([
-      supabase.from("catalog_items")
-        .select("id,name,description,image_url,price_minor,currency,item_type,category_id,ingredients,allergens,preparation_minutes")
-        .eq("bot_id", botId).eq("is_active", true).order("position", { ascending: true }).limit(200),
-      supabase.from("catalog_categories")
-        .select("id,name,position").eq("bot_id", botId).eq("is_active", true).order("position"),
-    ]);
-    if (itemResult.error) throw itemResult.error;
-    if (categoryResult.error) throw categoryResult.error;
-    const items = itemResult.data;
-    const categories = categoryResult.data;
     const published = (bot.published_snapshot ?? {}) as Record<string, unknown>;
+    const catalog = (published.catalog ?? {}) as Record<string, unknown>;
+    if (!Array.isArray(catalog.items) || !Array.isArray(catalog.categories))
+      return jsonError("Каталог ожидает публикации или обновления базы данных", 503);
+    // Publication freezes content and price, while inventory availability is live.
+    const publishedItems = catalog.items as Array<{id:string;[key:string]:unknown}>;
+    const ids = publishedItems.map(item=>item.id);
+    let items = publishedItems;
+    if(ids.length){
+      const {data:inventory,error:inventoryError}=await supabase.from("catalog_items")
+        .select("id,stock_quantity").eq("bot_id",botId).in("id",ids);
+      if(inventoryError)return jsonError("Временно недоступна проверка остатков",503);
+      const stocks=new Map((inventory??[]).map(row=>[row.id,row.stock_quantity]));
+      items=publishedItems.filter(item=>stocks.has(item.id)&&((stocks.get(item.id)??1)>0));
+    }
+    const categories = catalog.categories;
     // Buyer-visible theme comes exclusively from the last successful publication,
     // not the seller's still-editable draft settings.
     const publishedSettings = (published.settings ?? {}) as Record<string, unknown>;
     const designSettings = publishedSettings.miniapp_design;
+    const deliverySettings = publishedSettings.delivery_zone;
     return Response.json({
       bot: {
         id: bot.id, name: published.name ?? bot.name, description: published.description ?? bot.description,
         logoUrl: published.logo_url ?? bot.logo_url, color: published.primary_color ?? bot.primary_color,
         template: published.template_type ?? bot.template_type,
       },
-      items: items ?? [], categories: categories??[], design:designSettings??null,
+      items: items ?? [], categories: categories??[], design:designSettings??null, delivery:deliverySettings??null,
     }, { headers: { "cache-control": "no-store" } });
   } catch {
     return jsonError("Временная ошибка загрузки каталога", 503);
@@ -49,17 +54,35 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  // Checkout must be a bounded JSON object. Reject malformed input before any
+  // privileged database or Telegram token lookup is performed.
+  const MAX_CHECKOUT_BYTES = 32 * 1024;
+  const declaredLength = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_CHECKOUT_BYTES)
+    return jsonError("Слишком большой запрос", 413);
   let input: Checkout;
-  try { input = await request.json() as Checkout; } catch { return jsonError("Некорректный запрос", 400); }
-  if (!input.botId || !isUuid(input.botId) || !input.initData || !Array.isArray(input.items) ||
+  try {
+    const raw = await request.text();
+    if (new TextEncoder().encode(raw).byteLength > MAX_CHECKOUT_BYTES)
+      return jsonError("Слишком большой запрос", 413);
+    const body: unknown = JSON.parse(raw);
+    if (!body || typeof body !== "object" || Array.isArray(body))
+      return jsonError("Некорректный запрос", 400);
+    input = body as Checkout;
+  } catch { return jsonError("Некорректный запрос", 400); }
+  if (typeof input.botId !== "string" || !isUuid(input.botId) || typeof input.initData !== "string" || !input.initData ||
+      typeof input.requestKey !== "string" || typeof input.name !== "string" ||
+      !Array.isArray(input.items) ||
       !/^[A-Za-z0-9_-]{16,128}$/.test(input.requestKey ?? "") ||
       !input.items.length || input.items.length > 50 ||
-      !input.items.every(item => isUuid(item.id) && Number.isInteger(item.quantity) && item.quantity > 0 && item.quantity <= 99) ||
+      !input.items.every(item => item && typeof item === "object" && typeof item.id === "string" && isUuid(item.id) && Number.isInteger(item.quantity) && item.quantity > 0 && item.quantity <= 99) ||
       !["pickup", "delivery"].includes(input.fulfillment ?? "")) return jsonError("Проверьте данные заказа", 400);
   const name = (input.name ?? "").trim().slice(0, 100);
   if (!name) return jsonError("Укажите имя получателя", 400);
+  if (input.address != null && typeof input.address !== "string") return jsonError("Некорректный адрес", 400);
   const address = (input.address ?? "").trim().slice(0, 500);
   if (input.fulfillment === "delivery" && !address) return jsonError("Укажите адрес доставки", 400);
+  if(input.fulfillment==="delivery"&&(!Number.isFinite(input.latitude)||!Number.isFinite(input.longitude)||typeof input.latitude!=="number"||typeof input.longitude!=="number"||Math.abs(input.latitude)>85||Math.abs(input.longitude)>180))return jsonError("Укажите точку доставки на карте",400);
 
   try {
     const supabase = getSupabaseServer({ privileged: true });
@@ -87,6 +110,8 @@ export async function POST(request: Request) {
       p_customer_name: name,
       p_fulfillment: input.fulfillment,
       p_delivery_address: address,
+      p_lat: input.fulfillment==="delivery"?input.latitude:null,
+      p_lng: input.fulfillment==="delivery"?input.longitude:null,
       p_items: [...quantities].map(([id, quantity]) => ({ id, quantity })),
       p_request_key: input.requestKey,
     });

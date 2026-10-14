@@ -3,10 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Check, Minus, Plus, Search, ShoppingBag, Store, Truck, UserRound, X } from "lucide-react";
 import ServiceMiniApp from "./service-miniapp";
+import DeliveryLocationPicker, {type Point} from "./delivery-location-picker";
 
 type Item = { id: string; name: string; description: string; image_url: string | null; price_minor: number | null; currency: string; category_id?:string|null;ingredients?:string[];allergens?:string[];preparation_minutes?:number|null };
-type Shop = { bot: { id: string; name: string; description: string; logoUrl: string | null; color: string; template: string }; items: Item[]; categories?:{id:string;name:string;position:number}[]; design?:{layout?:"food01"|"food02";color?:string;dark?:boolean}|null };
+type Shop = { bot: { id: string; name: string; description: string; logoUrl: string | null; color: string; template: string }; items: Item[]; categories?:{id:string;name:string;position:number}[]; delivery?:DeliveryZone|null; design?:{layout?:"food01"|"food02";color?:string;dark?:boolean;themeMode?:"light"|"dark"|"customer";defaultTheme?:"system"|"light"|"dark";banner?:{enabled:boolean;title:string;description:string;imageUrl:string;buttonEnabled:boolean;buttonText:string;linkType:"category"|"product"|"page"|"external";target:string}}|null };
+type DeliveryZone={enabled:boolean;centerLat:number;centerLng:number;radiusKm:number;feeMinor:number};
 type Tab = "catalog" | "cart" | "profile";
+function deliveryDistanceKm(zone:DeliveryZone,lat:number,lng:number){const rad=Math.PI/180;const a=Math.sin((lat-zone.centerLat)*rad/2)**2+Math.cos(zone.centerLat*rad)*Math.cos(lat*rad)*Math.sin((lng-zone.centerLng)*rad/2)**2;return 6371.0088*2*Math.asin(Math.sqrt(Math.min(1,Math.max(0,a))));}
 
 const money = (value: number, currency = "UZS") => new Intl.NumberFormat("ru-RU", {
   style: "currency", currency, maximumFractionDigits: currency === "UZS" ? 0 : 2,
@@ -16,6 +19,8 @@ export default function MiniAppPage() {
   const [shop, setShop] = useState<Shop | null>(null);
   const [loading, setLoading] = useState(true);
   const [retryCount, setRetryCount] = useState(0);
+  const [customerTheme,setCustomerTheme]=useState<"light"|"dark"|null>(null);
+  const [telegramTheme,setTelegramTheme]=useState<"light"|"dark">("light");
   const [error, setError] = useState("");
   const [tab, setTab] = useState<Tab>("catalog");
   const [category,setCategory]=useState("all");
@@ -26,6 +31,7 @@ export default function MiniAppPage() {
   const [name, setName] = useState("");
   const [fulfillment, setFulfillment] = useState<"pickup" | "delivery">("pickup");
   const [address, setAddress] = useState("");
+  const [deliveryPoint,setDeliveryPoint]=useState<Point|null>(null);
   const [sending, setSending] = useState(false);
   const [success, setSuccess] = useState("");
   const [quantityError, setQuantityError] = useState("");
@@ -49,16 +55,59 @@ export default function MiniAppPage() {
     return () => { controller.abort(); clearTimeout(timeout); };
   }, [retryCount]);
 
+  useEffect(()=>{
+    const telegram=(window as typeof window & {Telegram?:{WebApp?:{colorScheme?:string;onEvent?:(name:string,cb:()=>void)=>void;offEvent?:(name:string,cb:()=>void)=>void;setHeaderColor?:(color:string)=>void;setBackgroundColor?:(color:string)=>void}}}).Telegram?.WebApp;
+    const sync=()=>setTelegramTheme(telegram?.colorScheme==="dark"?"dark":"light");
+    sync();telegram?.onEvent?.("themeChanged",sync);
+    return ()=>telegram?.offEvent?.("themeChanged",sync);
+  },[]);
+  useEffect(()=>{
+    if(!shop)return;
+    queueMicrotask(()=>{try{const saved=localStorage.getItem("miniapp-theme:"+shop.bot.id);setCustomerTheme(saved==="light"||saved==="dark"?saved:null);}catch{setCustomerTheme(null);}});
+  },[shop?.bot.id]);
+  function setBuyerTheme(next:"light"|"dark"){
+    setCustomerTheme(next);
+    if(shop)try{localStorage.setItem("miniapp-theme:"+shop.bot.id,next);}catch{}
+  }
+  function bannerAction(){
+    const b=shop?.design?.banner;
+    if(!b?.buttonEnabled)return;
+    if(b.linkType==="external"){
+      const webApp=(window as typeof window & {Telegram?:{WebApp?:{openLink?:(url:string)=>void}}}).Telegram?.WebApp;
+      try{const url=new URL(b.target);if(url.protocol!=="https:")return; if(webApp?.openLink)webApp.openLink(url.toString());else window.open(url.toString(),"_blank","noopener,noreferrer");}catch{}
+    }else if(b.linkType==="page" && ["catalog","cart","profile"].includes(b.target)){
+      setTab(b.target as Tab);setShowFoodCategories(false);
+    }else if(b.linkType==="category" && shop?.categories?.some(c=>c.id===b.target)){
+      setCategory(b.target);setTab("catalog");setShowFoodCategories(true);
+    }else if(b.linkType==="product" && shop?.items.some(i=>i.id===b.target)){
+      setDetailId(b.target);setTab("catalog");
+    }
+  }
+
   const count = Object.values(cart).reduce((total, value) => total + value, 0);
   const selected = useMemo(() => (shop?.items ?? []).filter(item => cart[item.id] > 0), [shop, cart]);
   const total = selected.reduce((sum, item) => sum + Number(item.price_minor ?? 0) * cart[item.id], 0);
   const currency = selected[0]?.currency ?? "UZS";
+  const deliveryZone=shop?.delivery;
+  const deliveryAvailable=deliveryZone?.enabled===true;
+  const insideZone=Boolean(deliveryAvailable&&deliveryPoint&&deliveryDistanceKm(deliveryZone!,deliveryPoint.lat,deliveryPoint.lng)<=deliveryZone!.radiusKm);
+  const deliveryFee=fulfillment==="delivery"&&insideZone?(deliveryZone?.feeMinor??0):0;
+  const deliveryInvalid=fulfillment==="delivery"&&(!deliveryAvailable||!insideZone||currency!=="UZS");
   const mixedCurrency = new Set(selected.map(item => item.currency)).size > 1;
   const isFood=shop?.bot.template==="delivery";
-  const dark=isFood&&shop?.design?.dark===true;
+  const themeMode=shop?.design?.themeMode??(shop?.design?.dark?"dark":"light");
+  const defaultTheme=shop?.design?.defaultTheme??"system";
+  const preferredTheme=customerTheme??(defaultTheme==="system"?telegramTheme:defaultTheme);
+  const dark=isFood&&(themeMode==="dark"||(themeMode==="customer"&&preferredTheme==="dark"));
   const foodStyle=shop?.design?.layout==="food02"?"food02":"food01";
   const color = isFood&&/^#[\da-f]{6}$/i.test(shop?.design?.color??"")?shop!.design!.color!: /^#[\da-f]{6}$/i.test(shop?.bot.color ?? "") ? shop!.bot.color : "#6541F5";
   const paper=dark?"#20242A":"#fff";const pageBg=dark?"#111418":"#f7f8fa";const ink=dark?"#f9fafb":"#18212b";const hint=dark?"#abb3c1":"#687281";
+  useEffect(()=>{
+    if(!shop||shop.bot.template!=="delivery")return;
+    const webApp=(window as typeof window & {Telegram?:{WebApp?:{setHeaderColor?:(color:string)=>void;setBackgroundColor?:(color:string)=>void}}}).Telegram?.WebApp;
+    webApp?.setHeaderColor?.(dark?"#20242A":"#edf0f2");
+    webApp?.setBackgroundColor?.(dark?"#111418":"#f7f8fa");
+  },[dark,shop?.bot.id]);
   const detailItem=(shop?.items??[]).find(item=>item.id===detailId);
   const visibleFood=(shop?.items??[]).filter(x=>(category==="all"||x.category_id===category)&&[x.name,x.description].join(" ").toLowerCase().includes(foodSearch.trim().toLowerCase()));
 
@@ -75,6 +124,7 @@ export default function MiniAppPage() {
   async function checkout() {
     if (!shop || sending || !selected.length) return;
     if (mixedCurrency) { setError("В одном заказе нельзя смешивать сумы и доллары. Выберите позиции в одной валюте."); return; }
+    if(deliveryInvalid){setError("Доставка недоступна по этому адресу или для выбранной валюты.");return;}
     const telegram = (window as typeof window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp;
     if (!telegram?.initData) { setError("Для оформления заказа откройте магазин через Telegram"); return; }
     checkoutKey.current ??= crypto.randomUUID().replaceAll("-", "");
@@ -84,7 +134,7 @@ export default function MiniAppPage() {
     try {
       const response = await fetch("/api/miniapp", {
         method: "POST", headers: { "content-type": "application/json" }, signal: controller.signal,
-        body: JSON.stringify({ botId: shop.bot.id, initData: telegram.initData, requestKey: checkoutKey.current, name, fulfillment, address,
+        body: JSON.stringify({ botId: shop.bot.id, initData: telegram.initData, requestKey: checkoutKey.current, name, fulfillment, address, latitude:fulfillment==="delivery"?deliveryPoint?.lat:undefined,longitude:fulfillment==="delivery"?deliveryPoint?.lng:undefined,
           items: selected.map(item => ({ id: item.id, quantity: cart[item.id] })) }),
       });
       const body = await response.json() as { error?: string; orderId?: string };
@@ -104,7 +154,9 @@ export default function MiniAppPage() {
 
   return <main className="min-h-dvh pb-28" style={{fontFamily:"Inter,system-ui,sans-serif",background:pageBg,color:ink}}>
     <div className="mx-auto max-w-[550px]">
-      {isFood?<header className="sticky top-0 z-20 flex h-[54px] items-center justify-between border-b px-5 text-sm" style={{background:dark?"#20242A":"#edf0f2",borderColor:dark?"#333941":"#e9edf0"}}><button onClick={()=>{setTab("catalog");setShowFoodCategories(false);setCategory("all")}} aria-label="На главную" className="text-[26px] leading-none">‹</button><strong className="text-[15px]">{shop.bot.name}</strong><span className="text-lg">•••</span></header>:
+      {isFood&&themeMode==="customer"&&<div className="flex justify-end gap-2 px-5 pt-2 text-xs"><button type="button" aria-pressed={!dark} onClick={()=>setBuyerTheme("light")} className="rounded-full px-3 py-1" style={{background:!dark?color:paper,color:!dark?"white":ink}}>Светлая</button><button type="button" aria-pressed={!!dark} onClick={()=>setBuyerTheme("dark")} className="rounded-full px-3 py-1" style={{background:dark?color:paper,color:dark?"white":ink}}>Тёмная</button></div>}
+
+      {isFood?<div className="px-5 pt-4"><p className="text-sm font-semibold" style={{color:ink}}>{shop.bot.name}</p></div>:
       <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-[#e9edf2] bg-white/95 px-5 py-4 backdrop-blur">
         {shop.bot.logoUrl ? <img src={shop.bot.logoUrl} alt="" className="size-12 rounded-2xl object-cover"/> :
           <span className="grid size-12 place-items-center rounded-2xl text-white" style={{ backgroundColor: color }}><Store className="size-6"/></span>}
@@ -134,10 +186,11 @@ export default function MiniAppPage() {
             <button aria-label={`Добавить ${item.name}`} onClick={()=>adjust(item.id,1)} className="grid size-8 shrink-0 place-items-center rounded-full text-white" style={{background:color}}><Plus size={16}/></button>
           </article>)}</div>
         </>:<>
-          <div className="relative mt-5 overflow-hidden rounded-[21px] p-5" style={{background:foodStyle==="food01"?(dark?"#452c27":"#fff0e8"):color,minHeight:155}}>
-           <div className="relative z-10 max-w-[65%]"><p className="text-[10px] font-semibold uppercase tracking-wider" style={{color:foodStyle==="food01"?color:"#fff"}}>Готовим с любовью</p><h2 className="mt-2 text-[21px] font-bold leading-tight" style={{color:foodStyle==="food01"?ink:"#fff"}}>Вкусная еда рядом</h2><p className="mt-2 text-xs" style={{color:foodStyle==="food01"?hint:"#fff"}}>Выбирайте любимые блюда и оформляйте заказ</p></div>
-           {shop.items[0]?.image_url&&<img src={shop.items[0].image_url} alt="" className="absolute -bottom-3 -right-6 size-[145px] rounded-full object-cover"/>}
-          </div>
+          {shop.design?.banner?.enabled!==false&&<div className="relative mt-5 overflow-hidden rounded-[21px] p-5" style={{background:foodStyle==="food01"?(dark?"#452c27":"#fff0e8"):color,minHeight:155}}>
+           <div className="relative z-10 max-w-[66%]"><p className="text-[10px] font-semibold uppercase tracking-wider" style={{color:foodStyle==="food01"?color:"#fff"}}>Готовим с любовью</p><h2 className="mt-2 text-[21px] font-bold leading-tight" style={{color:foodStyle==="food01"?ink:"#fff"}}>{shop.design?.banner?.title||"Вкусная еда рядом"}</h2><p className="mt-2 text-xs" style={{color:foodStyle==="food01"?hint:"#fff"}}>{shop.design?.banner?.description||"Выбирайте любимые блюда и оформляйте заказ"}</p>
+           {shop.design?.banner?.buttonEnabled&&<button type="button" onClick={bannerAction} className="mt-3 rounded-lg px-3 py-2 text-xs font-semibold" style={{background:foodStyle==="food01"?color:"#fff",color:foodStyle==="food01"?"#fff":color}}>{shop.design.banner.buttonText}</button>}</div>
+           {(shop.design?.banner?.imageUrl||shop.items[0]?.image_url)&&<img src={shop.design?.banner?.imageUrl||shop.items[0]?.image_url||""} alt="" className="absolute -bottom-3 -right-6 size-[145px] rounded-full object-cover"/>}
+          </div>}
           <div className="mt-6 flex items-center justify-between"><h2 className="text-lg font-bold">Категории</h2><button onClick={()=>setShowFoodCategories(true)} className="text-xs font-semibold" style={{color}}>Все →</button></div>
           <div className={foodStyle==="food01"?"mt-3 grid grid-cols-2 gap-2":"mt-3 flex gap-2 overflow-x-auto pb-2"}>{(shop.categories??[]).slice(0,6).map(c=><button key={c.id} onClick={()=>{setCategory(c.id);setShowFoodCategories(true)}} className={foodStyle==="food01"?"h-[46px] rounded-[13px] px-[14px] text-left text-[13px] font-semibold":"shrink-0 rounded-[13px] px-4 py-3 text-[13px] font-semibold"} style={{background:paper}}>{c.name}</button>)}</div>
           <h2 className="mb-3 mt-7 text-lg font-bold">Популярные блюда</h2>
@@ -189,11 +242,14 @@ export default function MiniAppPage() {
         </article>)}</div>
           <div className="mt-6 rounded-2xl bg-white p-5"><h3 className="mb-4 font-bold">Оформление заказа</h3><label className="mb-3 block text-sm">Имя получателя<input value={name} onChange={e=>{checkoutKey.current=null;setName(e.target.value)}} maxLength={100} className="mt-1 block h-12 w-full rounded-xl border border-[#d0d5dd] px-3 outline-none focus:border-[#667085]" placeholder="Ваше имя"/></label>
             <div className="mb-3 grid grid-cols-2 gap-2"><button onClick={()=>{checkoutKey.current=null;setFulfillment("pickup")}} className={`flex items-center justify-center gap-2 rounded-xl border p-3 text-sm ${fulfillment==="pickup"?"border-[#101828] bg-[#f2f4f7]":"border-[#d0d5dd]"}`}><Store size={16}/> Самовывоз</button><button onClick={()=>{checkoutKey.current=null;setFulfillment("delivery")}} className={`flex items-center justify-center gap-2 rounded-xl border p-3 text-sm ${fulfillment==="delivery"?"border-[#101828] bg-[#f2f4f7]":"border-[#d0d5dd]"}`}><Truck size={16}/> Доставка</button></div>
-            {fulfillment==="delivery" && <label className="block text-sm">Адрес доставки<textarea value={address} onChange={e=>{checkoutKey.current=null;setAddress(e.target.value)}} maxLength={500} className="mt-1 block min-h-20 w-full rounded-xl border border-[#d0d5dd] p-3" placeholder="Улица, дом, квартира"/></label>}
+            {fulfillment==="delivery" && <div className="space-y-3"><DeliveryLocationPicker key={shop.bot.id+":"+String(deliveryZone?.centerLat)+":"+String(deliveryZone?.centerLng)} initialCenter={deliveryZone?{lat:deliveryZone.centerLat,lng:deliveryZone.centerLng}:undefined} value={deliveryPoint} onChange={point=>{checkoutKey.current=null;setDeliveryPoint(point);}}/><label className="block text-sm">Адрес доставки<textarea value={address} onChange={e=>{checkoutKey.current=null;setAddress(e.target.value)}} maxLength={500} className="mt-1 block min-h-20 w-full rounded-xl border border-[#d0d5dd] p-3" placeholder="Улица, дом, квартира, подъезд, этаж"/></label></div>}
+            {fulfillment==="delivery"&&!deliveryAvailable&&<p role="alert" className="mb-3 text-sm text-red-600">Продавец ещё не настроил доставку. Выберите самовывоз.</p>}
+            {fulfillment==="delivery"&&deliveryAvailable&&deliveryPoint&&!insideZone&&<p role="alert" className="mb-3 text-sm text-red-600">Точка находится вне зоны доставки. Выберите другую точку или самовывоз.</p>}
+            {fulfillment==="delivery"&&currency!=="UZS"&&<p role="alert" className="mb-3 text-sm text-red-600">Доставка пока доступна только для заказов в сумах (UZS).</p>}
             {mixedCurrency && <p role="alert" className="mb-3 rounded-lg bg-[#fff7ed] p-3 text-sm text-[#9a3412]">Для заказа выберите позиции в одной валюте: UZS или USD.</p>}
-            <div className="my-4 flex items-center justify-between border-t border-[#eaecf0] pt-4"><span className="text-[#667085]">Итого</span><b className="text-xl">{mixedCurrency ? "Разные валюты" : money(total,currency)}</b></div>
-            <p className="mb-4 text-xs text-[#667085]">Оплата при получении. Стоимость доставки уточняется магазином.</p>
-            <button onClick={checkout} disabled={sending || mixedCurrency || !name.trim() || (fulfillment==="delivery" && !address.trim())} style={{backgroundColor:color}} className="w-full rounded-xl py-4 font-semibold text-white disabled:opacity-50">{sending?"Оформляем…":"Оформить заказ"}</button>
+            <div className="my-4 space-y-2 border-t border-[#eaecf0] pt-4"><div className="flex justify-between text-sm"><span>Товары</span><span>{money(total,currency)}</span></div>{fulfillment==="delivery"&&insideZone&&<div className="flex justify-between text-sm"><span>Доставка</span><span>{money(deliveryFee,"UZS")}</span></div>}<div className="flex justify-between font-bold"><span>Итого</span><span>{mixedCurrency?"Разные валюты":money(total+deliveryFee,currency)}</span></div></div>
+            <p className="mb-4 text-xs text-[#667085]">Оплата при получении. Стоимость доставки и доступность зоны проверяются при оформлении.</p>
+            <button onClick={checkout} disabled={sending || mixedCurrency || deliveryInvalid || !name.trim() || (fulfillment==="delivery" && (!address.trim()||!deliveryPoint))} style={{backgroundColor:color}} className="w-full rounded-xl py-4 font-semibold text-white disabled:opacity-50">{sending?"Оформляем…":"Оформить заказ"}</button>
           </div>
         </>}
       </section>}

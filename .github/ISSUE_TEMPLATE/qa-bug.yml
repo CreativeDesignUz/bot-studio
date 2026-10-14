@@ -1,0 +1,63 @@
+name: QA Bug Report
+description: Ошибка из CI, QA Agent, ручного теста или обратной связи клиента
+title: "[QA] "
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: source
+    attributes:
+      label: Источник
+      options:
+        - QA Agent (автоматический тест)
+        - GitHub Actions (CI)
+        - Ручная проверка
+        - Клиент
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Серьёзность
+      options:
+        - Critical — потеря данных / безопасность / платежи
+        - High — основной сценарий не работает
+        - Medium — функция частично не работает
+        - Low — визуальная или некритичная ошибка
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Среда / версия
+      placeholder: staging, commit SHA, Telegram iOS / Android / Desktop
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Шаги воспроизведения
+      placeholder: "1. Создать категорию\n2. Опубликовать меню\n3. Открыть Mini App"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Ожидаемый результат
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Фактический результат
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Доказательства
+      description: Ссылки на безопасные скриншоты, CI Run, trace. Без секретов и персональных данных.
+  - type: textarea
+    id: resolution
+    attributes:
+      label: Исправление и повторная проверка
+      description: PR/коммит, тест, статус E2E, дата выпуска; заполняется по мере выполнения.

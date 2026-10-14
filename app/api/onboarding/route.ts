@@ -14,7 +14,12 @@ type Payload = {
 };
 
 export async function POST(request: Request) {
-  const payload = await request.json() as Payload;
+  let payload: Payload;
+  try {
+    const input: unknown = await request.json();
+    if (!input || typeof input !== "object" || Array.isArray(input)) return Response.json({ error: "Некорректный запрос." }, { status: 400 });
+    payload = input as Payload;
+  } catch { return Response.json({ error: "Некорректный JSON." }, { status: 400 }); }
   if (!payload.botName?.trim() || !isBotTemplateType(payload.templateType) || !isValidRequestKey(payload.requestKey)) {
     return Response.json({ error: "Bot name, template and request key are required" }, { status: 400 });
   }

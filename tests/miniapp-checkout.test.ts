@@ -29,3 +29,15 @@ test("atomic checkout migration restricts privilege and validates tenant-owned p
   assert.match(sql, /revoke all on function public\.create_miniapp_order.*from public, anon, authenticated/);
   assert.match(sql, /grant execute on function public\.create_miniapp_order.*to service_role/);
 });
+
+test("checkout rejects malformed request bodies before privileged access", async () => {
+  const api = await readFile(new URL("../app/api/miniapp/route.ts", import.meta.url), "utf8");
+  assert.match(api, /MAX_CHECKOUT_BYTES = 32 \* 1024/);
+  assert.match(api, /typeof body !== "object" \|\| Array\.isArray\(body\)/);
+  assert.match(api, /typeof input\.botId !== "string"/);
+  assert.match(api, /typeof input\.initData !== "string"/);
+  assert.match(api, /typeof input\.name !== "string"/);
+  assert.match(api, /item && typeof item === "object"/);
+  assert.match(api, /typeof input\.address !== "string"/);
+  assert.ok(api.indexOf("JSON.parse(raw)") < api.indexOf("getSupabaseServer({ privileged: true });", api.indexOf("export async function POST")));
+});

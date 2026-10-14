@@ -2,11 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("buyer menu fetches category and item results concurrently", async () => {
+test("buyer menu reads only published category and item snapshot", async () => {
   const code = await readFile(new URL("../app/api/miniapp/route.ts", import.meta.url), "utf8");
-  assert.match(code, /Promise\.all\(\[/);
-  assert.match(code, /itemResult\.error/);
-  assert.match(code, /categoryResult\.error/);
+  assert.match(code, /published\.catalog/);
+  assert.match(code, /catalog\.items/);
+  assert.match(code, /catalog\.categories/);
+  assert.match(code, /publishedItems\.filter/);
 });
 
 test("buyer-visible design reads only the immutable published snapshot", async () => {

@@ -21,3 +21,23 @@ test("catalog endpoints verify owner and constrain every write by bot and item t
   assert.match(route, /\.eq\("item_type", auth\.itemType\)/);
   assert.match(route, /is_active: false/);
 });
+
+test("new catalog item respects selected currency and seller workspace has no demo seed", async () => {
+  const [route, manager] = await Promise.all([
+    readFile(new URL("../app/api/catalog/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/workspace/catalog-manager.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(route, /currency: input\.currency \?\? "UZS"/);
+  assert.doesNotMatch(route, /item_type: auth\.itemType, currency: "UZS"/);
+  assert.doesNotMatch(manager, /fillUzbekMenu|Добавить узбекские блюда|\/api\/catalog\/seed-uzbek/);
+});
+
+test("restaurant menu has dedicated category management and category-aware item creation", async () => {
+  const manager = await readFile(new URL("../app/workspace/catalog-manager.tsx", import.meta.url), "utf8");
+  assert.match(manager, /role="tablist" aria-label="Управление меню"/);
+  assert.match(manager, /setMenuView\("categories"\)/);
+  assert.match(manager, /setMenuView\("items"\)/);
+  assert.match(manager, /Категорий пока нет/);
+  assert.match(manager, /chosenCategory === "all" \? "" : chosenCategory/);
+  assert.match(manager, /categoryId:categoryId\|\|null/);
+});

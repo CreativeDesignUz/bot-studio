@@ -26,3 +26,18 @@ test("rejects modified and expired Telegram initData", async () => {
   assert.equal(await verifyTelegramInitData(valid.replace("Ali", "Vali"), "123:token"), null);
   assert.equal(await verifyTelegramInitData(await signedInitData("123:token", now - 90_000), "123:token"), null);
 });
+
+test("rejects duplicate signed parameters even when one value is valid", async () => {
+  const data = await signedInitData("123:token", Math.floor(Date.now() / 1000));
+  assert.equal(await verifyTelegramInitData(data + "&user=%7B%7D", "123:token"), null);
+  assert.equal(await verifyTelegramInitData(data + "&hash=" + "a".repeat(64), "123:token"), null);
+});
+
+test("rejects malformed timestamps, unreasonably future auth and malformed signatures", async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const valid = await signedInitData("123:token", now);
+  assert.equal(await verifyTelegramInitData(valid.replace(/auth_date=\d+/, "auth_date=NaN"), "123:token"), null);
+  assert.equal(await verifyTelegramInitData(valid.replace(/hash=[a-f0-9]{64}/, "hash=invalid"), "123:token"), null);
+  assert.equal(await verifyTelegramInitData(await signedInitData("123:token", now + 120), "123:token"), null);
+  assert.equal(await verifyTelegramInitData(valid, ""), null);
+});

@@ -31,11 +31,18 @@ function secureEqual(left: string, right: string) {
 }
 
 export async function verifyTelegramInitData(initData: string, botToken: string, maxAgeSeconds = 86_400) {
+  if (!initData || initData.length > 16_384 || !botToken || !Number.isFinite(maxAgeSeconds) || maxAgeSeconds <= 0) return null;
   const params = new URLSearchParams(initData);
+  // Reject ambiguous query strings: get() returns only the first value, while
+  // Telegram's signature covers every key-value pair.
+  const keys = [...params.keys()];
+  if (new Set(keys).size !== keys.length) return null;
   const receivedHash = params.get("hash") ?? "";
-  const authDate = Number(params.get("auth_date") ?? 0);
+  const timestamp = params.get("auth_date") ?? "";
+  if (!/^[a-f0-9]{64}$/i.test(receivedHash) || !/^[0-9]{1,16}$/.test(timestamp)) return null;
+  const authDate = Number(timestamp);
   const now = Math.floor(Date.now() / 1000);
-  if (!receivedHash || !authDate || now - authDate > maxAgeSeconds || authDate > now + 60) return null;
+  if (!Number.isSafeInteger(authDate) || authDate <= 0 || now - authDate > maxAgeSeconds || authDate > now + 60) return null;
 
   params.delete("hash");
   const checkString = [...params.entries()]
@@ -48,7 +55,7 @@ export async function verifyTelegramInitData(initData: string, botToken: string,
 
   try {
     const user = JSON.parse(params.get("user") ?? "null") as TelegramMiniAppUser | null;
-    return user?.id ? user : null;
+    return user && Number.isSafeInteger(user.id) && user.id > 0 && typeof user.first_name === "string" ? user : null;
   } catch {
     return null;
   }
