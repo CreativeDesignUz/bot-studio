@@ -35,7 +35,7 @@ test("workspace exposes real bot and Mini App settings instead of decorative con
  assert.match(workspace,/templateType=\{bot\.template_type\}/);
  assert.match(builder,/scrollToSection/);
  assert.match(builder,/aria-label="Разделы настроек бота"/);
- assert.doesNotMatch(builder,/xl:grid-cols-\\[250px_minmax/);
+ assert.doesNotMatch(builder,/xl:grid-cols-\[250px_minmax/);
  assert.match(builder,/encryptionReady===false/);
  assert.match(builder,/section=miniapp_appearance/);
  assert.doesNotMatch(builder,/\["Основное","Меню","Кнопки","Доставка","Оплата","Уведомления"\]/);
