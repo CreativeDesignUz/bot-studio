@@ -139,7 +139,7 @@ export default function OnboardingPage() {
       <nav className="onboarding-steps">
         <Step number="1" label="Название и дизайн" active={stage === "details"} done={stage !== "details"} />
         <Step number="2" label="Тип и возможности" active={stage === "type"} done={stage === "created" || stage === "item" || stage === "done"} />
-        <Step number="3" label="Бот создан" active={stage === "created"} done={stage === "item" || stage === "done"} />
+        <Step number="3" label="Проект создан" active={stage === "created"} done={stage === "item" || stage === "done"} />
         <Step number="4" label="Первый элемент" active={stage === "item"} done={stage === "done"} />
         <Step number="5" label="Готов к запуску" active={stage === "done"} done={false} />
       </nav>
@@ -148,7 +148,7 @@ export default function OnboardingPage() {
     <section className="onboarding-main">
       <header className="onboarding-header">
         <Link href="/" className="back-link"><ArrowLeft />Назад в кабинет</Link>
-        <div className="onboarding-bot-chip"><span className="switcher-avatar violet" style={{background:secondaryColor,color:primaryColor}}>{logoPreview || logoUrl ? <img src={logoPreview || logoUrl} alt="" /> : templateId ? <TemplateIcon /> : <Bot />}</span><span><small>{stage === "created" || stage === "item" || stage === "done" ? "Бот создан" : "Новый бот"}</small><strong>{botName || "Без названия"}</strong></span><ChevronDown /></div>
+        <div className="onboarding-bot-chip"><span className="switcher-avatar violet" style={{background:secondaryColor,color:primaryColor}}>{logoPreview || logoUrl ? <img src={logoPreview || logoUrl} alt="" /> : templateId ? <TemplateIcon /> : <Bot />}</span><span><small>{stage === "created" || stage === "item" || stage === "done" ? "Проект создан" : "Новый проект"}</small><strong>{botName || "Без названия"}</strong></span><ChevronDown /></div>
       </header>
       <div className="onboarding-content">
         {stage === "details" && <DetailsStep template={template} botName={botName} setBotName={setBotName} botDescription={botDescription} setBotDescription={setBotDescription} primaryColor={primaryColor} setPrimaryColor={setPrimaryColor} secondaryColor={secondaryColor} setSecondaryColor={setSecondaryColor} logoPreview={logoPreview} setLogoFile={selectLogo} onNext={() => setStage("type")} />}
@@ -192,15 +192,15 @@ function BotPreview({ template, name, description, primaryColor, secondaryColor,
 }
 
 function CreatedStep({ template, botName, botDescription, primaryColor, secondaryColor, logoPreview, warning, onEdit, onStart }: { template:Template; botName:string; botDescription:string; primaryColor:string; secondaryColor:string; logoPreview:string; warning:string; onEdit:()=>void; onStart:()=>void }) {
-  return <div className="flow-step created-step"><div className="success-mark"><Check /></div><div className="flow-heading"><span>Основа готова</span><h1>Бот «{botName}» создан</h1><p>Название, описание и дизайн сохранены. Теперь можно начать работу и добавить первый {template.item}.</p></div>
-    <div className="created-summary"><BotPreview template={template} name={botName} description={botDescription} primaryColor={primaryColor} secondaryColor={secondaryColor} logo={logoPreview} /><div className="created-next"><span className="ready-badge"><Check />Бот создан</span><h2>Начните наполнение</h2><p>Мы уже подготовили разделы под тип «{template.title}». Добавьте первый элемент, чтобы появился клиентский каталог.</p><div className="capability-list">{template.capabilities.map(({icon:CapabilityIcon,title,text})=><div key={title}><span><CapabilityIcon/></span><p><strong>{title}</strong><small>{text}</small></p><Check/></div>)}</div></div></div>
+  return <div className="flow-step created-step"><div className="success-mark"><Check /></div><div className="flow-heading"><span>Основа готова</span><h1>Проект «{botName}» создан</h1><p>Название, описание и дизайн сохранены. Добавьте первый {template.item}, затем подключите Telegram-бота в настройках.</p></div>
+    <div className="created-summary"><BotPreview template={template} name={botName} description={botDescription} primaryColor={primaryColor} secondaryColor={secondaryColor} logo={logoPreview} /><div className="created-next"><span className="ready-badge"><Check />Проект создан</span><h2>Начните наполнение</h2><p>Мы уже подготовили разделы под тип «{template.title}». Добавьте первый элемент, чтобы появился клиентский каталог.</p><div className="capability-list">{template.capabilities.map(({icon:CapabilityIcon,title,text})=><div key={title}><span><CapabilityIcon/></span><p><strong>{title}</strong><small>{text}</small></p><Check/></div>)}</div></div></div>
     {warning && <p className="save-error">{warning}</p>}
     <div className="flow-actions"><button className="flow-secondary" onClick={onEdit}><Palette />Изменить настройки</button><button className="flow-primary" onClick={onStart}>Начать работу <ArrowRight /></button></div>
   </div>;
 }
 
 function ItemStep({ template, itemName, setItemName, price, setPrice, description, setDescription, onBack, onSave, saveState, saveError }: { template:Template; itemName:string; setItemName:(v:string)=>void; price:string; setPrice:(v:string)=>void; description:string; setDescription:(v:string)=>void; onBack:()=>void; onSave:()=>void; saveState:SaveState; saveError:string }) {
-  return <div className="flow-step"><div className="flow-heading"><span>Шаг 3 из 4</span><h1>{template.firstAction}</h1><p>Бот уже создан. Теперь добавьте первый элемент, чтобы клиент увидел наполненный каталог.</p></div>
+  return <div className="flow-step"><div className="flow-heading"><span>Шаг 3 из 4</span><h1>{template.firstAction}</h1><p>Проект сохранён. Добавьте первый элемент каталога, затем подключите Telegram и опубликуйте Mini App.</p></div>
     <div className="item-editor"><label className="item-photo"><ImagePlus /><strong>Добавить фото</strong><small>JPG или PNG до 5 МБ</small><input className="sr-only" type="file" accept="image/*" /></label><div className="item-fields"><label><span>{template.nameLabel}</span><input autoFocus value={itemName} onChange={(event) => setItemName(event.target.value)} placeholder={template.namePlaceholder} /></label><label><span>{template.priceLabel}</span><div className="price-input"><input inputMode="numeric" value={price} onChange={(event) => setPrice(event.target.value.replace(/\D/g,""))} placeholder="0" /><b>сум</b></div></label><label className="full"><span>Короткое описание</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Что важно знать клиенту?" /></label></div></div>
     {saveError && <p className="save-error">{saveError}</p>}
     <div className="flow-actions"><button className="flow-secondary" onClick={onBack}><ArrowLeft />Назад</button><button className="flow-primary" disabled={!itemName.trim() || saveState === "saving"} onClick={onSave}>{saveState === "saving" ? "Сохраняю…" : `Сохранить ${template.item}`} {saveState !== "saving" && <ArrowRight />}</button></div>
@@ -208,7 +208,7 @@ function ItemStep({ template, itemName, setItemName, price, setPrice, descriptio
 }
 
 function DoneStep({ template, botName, itemName, price, botId, onAdd }: { template:Template; botName:string; itemName:string; price:string; botId:string|null; onAdd:()=>void }) {
-  return <div className="flow-step done-step"><div className="success-mark"><Check /></div><div className="flow-heading"><span>Готов к работе</span><h1>Первый {template.item} добавлен</h1><p>{itemName} сохранён в каталоге «{botName}». Проверьте его в черновике, а затем опубликуйте бот.</p></div>
+  return <div className="flow-step done-step"><div className="success-mark"><Check /></div><div className="flow-heading"><span>Готов к работе</span><h1>Первый {template.item} добавлен</h1><p>{itemName} сохранён в каталоге «{botName}». Чтобы запустить бота для покупателей, привяжите Telegram через BotFather и опубликуйте Mini App.</p></div>
     <div className="first-item-card"><span className="first-item-image"><Package /></span><div><small>{template.item}</small><strong>{itemName}</strong><p>{price ? `${Number(price).toLocaleString("ru-RU")} сум` : "Цена не указана"}</p></div><span className="published-badge">Активен</span></div>
     <div className="launch-actions"><button className="flow-secondary" onClick={onAdd}><Plus />Добавить ещё</button><a className="flow-primary" href={botId?`/workspace/builder?bot=${botId}`:"/workspace/builder"}>Настроить и посмотреть превью <ArrowRight /></a></div>
   </div>;
