@@ -88,28 +88,35 @@ export async function POST(request: Request) {
   if (env.SUPABASE_SECRET_KEY) {
     const supabase = getSupabaseServer({ privileged: true });
     const username = managed.username ?? "";
-    const { data: projectChannel } = await supabase.from("bot_channels").select("id,bot_id").eq("channel", "telegram").eq("external_username", username).maybeSingle();
+    const { data: projectChannel } = await supabase.from("bot_channels").select("id,bot_id").eq("channel", "telegram").eq("status", "pending").eq("external_username", username).maybeSingle();
     if (projectChannel) {
       const runtimeSecret = crypto.randomUUID().replaceAll("-", "");
       const origin = new URL(request.url).origin;
       const { data: projectBot } = await supabase.from("bots").select("id,owner_id,name,description,settings").eq("id", projectChannel.bot_id).single();
       if (projectBot) {
-        const token = await getManagedBotToken(env.TELEGRAM_MANAGER_TOKEN, String(managed.id));
-        const miniAppUrl = new URL(`/workspace?bot=${projectBot.id}`, origin).toString();
-        await Promise.all([
-          telegramCall(token, "setMyName", { name: projectBot.name.slice(0, 64) }),
-          telegramCall(token, "setMyDescription", { description: projectBot.description.slice(0, 512) }),
-          telegramCall(token, "setChatMenuButton", { menu_button: { type: "web_app", text: "Открыть", web_app: { url: miniAppUrl } } }),
-          telegramCall(token, "setWebhook", { url: new URL(`/api/channels/telegram/project-runtime?channel=${projectChannel.id}`, origin).toString(), secret_token: runtimeSecret, allowed_updates: ["message"] }),
-        ]);
-        await supabase.from("bot_channels").update({ status: "connected", external_account_id: String(managed.id), configuration: { runtime_secret: runtimeSecret, mini_app_url: miniAppUrl } }).eq("id", projectChannel.id);
+        // Telegram user who approved managed creation MUST already own this project.
+        // Username matching alone is insufficient for multi-tenant authorization.
         const creator = update.managed_bot?.user ?? message?.from;
-        if (creator?.id) await supabase.from("app_users").update({ telegram_id: creator.id, telegram_username: creator.username ?? null, first_name: creator.first_name ?? "" }).eq("id", projectBot.owner_id).is("telegram_id", null);
+        const { data: owner } = await supabase.from("app_users").select("telegram_id").eq("id", projectBot.owner_id).maybeSingle();
+        if (!creator?.id || String(owner?.telegram_id ?? "") !== String(creator.id)) return Response.json({ ok: true });
+        const token = await getManagedBotToken(env.TELEGRAM_MANAGER_TOKEN, String(managed.id));
+        const miniAppUrl = new URL(`/miniapp?bot=${projectBot.id}`, origin).toString();
+        const webhookUrl = new URL(`/api/channels/telegram/project-runtime?channel=${projectChannel.id}`, origin).toString();
+        const existingWebhook = await telegramCall<{ url: string }>(token, "getWebhookInfo", {});
+        if (existingWebhook.url && existingWebhook.url !== webhookUrl) return Response.json({ ok: true });
+        await telegramCall(token, "setMyName", { name: projectBot.name.slice(0, 64) });
+        await telegramCall(token, "setMyDescription", { description: projectBot.description.slice(0, 512) });
+        await telegramCall(token, "setChatMenuButton", { menu_button: { type: "web_app", text: "Открыть", web_app: { url: miniAppUrl } } });
+        await telegramCall(token, "setWebhook", { url: webhookUrl, secret_token: runtimeSecret, allowed_updates: ["message", "callback_query"], drop_pending_updates: false });
+        const verifiedWebhook = await telegramCall<{ url: string }>(token, "getWebhookInfo", {});
+        if (verifiedWebhook.url !== webhookUrl) throw Error("WEBHOOK_VERIFICATION_FAILED");
+        await supabase.from("bot_channels").update({ status: "connected", external_account_id: String(managed.id), configuration: { runtime_secret: runtimeSecret, mini_app_url: miniAppUrl } }).eq("id", projectChannel.id);
         return Response.json({ ok: true });
       }
     }
   }
 
+  if (!env.DB) return Response.json({ ok: true });
   const db = getDb();
   const username = managed.username ?? "";
   const [connection] = await db.select().from(channelConnections).where(and(eq(channelConnections.channel, "telegram"), eq(channelConnections.externalUsername, username))).limit(1);
