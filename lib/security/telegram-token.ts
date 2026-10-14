@@ -15,6 +15,30 @@ function decodeKey(value: string) {
   return key;
 }
 
+// Keys are supplied by the runtime, never exposed to clients or logs.
+// The newest valid key encrypts new credentials; legacy keys decrypt older ones.
+export function telegramEncryptionKeyring(...values: Array<string | null | undefined>) {
+  const result: string[] = [];
+  for (const value of values) {
+    if (!value || result.includes(value)) continue;
+    try { decodeKey(value); result.push(value); }
+    catch { /* Invalid configuration is never used as an encryption key. */ }
+  }
+  return result;
+}
+
+export async function decryptTelegramTokenFromKeyring(
+  ciphertext: string,
+  iv: string,
+  keys: readonly string[],
+) {
+  for (const key of keys) {
+    try { return await decryptTelegramToken(ciphertext, iv, key); }
+    catch { /* Old credentials can still use the previous key. */ }
+  }
+  throw new Error("TELEGRAM_TOKEN_DECRYPTION_FAILED");
+}
+
 function encode(value: ArrayBuffer | Uint8Array) {
   const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
   let binary = "";
