@@ -34,6 +34,9 @@ test("workspace exposes real bot and Mini App settings instead of decorative con
  assert.match(sidebar,/href="\/onboarding"/);
  assert.match(workspace,/templateType=\{bot\.template_type\}/);
  assert.match(builder,/scrollToSection/);
+ assert.match(builder,/aria-label="Разделы настроек бота"/);
+ assert.doesNotMatch(builder,/xl:grid-cols-\[250px_minmax/);
+ assert.match(builder,/encryptionReady===false/);
  assert.match(builder,/section=miniapp_appearance/);
  assert.doesNotMatch(builder,/\["Основное","Меню","Кнопки","Доставка","Оплата","Уведомления"\]/);
 });
@@ -97,6 +100,29 @@ test("BotFather connection and Telegram runtime remain wired securely",()=>{
  assert.match(builder,/action:"inspect"/);
  assert.match(builder,/action:"connect"/);
  assert.match(builder,/Опубликовать и открыть Mini App/);
+});
+test("BotFather linking preserves existing webhooks and verifies the new webhook",()=>{
+ const route=src("app/api/channels/telegram/token/route.ts");
+ const manager=src("app/api/channels/telegram/manager-webhook/route.ts");
+ assert.match(route,/getWebhookInfo/);
+ assert.match(route,/TelegramWebhookConflict/);
+ assert.match(route,/WEBHOOK_VERIFICATION_FAILED/);
+ assert.match(route,/deleteWebhook/);
+ assert.match(manager,/eq\("status", "pending"\)/);
+ assert.match(manager,/creator\?\.id/);
+ assert.match(manager,/telegram_id/);
+ assert.match(manager,/new URL\(`\/miniapp\?bot=/);
+ assert.match(manager,/getWebhookInfo/);
+});
+test("bot creation is idempotent and protects account ownership on retries",()=>{
+ const api=src("app/api/onboarding/route.ts");
+ const frontend=src("app/onboarding/page.tsx");
+ assert.match(frontend,/pendingCreateId/);
+ assert.match(frontend,/creationInFlight/);
+ assert.match(frontend,/crypto\.randomUUID\(\)/);
+ assert.match(api,/candidateId = payload\.botId \?\? crypto\.randomUUID\(\)/);
+ assert.match(api,/eq\("owner_id", appUser\.id\)/);
+ assert.match(api,/insert\(\{ id: candidateId, owner_id: appUser\.id/);
 });
 test("buyer Mini App uses Telegram-verified checkout with coordinates",()=>{
  const buyer=src("app/miniapp/page.tsx");

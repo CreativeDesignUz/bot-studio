@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { decryptTelegramToken, encryptTelegramToken, looksLikeTelegramBotToken } from "../lib/security/telegram-token.ts";
+import { decryptTelegramToken, decryptTelegramTokenFromKeyring, encryptTelegramToken, looksLikeTelegramBotToken, telegramEncryptionKeyring } from "../lib/security/telegram-token.ts";
 
 const key = Buffer.alloc(32, 7).toString("base64url");
 const token = `123456789:${"A".repeat(46)}`;
@@ -24,4 +24,25 @@ test("Telegram token format validation stays server-side and strict", () => {
   assert.equal(looksLikeTelegramBotToken(token), true);
   assert.equal(looksLikeTelegramBotToken("bad-token"), false);
   assert.equal(looksLikeTelegramBotToken(undefined), false);
+});
+
+test("configuration prefers a valid V2 key but retains the legacy key for decryption", async () => {
+  const legacy = Buffer.alloc(32, 7).toString("base64url");
+  const current = Buffer.alloc(32, 8).toString("base64url");
+  const keys = telegramEncryptionKeyring(current, legacy);
+  assert.deepEqual(keys, [current, legacy]);
+  const historical = await encryptTelegramToken(token, legacy);
+  assert.equal(await decryptTelegramTokenFromKeyring(historical.ciphertext, historical.iv, keys), token);
+  const newer = await encryptTelegramToken(token, keys[0]);
+  assert.equal(await decryptTelegramTokenFromKeyring(newer.ciphertext, newer.iv, keys), token);
+});
+
+test("invalid encryption secrets are rejected before use without exposing tokens", async () => {
+  assert.deepEqual(telegramEncryptionKeyring("plain-text", "short", undefined), []);
+  const valid = Buffer.alloc(32, 15).toString("base64url");
+  assert.deepEqual(telegramEncryptionKeyring("broken", valid, valid), [valid]);
+  await assert.rejects(
+    decryptTelegramTokenFromKeyring("some-ciphertext", "bad-iv", []),
+    /TELEGRAM_TOKEN_DECRYPTION_FAILED/,
+  );
 });

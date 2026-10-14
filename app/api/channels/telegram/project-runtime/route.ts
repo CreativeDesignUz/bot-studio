@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     const configuredButtons = ((published.settings ?? bot.settings as { home_buttons?: { label?: string; action?: string }[] } | null)?.home_buttons ?? []).slice(0, 8);
     const buttons = normalizeBotButtons(configuredButtons);
     const origin = resolvePublicAppOrigin(request.url, env.PUBLIC_APP_URL);
-    const token = await getProjectBotToken(supabase, channel, { managerToken: env.TELEGRAM_MANAGER_TOKEN, encryptionKey: env.TELEGRAM_TOKEN_ENCRYPTION_KEY });
+    const token = await getProjectBotToken(supabase, channel, { managerToken: env.TELEGRAM_MANAGER_TOKEN, encryptionKey: env.TELEGRAM_TOKEN_ENCRYPTION_KEY, encryptionKeyV2: env.TELEGRAM_TOKEN_ENCRYPTION_KEY_V2 });
     if (update.callback_query) {
       const query = update.callback_query;
       const selected = resolveReplyPath(buttons, query.data ?? "");

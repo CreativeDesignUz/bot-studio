@@ -3,11 +3,13 @@ import { resolveAppUser, withSessionCookie } from "@/lib/auth/app-user";
 import { getTelegramBotIdentity, telegramCall } from "@/lib/channels/telegram-api";
 import { getProjectBotToken } from "@/lib/channels/project-bot-token";
 import { resolvePublicAppOrigin } from "@/lib/http/public-origin";
-import { decryptTelegramToken, encryptTelegramToken, looksLikeTelegramBotToken } from "@/lib/security/telegram-token";
+import { decryptTelegramTokenFromKeyring, encryptTelegramToken, looksLikeTelegramBotToken, telegramEncryptionKeyring } from "@/lib/security/telegram-token";
 
 type RequestPayload = { initData?: string; action?: "inspect" | "connect" | "disconnect"; botId?: string; token?: string; credentialId?: string };
 type PendingCredential = { id: string; bot_id: string; channel_id: string; owner_id: string; external_account_id: string; external_username: string; token_ciphertext: string; token_iv: string; status: string; expires_at: string };
-type RuntimeBindings = typeof env & { PUBLIC_APP_URL?: string; TELEGRAM_TOKEN_ENCRYPTION_KEY?: string; TELEGRAM_MANAGER_TOKEN?: string };
+type RuntimeBindings = typeof env & { PUBLIC_APP_URL?: string; TELEGRAM_TOKEN_ENCRYPTION_KEY?: string; TELEGRAM_TOKEN_ENCRYPTION_KEY_V2?: string; TELEGRAM_MANAGER_TOKEN?: string };
+
+class TelegramWebhookConflict extends Error {}
 
 const COMMANDS = [
   { command: "start", description: "Открыть главное меню" },
@@ -31,6 +33,7 @@ export async function GET(request: Request) {
     .eq("bot_id", botId).eq("channel", "telegram").maybeSingle();
   const configuration = (channel?.configuration ?? {}) as Record<string, unknown>;
   return withSessionCookie({
+    encryptionReady: telegramEncryptionKeyring((env as RuntimeBindings).TELEGRAM_TOKEN_ENCRYPTION_KEY_V2, (env as RuntimeBindings).TELEGRAM_TOKEN_ENCRYPTION_KEY).length > 0,
     connection: channel?.status === "connected"
       ? { status: channel.status, username: channel.external_username, mode: configuration.auth_mode === "direct" ? "botfather" : "manager" }
       : null,
@@ -49,8 +52,9 @@ export async function POST(request: Request) {
   if (!bot) return errorResponse("Бот не найден или у вас нет доступа.", 404, setCookie);
 
   const bindings = env as RuntimeBindings;
-  const encryptionKey = bindings.TELEGRAM_TOKEN_ENCRYPTION_KEY;
-  if (!encryptionKey) return errorResponse("Серверное шифрование Telegram-токенов не настроено.", 503, setCookie);
+  const encryptionKeys = telegramEncryptionKeyring(bindings.TELEGRAM_TOKEN_ENCRYPTION_KEY_V2, bindings.TELEGRAM_TOKEN_ENCRYPTION_KEY);
+  const encryptionKey = encryptionKeys[0];
+  if (!encryptionKey) return errorResponse("Подключение Telegram временно недоступно: ключ шифрования сервера отсутствует или имеет неверный формат.", 503, setCookie);
 
   if (payload.action === "inspect") {
     if (!looksLikeTelegramBotToken(payload.token)) return errorResponse("Проверьте формат токена BotFather.", 400, setCookie);
@@ -92,19 +96,29 @@ export async function POST(request: Request) {
     catch { return errorResponse("Публичный HTTPS-адрес приложения не настроен.", 503, setCookie); }
     const runtimeSecret = crypto.randomUUID().replaceAll("-", "");
     const miniAppUrl = new URL(`/miniapp?bot=${payload.botId}`, origin).toString();
+    const webhookUrl = new URL(`/api/channels/telegram/project-runtime?channel=${pending.channel_id}`, origin).toString();
+    let webhookConfigured = false;
+    let connectedToken: string | null = null;
     try {
-      const token = await decryptTelegramToken(pending.token_ciphertext, pending.token_iv, encryptionKey);
+      const token = await decryptTelegramTokenFromKeyring(pending.token_ciphertext, pending.token_iv, encryptionKeys);
       const telegramBot = await getTelegramBotIdentity(token);
       if (String(telegramBot.id) !== pending.external_account_id) throw new Error("TELEGRAM_BOT_CHANGED");
+      connectedToken = token;
+      const previous = await telegramCall<{ url: string }>(token, "getWebhookInfo", {});
+      // Never hijack a webhook owned by another service or another Bot Studio project.
+      if (previous.url && previous.url !== webhookUrl) throw new TelegramWebhookConflict("WEBHOOK_ALREADY_IN_USE");
       await telegramCall(token, "setMyCommands", { commands: COMMANDS });
       await telegramCall(token, "setMyDescription", { description: bot.description.slice(0, 512) });
       await telegramCall(token, "setChatMenuButton", { menu_button: { type: "web_app", text: "Открыть", web_app: { url: miniAppUrl } } });
       await telegramCall(token, "setWebhook", {
-        url: new URL(`/api/channels/telegram/project-runtime?channel=${pending.channel_id}`, origin).toString(),
+        url: webhookUrl,
         secret_token: runtimeSecret,
         allowed_updates: ["message", "callback_query"],
         drop_pending_updates: false,
       });
+      webhookConfigured = true;
+      const webhook = await telegramCall<{ url: string }>(token, "getWebhookInfo", {});
+      if (webhook.url !== webhookUrl) throw new Error("WEBHOOK_VERIFICATION_FAILED");
       const { data: channel, error: channelError } = await supabase.rpc("complete_direct_telegram_connection", {
         p_credential_id: pending.id,
         p_bot_id: payload.botId,
@@ -114,9 +128,20 @@ export async function POST(request: Request) {
       });
       if (channelError || !channel) throw new Error("CONNECTION_COMMIT_FAILED");
       return withSessionCookie({ connected: true, bot: { name: telegramBot.first_name, username: telegramBot.username } }, 200, setCookie);
-    } catch {
+    } catch (cause) {
+      if (cause instanceof TelegramWebhookConflict) {
+        return errorResponse("У этого бота уже есть активный webhook другого сервиса. Отключите прежнюю интеграцию, затем повторите подключение.", 409, setCookie);
+      }
+      // Compensate only for the hook installed during this request, never delete
+      // a third-party webhook that could have been registered concurrently.
+      if (webhookConfigured && connectedToken) {
+        try {
+          const live = await telegramCall<{ url: string }>(connectedToken, "getWebhookInfo", {});
+          if (live.url === webhookUrl) await telegramCall(connectedToken, "deleteWebhook", { drop_pending_updates: false });
+        } catch { /* Keep original setup error; manual recovery remains possible. */ }
+      }
       await supabase.from("telegram_bot_credentials").update({ last_error: "Telegram connection configuration failed" }).eq("id", pending.id).eq("status", "pending");
-      return errorResponse("Не удалось настроить Telegram webhook. Проверьте токен и повторите подключение.", 502, setCookie);
+      return errorResponse("Не удалось завершить подключение Telegram. Проверьте настройки и повторите попытку.", 502, setCookie);
     }
   }
 
@@ -125,7 +150,7 @@ export async function POST(request: Request) {
     .eq("bot_id", payload.botId).eq("channel", "telegram").eq("status", "connected").maybeSingle();
   if (!channel) return withSessionCookie({ disconnected: true }, 200, setCookie);
   try {
-    const token = await getProjectBotToken(supabase, channel, { managerToken: bindings.TELEGRAM_MANAGER_TOKEN, encryptionKey });
+    const token = await getProjectBotToken(supabase, channel, { managerToken: bindings.TELEGRAM_MANAGER_TOKEN, encryptionKey: bindings.TELEGRAM_TOKEN_ENCRYPTION_KEY, encryptionKeyV2: bindings.TELEGRAM_TOKEN_ENCRYPTION_KEY_V2 });
     await telegramCall(token, "deleteWebhook", { drop_pending_updates: false });
     const { error } = await supabase.rpc("disconnect_telegram_channel", { p_bot_id: payload.botId, p_owner_id: user.id });
     if (error) throw error;

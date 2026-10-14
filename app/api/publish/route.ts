@@ -30,9 +30,9 @@ export async function POST(request:Request){
  if(!channel||channel.status!=="connected"||!channel.external_account_id){
   return withSessionCookie({ok:false,requiresTelegramConnection:true,error:"Сначала подключите Telegram-бота" },409,setCookie);
  }
- const bindings=env as typeof env & {TELEGRAM_MANAGER_TOKEN?:string;TELEGRAM_TOKEN_ENCRYPTION_KEY?:string};
+ const bindings=env as typeof env & {TELEGRAM_MANAGER_TOKEN?:string;TELEGRAM_TOKEN_ENCRYPTION_KEY?:string;TELEGRAM_TOKEN_ENCRYPTION_KEY_V2?:string};
  let token:string;
- try{token=await getProjectBotToken(supabase,channel,{managerToken:bindings.TELEGRAM_MANAGER_TOKEN,encryptionKey:bindings.TELEGRAM_TOKEN_ENCRYPTION_KEY});}
+ try{token=await getProjectBotToken(supabase,channel,{managerToken:bindings.TELEGRAM_MANAGER_TOKEN,encryptionKey:bindings.TELEGRAM_TOKEN_ENCRYPTION_KEY,encryptionKeyV2:bindings.TELEGRAM_TOKEN_ENCRYPTION_KEY_V2});}
  catch{return Response.json({error:"Telegram-канал подключён, но ключ бота недоступен. Повторно проверьте подключение."},{status:503});}
  let origin:string;
  try{origin=resolvePublicAppOrigin(request.url,(env as typeof env&{PUBLIC_APP_URL?:string}).PUBLIC_APP_URL)}catch{return Response.json({error:"Публичный HTTPS-адрес приложения не настроен"},{status:503})}
