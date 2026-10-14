@@ -52,7 +52,7 @@ export async function POST(request: Request) {
   const bindings = env as RuntimeBindings;
   const encryptionKeys = telegramEncryptionKeyring(bindings.TELEGRAM_TOKEN_ENCRYPTION_KEY_V2, bindings.TELEGRAM_TOKEN_ENCRYPTION_KEY);
   const encryptionKey = encryptionKeys[0];
-  if (!encryptionKey && payload.action !== "disconnect") return errorResponse("Подключение Telegram временно недоступно: ключ шифрования сервера отсутствует или имеет неверный формат.", 503, setCookie);
+  if (!encryptionKey) return errorResponse("Подключение Telegram временно недоступно: ключ шифрования сервера отсутствует или имеет неверный формат.", 503, setCookie);
 
   if (payload.action === "inspect") {
     if (!looksLikeTelegramBotToken(payload.token)) return errorResponse("Проверьте формат токена BotFather.", 400, setCookie);
