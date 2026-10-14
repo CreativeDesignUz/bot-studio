@@ -6,6 +6,7 @@ declare namespace Cloudflare {
     TELEGRAM_MANAGER_TOKEN?: string;
     TELEGRAM_MANAGER_WEBHOOK_SECRET?: string;
     TELEGRAM_TOKEN_ENCRYPTION_KEY?: string;
+    TELEGRAM_TOKEN_ENCRYPTION_KEY_V2?: string;
     TELEGRAM_LOGIN_BOT_TOKEN?: string;
     TELEGRAM_OIDC_CLIENT_ID?: string;
     TELEGRAM_OIDC_CLIENT_SECRET?: string;
